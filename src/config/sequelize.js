@@ -13,6 +13,7 @@ function getDB() {
         host: process.env.DB_HOST,
         port: process.env.DB_PORT,
         dialect: "mysql",
+        dialectModule: require('mysql2'), // Tambahkan baris ini
         logging: false,
         timezone: "+07:00",
       }
