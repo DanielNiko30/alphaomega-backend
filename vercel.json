@@ -2,6 +2,7 @@
     "version": 2,
     "functions": {
         "api/index.js": {
+            "runtime": "vercel-nodejs@18.0.0",
             "includeFiles": "node_modules/mysql2/**/*"
         }
     },
