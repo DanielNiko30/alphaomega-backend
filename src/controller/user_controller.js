@@ -1,4 +1,4 @@
-const { User } = require('../model/user_model');
+const { User, Kategori, Product, Stok } = require('../model/models');
 
 async function generateUserId() {
     const lastUser = await User.findOne({ order: [['id_user', 'DESC']] });
