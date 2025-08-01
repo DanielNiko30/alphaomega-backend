@@ -17,15 +17,23 @@ function getDB() {
           rejectUnauthorized: false,
         },
       },
-      logging: false, // Matikan log query
+      logging: false,
       timezone: '+07:00',
       pool: {
-        max: 10,
+        max: 5,          // kurangi biar ga overload di serverless
         min: 0,
-        acquire: 30000,
-        idle: 10000,
+        acquire: 10000,  // 10 detik timeout koneksi
+        idle: 5000,
       },
+      retry: {
+        max: 3           // coba koneksi ulang 3x
+      }
     });
+
+    // Test koneksi segera saat inisialisasi (biar cepat error kalau gagal)
+    dbInstance.authenticate()
+      .then(() => console.log('DB connected successfully'))
+      .catch(err => console.error('DB connection error:', err.message));
   }
 
   return dbInstance;
