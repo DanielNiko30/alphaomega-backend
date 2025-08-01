@@ -2,10 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "includeFiles": [
-        "node_modules/pg/**/*",
-        "node_modules/pg-hstore/**/*"
-      ]
+      "includeFiles": "node_modules/**"
     }
   },
   "routes": [
