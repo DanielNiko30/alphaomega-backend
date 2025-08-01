@@ -1,9 +1,11 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
 
-// Pilih file .env sesuai mode
+// Load env file untuk local development
 const envFile =
-  process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
+  process.env.NODE_ENV === 'production'
+    ? '.env.production'
+    : '.env.development';
 
 require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
 
@@ -11,11 +13,8 @@ let dbInstance;
 
 function getDB() {
   if (!dbInstance) {
-    if (process.env.NODE_ENV === 'production') {
-      // Mode Supabase PostgreSQL
-      if (!process.env.DATABASE_URL) {
-        throw new Error('DATABASE_URL is missing in production');
-      }
+    if (process.env.DATABASE_URL) {
+      // Jika ada DATABASE_URL → pakai PostgreSQL
       dbInstance = new Sequelize(process.env.DATABASE_URL, {
         dialect: 'postgres',
         dialectOptions: {
@@ -34,7 +33,7 @@ function getDB() {
         },
       });
     } else {
-      // Mode lokal MySQL
+      // Jika tidak ada DATABASE_URL → fallback ke MySQL (dev lokal)
       const { DB_NAME, DB_USER, DB_PASS, DB_HOST, DB_PORT } = process.env;
 
       if (!DB_NAME || !DB_USER || !DB_HOST) {
