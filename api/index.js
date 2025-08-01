@@ -9,15 +9,15 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors({ origin: '*' }));
 
-// Tes koneksi DB saat request pertama
+// Cek koneksi DB setiap request
 app.use(async (req, res, next) => {
   try {
     const db = getDB();
     await db.authenticate();
     next();
   } catch (err) {
-    console.error("DB connection failed:", err);
-    return res.status(500).json({ error: "Database connection failed" });
+    console.error('DB connection failed:', err);
+    return res.status(500).json({ error: 'Database connection failed' });
   }
 });
 
@@ -30,3 +30,9 @@ app.use('/api/transaksiBeli', require('../src/routes/trans_beli_routes'));
 app.use('/api/transaksiJual', require('../src/routes/trans_jual_routes'));
 
 module.exports = serverless(app);
+
+
+// const PORT = process.env.PORT || 3000;
+// app.listen(PORT, () => {
+//   console.log(`Local server running at http://localhost:${PORT}`);
+// });
