@@ -18,11 +18,11 @@ function getDB() {
       dialect: dbDialect,
       dialectOptions: {
         ssl: {
-          require: false, // Nonaktifkan SSL, freedb.tech biasanya tidak perlu
+          rejectUnauthorized: false, // 🛡️ Hindari error self-signed
         },
       },
-      logging: console.log,
-      timezone: '+07:00',
+      logging: console.log,          // Tampilkan query di console (debug)
+      timezone: '+07:00',           // Waktu lokal Indonesia
       pool: {
         max: 5,
         min: 0,
@@ -34,7 +34,7 @@ function getDB() {
       },
     });
 
-    // Tes koneksi langsung
+    // Test koneksi saat inisialisasi
     dbInstance.authenticate()
       .then(() => console.log('✅ DB connected successfully'))
       .catch(err => console.error('❌ DB connection error:', err.message));
