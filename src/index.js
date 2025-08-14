@@ -8,6 +8,12 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors({ origin: '*' }));
 
+// Route root untuk cek server via browser
+app.get('/', (req, res) => {
+  res.send('✅ Server Express berjalan dengan baik! Akses /api/health untuk cek database.');
+});
+
+// Health check
 app.get('/api/health', async (req, res) => {
   try {
     const db = getDB();
@@ -18,7 +24,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Routes
+// Routes API
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
 app.use('/api/supplier', require('./routes/supplier_routes'));
