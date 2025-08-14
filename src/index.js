@@ -24,6 +24,11 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+app.get('/callback', (req, res) => {
+  // tangani authorization code atau deauthorization
+  res.send('✅ Shopee callback berhasil diterima!');
+});
+
 // Routes API
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
