@@ -29,7 +29,7 @@ app.get('/callback', (req, res) => {
   res.send('✅ Shopee callback berhasil diterima!');
 });
 
-app.get('/api/lazada/callback', (req, res) => {
+app.post('/api/lazada/callback', (req, res) => {
   console.log('Lazada callback body:', req.body);
   res.send('OK');
 });
