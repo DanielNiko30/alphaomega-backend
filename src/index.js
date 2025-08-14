@@ -30,8 +30,15 @@ app.get('/callback', (req, res) => {
 });
 
 app.post('/api/lazada/callback', (req, res) => {
-  console.log('Lazada callback body:', req.body);
-  res.send('OK');
+  console.log('📦 Lazada Push Received:', req.body);
+
+  // Jika ini request verifikasi dari Lazada
+  if (req.body.type === 'VERIFY' && req.body.challenge) {
+    return res.status(200).json({ challenge: req.body.challenge });
+  }
+
+  // Kalau bukan verifikasi, berarti ini data event (order, produk, dll)
+  res.status(200).send('OK');
 });
 
 
