@@ -29,6 +29,12 @@ app.get('/callback', (req, res) => {
   res.send('✅ Shopee callback berhasil diterima!');
 });
 
+app.post('/api/lazada/callback', (req, res) => {
+  console.log('Lazada callback body:', req.body);
+  res.send('OK');
+});
+
+
 // Routes API
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
