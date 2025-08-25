@@ -16,13 +16,13 @@ function getDB() {
       host: dbHost,
       port: dbPort,
       dialect: dbDialect,
-      dialectOptions: {
+      dialectOptions: dbHost === 'localhost' ? {} : {
         ssl: {
-          rejectUnauthorized: false, // 🛡️ Hindari error self-signed
+          rejectUnauthorized: false,
         },
       },
-      logging: console.log,          // Tampilkan query di console (debug)
-      timezone: '+07:00',           // Waktu lokal Indonesia
+      logging: console.log,
+      timezone: '+07:00',
       pool: {
         max: 5,
         min: 0,
@@ -33,6 +33,7 @@ function getDB() {
         max: 3,
       },
     });
+
 
     // Test koneksi saat inisialisasi
     dbInstance.authenticate()

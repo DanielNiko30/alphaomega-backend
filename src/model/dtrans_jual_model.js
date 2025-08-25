@@ -23,7 +23,7 @@ const DTransJual = db.define(
       allowNull: false,
     },
     jumlah_barang: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.DECIMAL,
       allowNull: false,
     },
     harga_satuan: {

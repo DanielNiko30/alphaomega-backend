@@ -86,8 +86,9 @@ const TransJualController = {
     createTransaction: async (req, res) => {
         try {
             const { id_user, id_user_penjual, nama_pembeli, tanggal, total_harga, metode_pembayaran, detail } = req.body;
-            let stokTidakCukup = [];
 
+            // 1️⃣ Cek stok sebelum transaksi
+            let stokTidakCukup = [];
             for (const item of detail) {
                 const stock = await Stok.findOne({
                     where: {
@@ -96,12 +97,13 @@ const TransJualController = {
                     }
                 });
 
-                if (!stock || stock.stok < item.jumlah_barang) {
+                const jumlahKurangi = Math.ceil(Number(item.jumlah_barang)); // bulatkan ke atas
+                if (!stock || stock.stok < jumlahKurangi) {
                     stokTidakCukup.push({
                         id_produk: item.id_produk,
                         satuan: item.satuan,
                         stok_tersedia: stock ? stock.stok : 0,
-                        jumlah_diminta: item.jumlah_barang,
+                        jumlah_diminta: jumlahKurangi,
                     });
                 }
             }
@@ -113,44 +115,50 @@ const TransJualController = {
                 });
             }
 
+            // 2️⃣ Buat id_htrans_jual dan nomor invoice
             const id_htrans_jual = await generateHTransJualId();
             const nomor_invoice = await generateInvoiceNumber();
 
+            // 3️⃣ Simpan HTransJual (total_harga tetap int)
             const newTransaction = await HTransJual.create({
                 id_htrans_jual,
                 id_user,
                 id_user_penjual,
                 nama_pembeli,
                 tanggal,
-                total_harga,
+                total_harga: Math.floor(Number(total_harga)), // pastikan int
                 metode_pembayaran,
                 nomor_invoice,
                 status: "Pending",
             });
 
+            // 4️⃣ Loop detail untuk buat DTransJual & update stok
             for (const item of detail) {
                 const id_dtrans_jual = await generateDTransJualId();
+                const jumlahKurangi = Math.ceil(Number(item.jumlah_barang));
 
+                // Simpan detail transaksi (jumlah_barang tetap desimal)
                 await DTransJual.create({
                     id_dtrans_jual,
                     id_htrans_jual,
                     id_produk: item.id_produk,
                     satuan: item.satuan,
-                    jumlah_barang: item.jumlah_barang,
-                    harga_satuan: item.harga_satuan,
-                    subtotal: item.subtotal,
+                    jumlah_barang: Number(item.jumlah_barang), // tetap desimal
+                    harga_satuan: Number(item.harga_satuan),
+                    subtotal: Math.floor(Number(item.subtotal)), // subtotal tetap int
                 });
 
+                // Update stok
                 const stock = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
                         satuan: item.satuan,
                     }
                 });
-
-                await stock.update({ stok: stock.stok - item.jumlah_barang });
+                await stock.update({ stok: stock.stok - jumlahKurangi });
             }
 
+            // 5️⃣ Response sukses
             return res.status(201).json({
                 message: "Transaksi jual berhasil dibuat",
                 invoice: nomor_invoice,
@@ -158,6 +166,7 @@ const TransJualController = {
             });
 
         } catch (error) {
+            console.error(error);
             res.status(500).json({ message: error.message });
         }
     },

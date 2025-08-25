@@ -35,4 +35,12 @@ const Product = db.define(
   }
 );
 
+// ✅ Relasi Product ↔ Stok
+Product.hasMany(Stok, { as: 'stok', foreignKey: 'id_product_stok' });
+Stok.belongsTo(Product, { foreignKey: 'id_product_stok' });
+
+// ✅ Relasi Product ↔ Kategori
+Product.belongsTo(Kategori, { foreignKey: 'product_kategori', as: 'kategori' });
+Kategori.hasMany(Product, { foreignKey: 'product_kategori', as: 'products' });
+
 module.exports = { Product };

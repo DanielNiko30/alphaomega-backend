@@ -51,6 +51,10 @@ app.use('/api/transaksiBeli', require('./routes/trans_beli_routes'));
 app.use('/api/transaksiJual', require('./routes/trans_jual_routes'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server running at http://0.0.0.0:${PORT}`);
+// app.listen(PORT, '0.0.0.0', () => {
+//   console.log(`✅ Server running at http://0.0.0.0:${PORT}`);
+// });
+
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`✅ Server running at http://127.0.0.1:${PORT}`);
 });

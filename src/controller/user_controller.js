@@ -67,6 +67,44 @@ const UserController = {
             res.status(500).json({ message: error.message });
         }
     },
+
+    updateUserRole: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { role } = req.body;
+
+            console.log("🔍 ID yang diterima:", id); // cek isi id
+
+            const user = await User.findByPk(id);
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
+            }
+
+            user.role = role;
+            await user.save();
+            res.json({ message: "User role updated successfully", role: user.role });
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    },
+
+    getUsersPenjual: async (req, res) => {
+        try {
+            const users = await User.findAll({ where: { role: "penjual" } });
+            res.json(users);
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    },
+
+    getUsersGudang: async (req, res) => {
+        try {
+            const users = await User.findAll({ where: { role: "pegawai gudang" } });
+            res.json(users);
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    }
 };
 
 module.exports = UserController;
