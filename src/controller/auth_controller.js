@@ -39,4 +39,15 @@ exports.login = async (req, res) => {
     }
 };
 
+exports.logout = async (req, res) => {
+    try {
+        // Kalau stateless JWT, cukup hapus token di client
+        // Di server kita bisa kasih respon sukses
+        res.json({ message: "Logout berhasil, silakan hapus token di client." });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
 

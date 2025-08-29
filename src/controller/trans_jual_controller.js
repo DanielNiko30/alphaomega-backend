@@ -394,6 +394,44 @@ const TransJualController = {
         }
     },
 
+    getPendingTransactionsByPenjual: async (req, res) => {
+        try {
+            const { id_user_penjual } = req.body; // dikirim dari frontend
+
+            if (!id_user_penjual) {
+                return res.status(400).json({ message: "id_user_penjual diperlukan" });
+            }
+
+            const transaksiPending = await HTransJual.findAll({
+                where: {
+                    status: "Pending",
+                    id_user_penjual: id_user_penjual
+                },
+                include: [
+                    {
+                        model: DTransJual,
+                        as: "detail_transaksi",
+                    },
+                    {
+                        model: User,
+                        as: "user",
+                        attributes: ["name"], // Nama pembeli
+                    },
+                    {
+                        model: User,
+                        as: "penjual",
+                        attributes: ["name"], // Nama pegawai
+                    },
+                ],
+            });
+
+            res.json(transaksiPending);
+        } catch (error) {
+            console.error("Error getPendingTransactionsByPenjual:", error);
+            res.status(500).json({ message: error.message });
+        }
+    },
+
 };
 
 module.exports = TransJualController;
