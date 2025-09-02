@@ -22,8 +22,19 @@ const shopeeCallback = async (req, res) => {
             .update(baseString)
             .digest("hex");
 
+        // 🔄 Debug log
+        console.log("===== SHOPEE DEBUG =====");
+        console.log("Partner ID:", PARTNER_ID);
+        console.log("Partner Key (first 6 chars):", PARTNER_KEY?.substring(0, 6));
+        console.log("Timestamp:", timestamp);
+        console.log("Path:", path);
+        console.log("BaseString:", baseString);
+        console.log("Generated Sign:", sign);
+        console.log("========================");
+
         // 🔄 Request ke Shopee API
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
+        console.log("Request URL:", url);
 
         const tokenRes = await fetch(url, {
             method: "POST",
