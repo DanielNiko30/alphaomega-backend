@@ -42,12 +42,12 @@ const shopeeCallback = async (req, res) => {
         }
 
         // ✅ Simpan token di database
-        await ShopeeToken.upsert({
-            shop_id: shop_id,
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-            expire_in: Date.now() + data.expire_in * 1000,
-        });
+        // await ShopeeToken.upsert({
+        //     shop_id: shop_id,
+        //     access_token: data.access_token,
+        //     refresh_token: data.refresh_token,
+        //     expire_in: Date.now() + data.expire_in * 1000,
+        // });
 
         return res.json({
             success: true,
