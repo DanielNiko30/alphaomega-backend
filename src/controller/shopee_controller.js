@@ -62,12 +62,18 @@ const shopeeCallback = async (req, res) => {
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get"; // leading slash wajib
 
-        // BaseString Shopee
-        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
+        // BaseString = partner_id + path + timestamp (shop_id TIDAK ikut)
+        const baseString = `${PARTNER_ID}${path}${timestamp}`;
         const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
         console.log("===== SHOPEE DEBUG =====");
-        console.log({ partner_id: PARTNER_ID, timestamp, shop_id: shopIdStr, baseString, generatedSign: sign });
+        console.log({
+            partner_id: PARTNER_ID,
+            timestamp,
+            shop_id: shopIdStr,
+            baseString,
+            generatedSign: sign
+        });
         console.log("========================");
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
