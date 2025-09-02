@@ -1,9 +1,9 @@
 const crypto = require("crypto");
-const fetch = require("node-fetch");
 
 const PARTNER_ID = process.env.SHOPEE_PARTNER_ID;
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
-const REDIRECT_URL = process.env.SHOPEE_REDIRECT_URL; // contoh: https://tokalphaomegaploso.my.id/api/shopee/callback
+const REDIRECT_URL = process.env.SHOPEE_REDIRECT_URL;
+// contoh: https://tokalphaomegaploso.my.id/api/shopee/callback
 
 // ✅ Callback dari Shopee setelah authorize
 const shopeeCallback = async (req, res) => {
@@ -24,15 +24,18 @@ const shopeeCallback = async (req, res) => {
             .digest("hex");
 
         // 🔄 Tukar code jadi access_token
-        const tokenRes = await fetch(`https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                code,
-                shop_id: Number(shop_id),
-                partner_id: Number(PARTNER_ID),
-            }),
-        });
+        const tokenRes = await fetch(
+            `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code,
+                    shop_id: Number(shop_id),
+                    partner_id: Number(PARTNER_ID),
+                }),
+            }
+        );
 
         const data = await tokenRes.json();
 
@@ -40,12 +43,12 @@ const shopeeCallback = async (req, res) => {
             return res.status(400).json({ error: data });
         }
 
-        // ✅ Simpan token di database
+        // ✅ Simpan token di DB (nanti kamu buat model ShopeeToken)
         // await ShopeeToken.upsert({
-        //     shop_id: shop_id,
-        //     access_token: data.access_token,
-        //     refresh_token: data.refresh_token,
-        //     expire_in: Date.now() + data.expire_in * 1000,
+        //   shop_id,
+        //   access_token: data.access_token,
+        //   refresh_token: data.refresh_token,
+        //   expire_in: Date.now() + data.expire_in * 1000,
         // });
 
         return res.json({
