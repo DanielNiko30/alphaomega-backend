@@ -44,7 +44,7 @@ function postJSON(url, body) {
 }
 
 /**
- * Shopee OAuth callback dengan debug partner key/id
+ * Shopee OAuth callback dengan debug lengkap
  */
 const shopeeCallback = async (req, res) => {
     try {
@@ -61,7 +61,7 @@ const shopeeCallback = async (req, res) => {
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
-        // BaseString sesuai dokumentasi: partner_id + path + timestamp + shop_id
+        // BaseString sesuai dokumentasi
         const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
@@ -71,7 +71,7 @@ const shopeeCallback = async (req, res) => {
         console.log("===== SHOPEE DEBUG =====");
         console.log("Partner ID:", PARTNER_ID);
         console.log("Partner Key Length:", PARTNER_KEY?.length);
-        console.log("Partner Key (first 8 chars):", PARTNER_KEY?.substring(0, 8));
+        console.log("Partner Key (full):", PARTNER_KEY);
         console.log("Timestamp:", timestamp);
         console.log("Path:", path);
         console.log("Shop ID (string):", shopIdStr);
@@ -84,25 +84,27 @@ const shopeeCallback = async (req, res) => {
         console.log("Request URL:", url);
 
         // POST ke Shopee
-        const data = await postJSON(url, {
+        const shopeeResponse = await postJSON(url, {
             code,
             shop_id: shopIdStr,
             partner_id: PARTNER_ID
         });
 
-        console.log("Shopee Response:", data);
+        console.log("Shopee Response:", shopeeResponse);
 
-        // Tambahkan partner info di response untuk cek
+        // Kembalikan semua debug dan response Shopee
         return res.json({
             success: true,
             shop_id: shopIdStr,
             state,
-            partner_debug: {
+            data: {
                 partner_id: PARTNER_ID,
-                partner_key_length: PARTNER_KEY?.length,
-                partner_key_first8: PARTNER_KEY?.substring(0, 8)
-            },
-            data,
+                partner_key: PARTNER_KEY,
+                timestamp,
+                baseString,
+                generatedSign: sign,
+                shopee_response: shopeeResponse
+            }
         });
 
     } catch (err) {
