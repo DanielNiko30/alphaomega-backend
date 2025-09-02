@@ -1,6 +1,5 @@
 const crypto = require("crypto");
 const fetch = require("node-fetch");
-const { ShopeeToken } = require("../../models"); // model Sequelize
 
 const PARTNER_ID = process.env.SHOPEE_PARTNER_ID;
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
