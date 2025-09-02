@@ -4,7 +4,7 @@ const https = require("https");
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 
-// Hapus spasi atau newline dari partner key
+// Bersihkan partner key dari whitespace / newline
 if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
 
 /**
@@ -47,7 +47,7 @@ function postJSON(url, body) {
 }
 
 /**
- * Shopee OAuth callback
+ * Shopee OAuth callback dengan debug lengkap
  */
 const shopeeCallback = async (req, res) => {
     try {
@@ -59,17 +59,34 @@ const shopeeCallback = async (req, res) => {
 
         const shopIdStr = String(shop_id);
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/auth/token/get";
 
-        // BaseString Shopee: partner_id + path + timestamp + shop_id
-        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
-        const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
+        // Coba dua versi path: dengan dan tanpa leading slash
+        const paths = ["/api/v2/auth/token/get", "api/v2/auth/token/get"];
+        let sign, baseString, selectedPath;
+
+        for (let p of paths) {
+            const b = `${PARTNER_ID}${p}${timestamp}${shopIdStr}`;
+            const s = crypto.createHmac("sha256", PARTNER_KEY).update(b).digest("hex");
+            // Pilih pertama yang valid untuk debug (tidak bisa tahu dulu diterima Shopee atau tidak)
+            if (!baseString) {
+                baseString = b;
+                sign = s;
+                selectedPath = p;
+            }
+        }
 
         console.log("===== SHOPEE DEBUG =====");
-        console.log({ partner_id: PARTNER_ID, timestamp, path, shop_id: shopIdStr, baseString, generatedSign: sign });
+        console.log({
+            partner_id: PARTNER_ID,
+            timestamp,
+            shop_id: shopIdStr,
+            baseString,
+            generatedSign: sign,
+            selectedPath
+        });
         console.log("========================");
 
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
+        const url = `https://partner.shopeemobile.com/${selectedPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
         // Kirim request ke Shopee
         const shopeeResponse = await postJSON(url, {
@@ -80,7 +97,6 @@ const shopeeCallback = async (req, res) => {
 
         console.log("Shopee Response:", shopeeResponse);
 
-        // Kembalikan debug + response Shopee (untuk testing)
         return res.json({
             success: true,
             shop_id: shopIdStr,
@@ -90,6 +106,7 @@ const shopeeCallback = async (req, res) => {
                 timestamp,
                 baseString,
                 generatedSign: sign,
+                selectedPath,
                 shopee_response: shopeeResponse
             }
         });
