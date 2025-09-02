@@ -1,8 +1,8 @@
 const crypto = require("crypto");
 
-const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
-const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
-const REDIRECT_URL = process.env.SHOPEE_REDIRECT_URL;
+const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID?.trim());
+const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
+const REDIRECT_URL = process.env.SHOPEE_REDIRECT_URL?.trim();
 
 const shopeeCallback = async (req, res) => {
     try {
@@ -15,16 +15,18 @@ const shopeeCallback = async (req, res) => {
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
-        // ✅ BaseString: partner_id + path + timestamp + shop_id
+        // ✅ BaseString sesuai docs
         const baseString = `${PARTNER_ID}${path}${timestamp}${shop_id}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
             .update(baseString)
             .digest("hex");
 
+        // 🔍 Debug detail
         console.log("===== SHOPEE DEBUG =====");
         console.log("Partner ID:", PARTNER_ID);
-        console.log("Partner Key (first 6 chars):", PARTNER_KEY?.substring(0, 6));
+        console.log("Partner Key Length:", PARTNER_KEY?.length);
+        console.log("Partner Key (first 8):", PARTNER_KEY?.substring(0, 8));
         console.log("Timestamp:", timestamp);
         console.log("Path:", path);
         console.log("Shop ID:", shop_id);
@@ -32,8 +34,9 @@ const shopeeCallback = async (req, res) => {
         console.log("Generated Sign:", sign);
         console.log("========================");
 
-        // 🔗 URL (tanpa shop_id di query!)
+        // 🔗 Endpoint Shopee
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
+
         console.log("Request URL:", url);
 
         // 🚀 Request ke Shopee API
@@ -48,7 +51,7 @@ const shopeeCallback = async (req, res) => {
         });
 
         const data = await tokenRes.json();
-        console.log("Shopee Response:", data);
+        console.log("Shopee Response:", JSON.stringify(data, null, 2));
 
         return res.json({
             success: true,
