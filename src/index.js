@@ -14,6 +14,12 @@ app.get('/', (req, res) => {
   res.send('✅ Server Express berjalan dengan baik! Akses /api/health untuk cek database.');
 });
 
+app.use('/api/shopee', (req, res, next) => {
+  console.log("➡️ Shopee route hit:", req.method, req.originalUrl);
+  next();
+}, require('./routes/shopee_routes'));
+
+
 app.post('/api/lazada/callback', (req, res) => {
   console.log('📦 Lazada Push Received:', req.body);
 
