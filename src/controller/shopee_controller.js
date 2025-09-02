@@ -47,7 +47,8 @@ function postJSON(url, body) {
 }
 
 /**
- * Shopee OAuth callback dengan debug lengkap
+ * Shopee OAuth callback
+ * @route GET /api/shopee/callback
  */
 const shopeeCallback = async (req, res) => {
     try {
@@ -59,21 +60,11 @@ const shopeeCallback = async (req, res) => {
 
         const shopIdStr = String(shop_id);
         const timestamp = Math.floor(Date.now() / 1000);
+        const path = "api/v2/auth/token/get"; // tanpa slash di baseString
 
-        // Coba dua versi path: dengan dan tanpa leading slash
-        const paths = ["/api/v2/auth/token/get", "api/v2/auth/token/get"];
-        let sign, baseString, selectedPath;
-
-        for (let p of paths) {
-            const b = `${PARTNER_ID}${p}${timestamp}${shopIdStr}`;
-            const s = crypto.createHmac("sha256", PARTNER_KEY).update(b).digest("hex");
-            // Pilih pertama yang valid untuk debug (tidak bisa tahu dulu diterima Shopee atau tidak)
-            if (!baseString) {
-                baseString = b;
-                sign = s;
-                selectedPath = p;
-            }
-        }
+        // BaseString sesuai dokumentasi Shopee
+        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
+        const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
         console.log("===== SHOPEE DEBUG =====");
         console.log({
@@ -81,14 +72,13 @@ const shopeeCallback = async (req, res) => {
             timestamp,
             shop_id: shopIdStr,
             baseString,
-            generatedSign: sign,
-            selectedPath
+            generatedSign: sign
         });
         console.log("========================");
 
-        const url = `https://partner.shopeemobile.com/${selectedPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
+        const url = `https://partner.shopeemobile.com/${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
-        // Kirim request ke Shopee
+        // POST ke Shopee untuk tukar code jadi access_token
         const shopeeResponse = await postJSON(url, {
             code,
             shop_id: shopIdStr,
@@ -106,7 +96,6 @@ const shopeeCallback = async (req, res) => {
                 timestamp,
                 baseString,
                 generatedSign: sign,
-                selectedPath,
                 shopee_response: shopeeResponse
             }
         });

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { getDB } = require('./config/sequelize');
 
 const app = express();
@@ -14,6 +15,30 @@ app.get('/', (req, res) => {
   res.send('✅ Server Express berjalan dengan baik! Akses /api/health untuk cek database.');
 });
 
+// Route sementara untuk generate Shopee login URL
+app.get('/api/shopee/generate-login-url', (req, res) => {
+  try {
+    const PARTNER_ID = 2012319; // Ganti sesuai live partner ID
+    const PARTNER_KEY = 'shpk70754d646e53645a4450504e7a5a716871715a4c5877416647776555494f'; // Ganti live key
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = '/api/v2/shop/auth_partner';
+
+    const baseString = `${PARTNER_ID}${path}${timestamp}`;
+    const sign = crypto.createHmac('sha256', PARTNER_KEY).update(baseString).digest('hex');
+
+    const redirectUrl = encodeURIComponent('https://tokalphaomegaploso.my.id/api/shopee/callback');
+    const state = 'xyz';
+
+    const loginUrl = `https://partner.shopeemobile.com/api/v2/shop/auth_partner?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}&redirect=${redirectUrl}&state=${state}`;
+
+    res.json({ login_url: loginUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Gagal generate login URL' });
+  }
+});
+
+// Endpoint Lazada
 app.post('/api/lazada/callback', (req, res) => {
   console.log('📦 Lazada Push Received:', req.body);
 
@@ -24,6 +49,7 @@ app.post('/api/lazada/callback', (req, res) => {
   res.status(200).send('OK');
 });
 
+// Routes lain
 app.use('/api/shopee', require('./routes/shopee_routes'));
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
