@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "src/index.js",
-  "type": "module",
   "scripts": {
     "dev": "cross-env NODE_ENV=development node src/index.js",
     "start": "cross-env NODE_ENV=production node src/index.js",
