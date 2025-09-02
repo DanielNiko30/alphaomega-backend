@@ -4,6 +4,12 @@ const https = require("https");
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 
+/**
+ * Fungsi POST JSON menggunakan https bawaan Node
+ * @param {string} url 
+ * @param {object} body 
+ * @returns {Promise<object>}
+ */
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -26,7 +32,7 @@ function postJSON(url, body) {
                 try {
                     resolve(JSON.parse(chunks));
                 } catch (err) {
-                    reject(err);
+                    reject(new Error(`Invalid JSON response: ${chunks}`));
                 }
             });
         });
@@ -37,6 +43,9 @@ function postJSON(url, body) {
     });
 }
 
+/**
+ * Shopee OAuth callback
+ */
 const shopeeCallback = async (req, res) => {
     try {
         const { code, shop_id, state } = req.query;
@@ -45,11 +54,15 @@ const shopeeCallback = async (req, res) => {
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
+        // Gunakan string untuk shop_id
+        const shopIdStr = String(shop_id);
+
+        // Timestamp UTC
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
-        // BaseString harus include shop_id
-        const baseString = `${PARTNER_ID}${path}${timestamp}${shop_id}`;
+        // BaseString sesuai dokumentasi: partner_id + path + timestamp + shop_id
+        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
             .update(baseString)
@@ -60,28 +73,31 @@ const shopeeCallback = async (req, res) => {
         console.log("Partner Key Length:", PARTNER_KEY?.length);
         console.log("Timestamp:", timestamp);
         console.log("Path:", path);
-        console.log("Shop ID:", shop_id);
+        console.log("Shop ID (string):", shopIdStr);
         console.log("BaseString:", baseString);
         console.log("Generated Sign:", sign);
         console.log("========================");
 
+        // URL request
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
         console.log("Request URL:", url);
 
+        // POST ke Shopee
         const data = await postJSON(url, {
             code,
-            shop_id,
-            partner_id: PARTNER_ID,
+            shop_id: shopIdStr,
+            partner_id: PARTNER_ID
         });
 
         console.log("Shopee Response:", data);
 
         return res.json({
             success: true,
-            shop_id,
+            shop_id: shopIdStr,
             state,
             data,
         });
+
     } catch (err) {
         console.error("Shopee Callback Error:", err);
         return res.status(500).json({ error: "Internal server error" });
