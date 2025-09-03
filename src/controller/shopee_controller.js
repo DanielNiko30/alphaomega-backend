@@ -46,12 +46,15 @@ const shopeeCallback = async (req, res) => {
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
-        const shopIdNum = Number(shop_id); // pastikan ini angka
+        const shopIdNum = Number(shop_id); // pastikan angka
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
-        // ✅ Generate signature
-        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdNum}`;
+        /**
+         * ✅ SIGN yang benar untuk token/get
+         * partner_id + path + timestamp + code + shop_id
+         */
+        const baseString = `${PARTNER_ID}${path}${timestamp}${code}${shopIdNum}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
             .update(baseString, "utf8")
@@ -70,6 +73,7 @@ const shopeeCallback = async (req, res) => {
             partner_id: PARTNER_ID,
         });
 
+        // 🔹 Request ke Shopee
         const shopeeResponse = await postJSON(url, {
             code,
             shop_id: shopIdNum,
@@ -78,13 +82,14 @@ const shopeeCallback = async (req, res) => {
 
         console.log("Shopee Response:", shopeeResponse);
 
+        // ✅ Simpan token jika berhasil
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
             await Shopee.upsert({
                 shop_id: BigInt(shopIdNum),
                 access_token: shopeeResponse.access_token,
                 refresh_token: shopeeResponse.refresh_token,
                 expire_in: shopeeResponse.expire_in,
-                last_updated: Math.floor(Date.now() / 1000),
+                last_updated: timestamp,
             });
             console.log(`✅ Token Shopee untuk shop_id ${shopIdNum} berhasil disimpan`);
         } else {
