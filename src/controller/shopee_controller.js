@@ -1,9 +1,16 @@
 const crypto = require("crypto");
 const https = require("https");
 
+// Ambil partner_id & partner_key dari .env
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
-let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
+let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 
+// Bersihkan partner key dari whitespace/newline
+if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
+
+/**
+ * Helper POST JSON
+ */
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -21,7 +28,7 @@ function postJSON(url, body) {
 
         const req = https.request(options, (res) => {
             let chunks = "";
-            res.on("data", (chunk) => chunks += chunk);
+            res.on("data", (chunk) => (chunks += chunk));
             res.on("end", () => {
                 try {
                     resolve(JSON.parse(chunks));
@@ -37,48 +44,109 @@ function postJSON(url, body) {
     });
 }
 
+/**
+ * Callback Shopee OAuth
+ */
 const shopeeCallback = async (req, res) => {
     try {
-        const { code, shop_id } = req.query;
+        // ======== FULL DEBUG START ========
+        console.log("===== FULL DEBUG START =====");
+
+        console.log("ENV VARIABLES:");
+        console.log({
+            SHOPEE_PARTNER_ID: process.env.SHOPEE_PARTNER_ID,
+            SHOPEE_PARTNER_KEY_RAW: process.env.SHOPEE_PARTNER_KEY,
+            SHOPEE_PARTNER_KEY_JSON: JSON.stringify(process.env.SHOPEE_PARTNER_KEY),
+            SHOPEE_PARTNER_KEY_TRIMMED: JSON.stringify(PARTNER_KEY),
+            key_length_raw: process.env.SHOPEE_PARTNER_KEY?.length,
+            key_length_trimmed: PARTNER_KEY?.length
+        });
+
+        console.log("QUERY RECEIVED FROM SHOPEE:");
+        console.log(req.query);
+
+        const { code, shop_id, state } = req.query;
 
         if (!code || !shop_id) {
+            console.error("❌ Missing code or shop_id");
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
+        // Shopee sangat sensitif waktu
         const timestamp = Math.floor(Date.now() / 1000);
+        console.log("SERVER TIMESTAMP:", timestamp, "| Local Date:", new Date(timestamp * 1000).toISOString());
+
+        // Pastikan path benar dan persis sesuai dokumen
         const path = "/api/v2/auth/token/get";
 
-        // BaseString
+        // BaseString format sesuai dokumentasi:
+        // partner_id + path + timestamp + shop_id
         const baseString = `${PARTNER_ID}${path}${timestamp}${shop_id}`;
-
-        console.log("===== DEBUG SIGNATURE =====");
+        console.log("BASESTRING DEBUG:");
         console.log({
             partner_id: PARTNER_ID,
             path,
             timestamp,
             shop_id,
             baseString,
-            key_length: PARTNER_KEY.length,
+            baseString_length: baseString.length
         });
 
-        const sign = crypto.createHmac("sha256", PARTNER_KEY)
+        // Generate signature
+        const sign = crypto
+            .createHmac("sha256", PARTNER_KEY)
             .update(baseString)
             .digest("hex");
 
-        console.log("Generated Sign:", sign);
+        console.log("SIGNATURE DEBUG:");
+        console.log({
+            generatedSign: sign,
+            sign_length: sign.length
+        });
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
-        const body = { code, shop_id, partner_id: PARTNER_ID };
-        console.log("POST URL:", url);
-        console.log("POST BODY:", body);
+        const body = {
+            code,
+            shop_id,
+            partner_id: PARTNER_ID,
+        };
 
-        const shopeeResponse = await postJSON(url, body);
+        console.log("FINAL REQUEST TO SHOPEE:");
+        console.log({ url, body });
 
-        return res.json({ success: true, shop_id, shopee_response: shopeeResponse });
+        // ======== CALL SHOPEE ========
+        let shopeeResponse;
+        try {
+            shopeeResponse = await postJSON(url, body);
+        } catch (err) {
+            console.error("❌ Error posting to Shopee:", err.message);
+            shopeeResponse = { error: "post_error", message: err.message };
+        }
+
+        console.log("SHOPEE RAW RESPONSE:");
+        console.log(shopeeResponse);
+        console.log("===== FULL DEBUG END =====");
+
+        return res.json({
+            success: true,
+            shop_id,
+            state,
+            data: {
+                partner_id: PARTNER_ID,
+                timestamp,
+                baseString,
+                generatedSign: sign,
+                url,
+                shopee_response: shopeeResponse
+            },
+        });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: err.message });
+        console.error("❌ Shopee Callback Error:", err);
+        return res.status(500).json({
+            error: "Internal server error",
+            message: err.message,
+        });
     }
 };
 
