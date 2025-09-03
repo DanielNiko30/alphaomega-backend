@@ -6,7 +6,7 @@ const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
 
 /**
- * Helper untuk POST JSON
+ * Helper untuk POST JSON ke Shopee
  */
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
@@ -52,22 +52,27 @@ const shopeeCallback = async (req, res) => {
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
-        // ✅ Shopee mengirim shop_id sebagai string angka
-        const shopIdNum = Number(shop_id);
+        // ❗ Jangan convert ke Number
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
         /**
          * SIGN untuk token/get:
          * partner_id + path + timestamp + code + shop_id
+         * Semua dalam bentuk STRING
          */
-        const baseString = `${PARTNER_ID}${path}${timestamp}${code}${shopIdNum}`;
+        const baseString = `${PARTNER_ID}${path}${timestamp}${code}${shop_id}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
             .update(baseString, "utf8")
             .digest("hex");
 
         console.log("===== SHOPEE SIGN DEBUG =====");
+        console.log("PARTNER_ID:", PARTNER_ID);
+        console.log("PATH:", path);
+        console.log("TIMESTAMP:", timestamp);
+        console.log("CODE:", code);
+        console.log("SHOP_ID:", shop_id);
         console.log("BaseString:", baseString);
         console.log("Generated Sign:", sign);
         console.log("Partner Key Length:", PARTNER_KEY.length);
@@ -76,14 +81,14 @@ const shopeeCallback = async (req, res) => {
 
         console.log("Request Body to Shopee:", {
             code,
-            shop_id: shopIdNum,
+            shop_id,
             partner_id: PARTNER_ID,
         });
 
         // 🔹 Request ke Shopee untuk exchange code jadi token
         const shopeeResponse = await postJSON(url, {
             code,
-            shop_id: shopIdNum,
+            shop_id,
             partner_id: PARTNER_ID,
         });
 
@@ -93,20 +98,20 @@ const shopeeCallback = async (req, res) => {
         // ✅ Jika Shopee mengembalikan token
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
             await Shopee.upsert({
-                shop_id: BigInt(shopIdNum),
+                shop_id: BigInt(shop_id),
                 access_token: shopeeResponse.access_token,
                 refresh_token: shopeeResponse.refresh_token,
                 expire_in: shopeeResponse.expire_in,
                 last_updated: timestamp,
             });
-            console.log(`✅ Token Shopee untuk shop_id ${shopIdNum} berhasil disimpan`);
+            console.log(`✅ Token Shopee untuk shop_id ${shop_id} berhasil disimpan`);
         } else {
             console.error("❌ Shopee tidak mengirim access_token:", shopeeResponse);
         }
 
         return res.json({
             success: true,
-            shop_id: shopIdNum,
+            shop_id,
             state,
             data: {
                 partner_id: PARTNER_ID,
