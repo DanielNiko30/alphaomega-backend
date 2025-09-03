@@ -5,6 +5,9 @@ const { Shopee } = require("../model/shopee_model");
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
 
+/**
+ * Helper untuk POST JSON
+ */
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -40,18 +43,22 @@ function postJSON(url, body) {
 
 const shopeeCallback = async (req, res) => {
     try {
+        console.log("===== DEBUG CALLBACK QUERY =====");
+        console.log(req.query);
+
         const { code, shop_id, state } = req.query;
 
         if (!code || !shop_id) {
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
-        const shopIdNum = Number(shop_id); // pastikan angka
+        // ✅ Shopee mengirim shop_id sebagai string angka
+        const shopIdNum = Number(shop_id);
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
         /**
-         * ✅ SIGN yang benar untuk token/get
+         * SIGN untuk token/get:
          * partner_id + path + timestamp + code + shop_id
          */
         const baseString = `${PARTNER_ID}${path}${timestamp}${code}${shopIdNum}`;
@@ -60,7 +67,7 @@ const shopeeCallback = async (req, res) => {
             .update(baseString, "utf8")
             .digest("hex");
 
-        console.log("===== SHOPEE DEBUG =====");
+        console.log("===== SHOPEE SIGN DEBUG =====");
         console.log("BaseString:", baseString);
         console.log("Generated Sign:", sign);
         console.log("Partner Key Length:", PARTNER_KEY.length);
@@ -73,16 +80,17 @@ const shopeeCallback = async (req, res) => {
             partner_id: PARTNER_ID,
         });
 
-        // 🔹 Request ke Shopee
+        // 🔹 Request ke Shopee untuk exchange code jadi token
         const shopeeResponse = await postJSON(url, {
             code,
             shop_id: shopIdNum,
             partner_id: PARTNER_ID,
         });
 
-        console.log("Shopee Response:", shopeeResponse);
+        console.log("===== SHOPEE RESPONSE =====");
+        console.log(shopeeResponse);
 
-        // ✅ Simpan token jika berhasil
+        // ✅ Jika Shopee mengembalikan token
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
             await Shopee.upsert({
                 shop_id: BigInt(shopIdNum),
@@ -111,9 +119,10 @@ const shopeeCallback = async (req, res) => {
         });
     } catch (err) {
         console.error("Shopee Callback Error:", err);
-        return res
-            .status(500)
-            .json({ error: "Internal server error", message: err.message });
+        return res.status(500).json({
+            error: "Internal server error",
+            message: err.message,
+        });
     }
 };
 
