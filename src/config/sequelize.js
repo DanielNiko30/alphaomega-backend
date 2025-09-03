@@ -8,20 +8,16 @@ function getDB() {
     const dbName = process.env.DB_NAME;
     const dbUser = process.env.DB_USER;
     const dbPass = process.env.DB_PASS;
-    const dbHost = process.env.DB_HOST || 'localhost';
+    const dbHost = process.env.DB_HOST || '127.0.0.1';
     const dbPort = process.env.DB_PORT || 3306;
     const dbDialect = process.env.DB_DIALECT || 'mysql';
     const dbSSL = process.env.DB_SSL === 'true';
 
-    dbInstance = new Sequelize(dbName, dbUser, dbPass, {
+    // Konfigurasi dasar Sequelize
+    const sequelizeOptions = {
       host: dbHost,
       port: dbPort,
       dialect: dbDialect,
-      dialectOptions: dbHost === 'localhost' ? {} : dbSSL ? {
-        ssl: {
-          rejectUnauthorized: false,
-        },
-      } : {},
       logging: console.log,
       timezone: '+07:00',
       pool: {
@@ -33,13 +29,31 @@ function getDB() {
       retry: {
         max: 3,
       },
-    });
+    };
 
-    // Test koneksi saat inisialisasi dengan async/await
+    // Jika SSL aktif (untuk koneksi remote)
+    if (dbSSL) {
+      sequelizeOptions.dialectOptions = {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      };
+    }
+
+    // Paksa Sequelize selalu gunakan TCP, tidak fallback ke socket
+    sequelizeOptions.dialectOptions = {
+      ...sequelizeOptions.dialectOptions,
+      connectTimeout: 60000,
+    };
+
+    // Buat instance Sequelize
+    dbInstance = new Sequelize(dbName, dbUser, dbPass, sequelizeOptions);
+
+    // Test koneksi
     (async () => {
       try {
         await dbInstance.authenticate();
-        console.log(`✅ DB connected successfully: ${dbUser}@${dbHost}/${dbName}`);
+        console.log(`✅ DB connected successfully: ${dbUser}@${dbHost}:${dbPort}/${dbName}`);
       } catch (err) {
         console.error(`❌ DB connection error for ${dbUser}@${dbHost}:`, err.message);
       }
