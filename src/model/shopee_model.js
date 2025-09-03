@@ -26,7 +26,7 @@ const Shopee = db.define("shopee", {
         allowNull: false,
     },
 }, {
-    tableName: "shopee",
+    tableName: "shopee_routes",
     timestamps: false,
 });
 
