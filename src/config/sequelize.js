@@ -11,16 +11,17 @@ function getDB() {
     const dbHost = process.env.DB_HOST || 'localhost';
     const dbPort = process.env.DB_PORT || 3306;
     const dbDialect = process.env.DB_DIALECT || 'mysql';
+    const dbSSL = process.env.DB_SSL === 'true';
 
     dbInstance = new Sequelize(dbName, dbUser, dbPass, {
       host: dbHost,
       port: dbPort,
       dialect: dbDialect,
-      dialectOptions: dbHost === 'localhost' ? {} : {
+      dialectOptions: dbHost === 'localhost' ? {} : dbSSL ? {
         ssl: {
           rejectUnauthorized: false,
         },
-      },
+      } : {},
       logging: console.log,
       timezone: '+07:00',
       pool: {
@@ -34,11 +35,15 @@ function getDB() {
       },
     });
 
-
-    // Test koneksi saat inisialisasi
-    dbInstance.authenticate()
-      .then(() => console.log('✅ DB connected successfully'))
-      .catch(err => console.error('❌ DB connection error:', err.message));
+    // Test koneksi saat inisialisasi dengan async/await
+    (async () => {
+      try {
+        await dbInstance.authenticate();
+        console.log(`✅ DB connected successfully: ${dbUser}@${dbHost}/${dbName}`);
+      } catch (err) {
+        console.error(`❌ DB connection error for ${dbUser}@${dbHost}:`, err.message);
+      }
+    })();
   }
 
   return dbInstance;
