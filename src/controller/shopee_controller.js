@@ -22,7 +22,7 @@ function postJSON(url, body) {
 
         const req = https.request(options, (res) => {
             let chunks = "";
-            res.on("data", (chunk) => chunks += chunk);
+            res.on("data", (chunk) => (chunks += chunk));
             res.on("end", () => {
                 try {
                     resolve(JSON.parse(chunks));
@@ -46,62 +46,54 @@ const shopeeCallback = async (req, res) => {
             return res.status(400).json({ error: "Missing code or shop_id" });
         }
 
-        const shopIdStr = shop_id;
+        const shopIdNum = Number(shop_id); // pastikan ini angka
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/auth/token/get";
 
-        // ✅ Generate Signature
-        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdStr}`;
+        // ✅ Generate signature
+        const baseString = `${PARTNER_ID}${path}${timestamp}${shopIdNum}`;
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
-            .update(baseString)
+            .update(baseString, "utf8")
             .digest("hex");
 
-        // Debug untuk validasi
         console.log("===== SHOPEE DEBUG =====");
-        console.log("Partner ID:", PARTNER_ID);
-        console.log("Timestamp:", timestamp);
-        console.log("Path:", path);
-        console.log("Shop ID:", shopIdStr);
         console.log("BaseString:", baseString);
-        console.log("Partner Key Length:", PARTNER_KEY.length);
         console.log("Generated Sign:", sign);
+        console.log("Partner Key Length:", PARTNER_KEY.length);
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
-        let shopeeResponse;
-        try {
-            shopeeResponse = await postJSON(url, {
-                code,
-                shop_id: shopIdStr,
-                partner_id: PARTNER_ID
-            });
-        } catch (err) {
-            console.error("Error posting to Shopee:", err.message);
-            return res.status(500).json({ error: "Shopee API Error", message: err.message });
-        }
+        console.log("Request Body to Shopee:", {
+            code,
+            shop_id: shopIdNum,
+            partner_id: PARTNER_ID,
+        });
 
-        // ✅ Simpan token hanya jika Shopee memberikan access_token & refresh_token
+        const shopeeResponse = await postJSON(url, {
+            code,
+            shop_id: shopIdNum,
+            partner_id: PARTNER_ID,
+        });
+
+        console.log("Shopee Response:", shopeeResponse);
+
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
-            try {
-                await Shopee.upsert({
-                    shop_id: BigInt(shopIdStr), // PK → otomatis replace jika sudah ada
-                    access_token: shopeeResponse.access_token,
-                    refresh_token: shopeeResponse.refresh_token,
-                    expire_in: shopeeResponse.expire_in,
-                    last_updated: Math.floor(Date.now() / 1000)
-                });
-                console.log(`✅ Token Shopee untuk shop_id ${shopIdStr} berhasil disimpan / diperbarui`);
-            } catch (dbErr) {
-                console.error("❌ Gagal menyimpan token Shopee ke DB:", dbErr.message);
-            }
+            await Shopee.upsert({
+                shop_id: BigInt(shopIdNum),
+                access_token: shopeeResponse.access_token,
+                refresh_token: shopeeResponse.refresh_token,
+                expire_in: shopeeResponse.expire_in,
+                last_updated: Math.floor(Date.now() / 1000),
+            });
+            console.log(`✅ Token Shopee untuk shop_id ${shopIdNum} berhasil disimpan`);
         } else {
-            console.error("❌ Shopee tidak mengirimkan access_token:", JSON.stringify(shopeeResponse));
+            console.error("❌ Shopee tidak mengirim access_token:", shopeeResponse);
         }
 
         return res.json({
             success: true,
-            shop_id: shopIdStr,
+            shop_id: shopIdNum,
             state,
             data: {
                 partner_id: PARTNER_ID,
@@ -109,12 +101,14 @@ const shopeeCallback = async (req, res) => {
                 baseString,
                 generatedSign: sign,
                 url,
-                shopee_response: shopeeResponse
-            }
+                shopee_response: shopeeResponse,
+            },
         });
     } catch (err) {
         console.error("Shopee Callback Error:", err);
-        return res.status(500).json({ error: "Internal server error", message: err.message });
+        return res
+            .status(500)
+            .json({ error: "Internal server error", message: err.message });
     }
 };
 
