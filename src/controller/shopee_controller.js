@@ -39,42 +39,37 @@ function postJSON(url, body) {
     });
 }
 
-const getShopeeItemList = async (req, res) => {
-    try {
-        // Ambil token terbaru dari database
-        const shopeeData = await Shopee.findOne();
-        if (!shopeeData || !shopeeData.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
-        }
+function getJSON(url) {
+    return new Promise((resolve, reject) => {
+        const parsedUrl = new URL(url);
 
-        const { shop_id, access_token } = shopeeData;
+        const options = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: "GET",
+        };
 
-        const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/product/get_item_list";
-
-        // Generate signature
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-
-        // Build URL ke Shopee
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=0&page_size=10&item_status=NORMAL`;
-
-        console.log("Shopee Get Item List URL:", url);
-
-        // Request ke Shopee API
-        const response = await getJSON(url);
-
-        return res.json({
-            success: true,
-            timestamp,
-            shop_id,
-            url,
-            shopee_response: response,
+        const req = https.request(options, (res) => {
+            let chunks = "";
+            res.on("data", (chunk) => (chunks += chunk));
+            res.on("end", () => {
+                try {
+                    resolve(JSON.parse(chunks));
+                } catch (err) {
+                    reject(new Error(`Invalid JSON response: ${chunks}`));
+                }
+            });
         });
-    } catch (err) {
-        console.error("Shopee Get Item List Error:", err);
-        return res.status(500).json({ error: err.message });
-    }
-};
+
+        req.on("error", (err) => reject(err));
+        req.end();
+    });
+}
+
+function generateSign(path, timestamp, access_token, shop_id) {
+    const baseString = `${PARTNER_ID}${path}${timestamp}${access_token}${shop_id}`;
+    return crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
+}
 
 const shopeeCallback = async (req, res) => {
     try {
@@ -132,6 +127,43 @@ const shopeeCallback = async (req, res) => {
         });
     } catch (err) {
         console.error("Shopee Callback Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const getShopeeItemList = async (req, res) => {
+    try {
+        // Ambil token terbaru dari database
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData || !shopeeData.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/get_item_list";
+
+        // Generate signature
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        // Build URL ke Shopee
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=0&page_size=10&item_status=NORMAL`;
+
+        console.log("Shopee Get Item List URL:", url);
+
+        // Request GET ke Shopee API
+        const response = await getJSON(url);
+
+        return res.json({
+            success: true,
+            timestamp,
+            shop_id,
+            url,
+            shopee_response: response,
+        });
+    } catch (err) {
+        console.error("Shopee Get Item List Error:", err);
         return res.status(500).json({ error: err.message });
     }
 };
