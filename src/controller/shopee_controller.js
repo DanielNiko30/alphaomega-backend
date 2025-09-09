@@ -100,14 +100,19 @@ const shopeeCallback = async (req, res) => {
 
         // ✅ Jika sukses, simpan ke DB
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
-            await Shopee.upsert({
+            // Hapus semua data lama
+            await Shopee.destroy({ where: {} });
+
+            // Simpan data token terbaru
+            await Shopee.create({
                 shop_id: shop_id,
                 access_token: shopeeResponse.access_token,
                 refresh_token: shopeeResponse.refresh_token,
                 expire_in: shopeeResponse.expire_in,
                 last_updated: timestamp,
             });
-            console.log(`✅ Shopee token saved/updated for shop_id ${shop_id}`);
+
+            console.log(`✅ Shopee token replaced for shop_id ${shop_id}`);
         } else {
             console.error("❌ Shopee did not return token:", shopeeResponse);
         }

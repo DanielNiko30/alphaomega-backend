@@ -162,6 +162,8 @@ const ProductController = {
                 nama_product,
                 gambar_product: gambarBuffer,
                 deskripsi_product,
+                id_product_shopee: null,
+                id_product_lazada: null
             });
 
             // Reset counter stok ID
