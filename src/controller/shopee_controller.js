@@ -234,6 +234,11 @@ const createProductShopee = async (req, res) => {
         // Convert BLOB → Buffer
         const imageBuffer = Buffer.from(product.gambar_product);
 
+        // Pastikan gambar valid
+        if (imageBuffer.length === 0) {
+            return res.status(400).json({ error: "Gambar di database kosong!" });
+        }
+
         // Buat form-data untuk upload gambar
         const formData = new FormData();
         formData.append("image", imageBuffer, {
@@ -253,7 +258,8 @@ const createProductShopee = async (req, res) => {
         if (
             !uploadResponse.data ||
             !uploadResponse.data.response ||
-            !uploadResponse.data.response.image_info
+            !uploadResponse.data.response.image_info ||
+            !uploadResponse.data.response.image_info.image_url
         ) {
             return res.status(400).json({
                 success: false,
@@ -289,7 +295,7 @@ const createProductShopee = async (req, res) => {
             dimension,
             condition,
             normal_stock: stokUtama.stok,
-            images: [shopeeImageUrl], // ✅ array of string, bukan object
+            images: [shopeeImageUrl], // ✅ Harus array of string
         };
 
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
@@ -302,7 +308,7 @@ const createProductShopee = async (req, res) => {
         console.log("Shopee Create Product Response:", JSON.stringify(createResponse.data, null, 2));
 
         // Jika Shopee mengembalikan error
-        if (createResponse.data.error || createResponse.data.message) {
+        if (createResponse.data.error) {
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message || "Gagal membuat produk di Shopee",
