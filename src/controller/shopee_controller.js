@@ -184,8 +184,6 @@ const createProductShopee = async (req, res) => {
         const { id_product } = req.params;
         const { weight, category_id, dimension, condition, item_sku, brand_id, brand_name, selected_unit } = req.body;
 
-        console.log("🚀 Starting createProductShopee for", id_product);
-
         // 1️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
@@ -208,8 +206,6 @@ const createProductShopee = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        console.log(`🔹 Stok terpilih: ${stokTerpilih.stok} ${stokTerpilih.satuan}`);
-
         // 4️⃣ Ambil channel logistik Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const logisticPath = "/api/v2/logistics/get_channel_list";
@@ -217,22 +213,19 @@ const createProductShopee = async (req, res) => {
         const logisticUrl = `https://partner.shopeemobile.com${logisticPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${logisticSign}`;
 
         const logisticResponse = await getJSON(logisticUrl);
-        // Ambil channel yang enabled dan memiliki konfigurasi
         const validChannels = (logisticResponse.response?.logistics_channel_list || []).filter(ch => ch.enabled === true);
         if (!validChannels.length) {
-            return res.status(400).json({ error: "Tidak ada channel logistik Shopee yang valid. Periksa pengaturan shipping di Seller Center." });
+            return res.status(400).json({ error: "Tidak ada channel logistik Shopee yang valid." });
         }
 
         // Pilih channel pertama
         const selectedChannel = validChannels[0];
-        console.log("🔹 Selected logistics channel:", selectedChannel.id, selectedChannel.name);
 
         // 5️⃣ Upload gambar
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
         const uploadUrl = `https://partner.shopeemobile.com${uploadPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${uploadSign}`;
         const imageBuffer = Buffer.isBuffer(product.gambar_product) ? product.gambar_product : Buffer.from(product.gambar_product);
-        if (!imageBuffer || imageBuffer.length === 0) return res.status(400).json({ error: "Gambar kosong atau invalid!" });
 
         const formData = new FormData();
         formData.append("image", imageBuffer, { filename: `${product.id_product}.png`, contentType: "image/png" });
@@ -240,7 +233,7 @@ const createProductShopee = async (req, res) => {
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 6️⃣ Body Add Item (gunakan logistic_id)
+        // 6️⃣ Body Add Item
         const body = {
             original_price: Number(stokTerpilih.harga),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
@@ -252,7 +245,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistic_id: Number(selectedChannel.id), // <-- perbaikan di sini
+                    logistic_id: Number(selectedChannel.id), // ✅ perbaikan di sini
                     enabled: true,
                     is_free: false
                 }
@@ -268,8 +261,6 @@ const createProductShopee = async (req, res) => {
             image: { image_id_list: [uploadedImageId], image_ratio: "1:1" },
             brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" }
         };
-
-        console.log("🔹 Shopee Add Item body:", JSON.stringify(body, null, 2));
 
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
@@ -292,7 +283,7 @@ const createProductShopee = async (req, res) => {
 
     } catch (err) {
         console.error("❌ Shopee Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal menambahkan produk ke Shopee. Periksa console log." });
+        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal menambahkan produk ke Shopee." });
     }
 };
 
