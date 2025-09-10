@@ -225,6 +225,7 @@ const createProductShopee = async (req, res) => {
         }
 
         // === 4. Upload gambar ke Shopee ===
+        // === 4. Upload gambar ke Shopee ===
         const timestamp = Math.floor(Date.now() / 1000);
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
@@ -251,25 +252,22 @@ const createProductShopee = async (req, res) => {
 
         console.log("Shopee Upload Response:", JSON.stringify(uploadResponse.data, null, 2));
 
-        // === FIX: ambil URL dari response.image_info.image_url_list[0].image_url ===
-        const uploadedImageInfo = uploadResponse.data?.response?.image_info;
-        const uploadedImageUrl = uploadedImageInfo?.image_url_list?.[0]?.image_url;
+        // === Ambil URL gambar Shopee ===
+        const uploadedImageUrl =
+            uploadResponse.data?.response?.image_info?.image_url_list?.find(
+                img => img.image_url_region === "ID"
+            )?.image_url ||
+            uploadResponse.data?.response?.image_info?.image_url_list?.[0]?.image_url;
 
-        if (!uploadedImageUrl) {
+        console.log("Uploaded Image URL:", uploadedImageUrl);
+
+        if (!uploadedImageUrl || !uploadedImageUrl.startsWith("http")) {
             return res.status(400).json({
                 success: false,
-                message: "Gagal upload gambar ke Shopee, URL tidak ditemukan",
+                message: "URL gambar tidak valid setelah upload",
                 shopee_response: uploadResponse.data,
             });
         }
-
-        console.log("Shopee Image Uploaded URL:", uploadedImageUrl);
-
-        // === 5. Generate sign untuk create product ===
-        const addItemPath = "/api/v2/product/add_item";
-        const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
-
-        const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
 
         // === 6. Body final untuk Shopee Add Item ===
         const body = {
@@ -293,7 +291,7 @@ const createProductShopee = async (req, res) => {
             },
             condition,
             normal_stock: Number(stokUtama.stok),
-            images: [uploadedImageUrl], // ✅ Harus array of string
+            images: [uploadedImageUrl], // ✅ Array of string
         };
 
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
