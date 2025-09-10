@@ -397,4 +397,60 @@ const getShopeeLogistics = async (req, res) => {
     }
 };
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics };
+const getBrandListShopee = async (req, res) => {
+    try {
+        const { category_id, status = 1, offset = 0, page_size = 10, language = "en" } = req.query;
+
+        if (!category_id) {
+            return res.status(400).json({ error: "category_id is required" });
+        }
+
+        // 1️⃣ Ambil token Shopee
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+        const { shop_id, access_token } = shopeeData;
+
+        // 2️⃣ Prepare request
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/brand/get_brand_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const body = {
+            category_id: Number(category_id),
+            status: Number(status),
+            offset: Number(offset),
+            page_size: Number(page_size),
+            language: language
+        };
+
+        // 3️⃣ Request ke Shopee
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/json" }
+        });
+
+        // 4️⃣ Cek error
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data
+            });
+        }
+
+        // 5️⃣ Return data brand
+        return res.status(200).json({
+            success: true,
+            message: "Brand list retrieved successfully",
+            shopee_response: response.data
+        });
+
+    } catch (err) {
+        console.error("❌ Shopee Get Brand List Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
+};
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee };
