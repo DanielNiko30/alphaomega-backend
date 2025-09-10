@@ -198,7 +198,6 @@ const createProductShopee = async (req, res) => {
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
-        if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
 
         // 3️⃣ Pilih stok sesuai satuan
         const stokTerpilih = selected_unit
