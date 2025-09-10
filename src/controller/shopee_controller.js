@@ -198,9 +198,11 @@ const createProductShopee = async (req, res) => {
         // 1️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
+            console.log("❌ Shopee token tidak ditemukan");
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
         const { shop_id, access_token } = shopeeData;
+        console.log("🔹 Shopee access_token found, shop_id:", shop_id);
 
         // 2️⃣ Ambil data produk + stok
         const product = await Product.findOne({
@@ -213,9 +215,7 @@ const createProductShopee = async (req, res) => {
         if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
 
         const stokUtama = product.stok[0];
-        if (!stokUtama || stokUtama.stok == null) {
-            return res.status(400).json({ error: "Produk tidak memiliki stok valid!" });
-        }
+        if (!stokUtama) return res.status(400).json({ error: "Produk tidak memiliki stok!" });
 
         console.log("🔹 Produk & stok valid, mulai upload gambar...");
 
@@ -254,19 +254,17 @@ const createProductShopee = async (req, res) => {
 
         console.log("✅ Image uploaded successfully. Image ID:", uploadedImageId);
 
-        // 4️⃣ Body Add Item (update dengan brand dan normal_stock)
+        // 4️⃣ Body Add Item (update dengan brand)
+        // 4️⃣ Body Add Item (update stok ke normal_stock, tetap gunakan image yang sudah ada)
         const body = {
-            item_name: product.nama_product,
-            description: product.deskripsi_product || "Deskripsi tidak tersedia",
-            category_id: Number(category_id),
             original_price: Number(stokUtama.harga),
-            normal_stock: Number(stokUtama.stok), // wajib diisi
+            description: product.deskripsi_product || "Deskripsi tidak tersedia",
+            item_name: product.nama_product,
             item_sku: item_sku || null,
             weight: Number(weight),
             package_height: Number(dimension.height),
             package_length: Number(dimension.length),
             package_width: Number(dimension.width),
-            condition: condition || "NEW",
             logistic_info: [
                 {
                     logistic_id: Number(logistic_id),
@@ -274,7 +272,13 @@ const createProductShopee = async (req, res) => {
                     is_free: false,
                 },
             ],
-            image_ids: [uploadedImageId],
+            category_id: Number(category_id),
+            normal_stock: Number(stokUtama.stok), // ubah dari "stock" ke "normal_stock"
+            condition: condition || "NEW",
+            image: {
+                image_id_list: [uploadedImageId],
+                image_ratio: "1:1"
+            },
             brand: {
                 brand_id: Number(brand_id) || 0,
                 original_brand_name: brand_name || "No Brand"
@@ -318,6 +322,7 @@ const createProductShopee = async (req, res) => {
         return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
+
 
 const getShopeeCategories = async (req, res) => {
     try {
