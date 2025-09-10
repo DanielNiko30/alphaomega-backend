@@ -190,7 +190,8 @@ const createProductShopee = async (req, res) => {
             condition,
             item_sku,
             brand_id,
-            brand_name
+            brand_name,
+            selected_unit // tambahan: satuan yang dipilih di frontend
         } = req.body;
 
         console.log("🚀 Starting createProductShopee for", id_product);
@@ -214,12 +215,15 @@ const createProductShopee = async (req, res) => {
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
 
-        const stokUtama = product.stok[0];
-        if (!stokUtama) return res.status(400).json({ error: "Produk tidak memiliki stok!" });
+        // 3️⃣ Pilih stok sesuai satuan
+        const stokTerpilih = selected_unit
+            ? product.stok.find(s => s.satuan === selected_unit)
+            : product.stok[0]; // jika tidak pilih satuan, ambil stok pertama
 
-        console.log("🔹 Produk & stok valid, mulai upload gambar...");
+        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+        console.log(`🔹 Stok terpilih: ${stokTerpilih.stok} ${stokTerpilih.satuan}`);
 
-        // 3️⃣ Upload gambar ke Shopee
+        // 4️⃣ Upload gambar ke Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
@@ -254,10 +258,9 @@ const createProductShopee = async (req, res) => {
 
         console.log("✅ Image uploaded successfully. Image ID:", uploadedImageId);
 
-        // 4️⃣ Body Add Item (update dengan brand)
-        // 4️⃣ Body Add Item (update stok ke normal_stock, tetap gunakan image yang sudah ada)
+        // 5️⃣ Body Add Item ke Shopee
         const body = {
-            original_price: Number(stokUtama.harga),
+            original_price: Number(stokTerpilih.harga),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: product.nama_product,
             item_sku: item_sku || null,
@@ -273,7 +276,7 @@ const createProductShopee = async (req, res) => {
                 },
             ],
             category_id: Number(category_id),
-            normal_stock: Number(stokUtama.stok), // ubah dari "stock" ke "normal_stock"
+            normal_stock: Number(stokTerpilih.stok), // gunakan stok sesuai satuan yang dipilih
             condition: condition || "NEW",
             image: {
                 image_id_list: [uploadedImageId],
@@ -322,7 +325,6 @@ const createProductShopee = async (req, res) => {
         return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
-
 
 const getShopeeCategories = async (req, res) => {
     try {
