@@ -191,7 +191,7 @@ const createProductShopee = async (req, res) => {
             item_sku,
             brand_id,
             brand_name,
-            selected_unit // tambahan: satuan yang dipilih di frontend
+            selected_unit // satuan yang dipilih di frontend
         } = req.body;
 
         console.log("🚀 Starting createProductShopee for", id_product);
@@ -218,10 +218,17 @@ const createProductShopee = async (req, res) => {
         // 3️⃣ Pilih stok sesuai satuan
         const stokTerpilih = selected_unit
             ? product.stok.find(s => s.satuan === selected_unit)
-            : product.stok[0]; // jika tidak pilih satuan, ambil stok pertama
+            : product.stok[0]; // default stok pertama
 
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+
         console.log(`🔹 Stok terpilih: ${stokTerpilih.stok} ${stokTerpilih.satuan}`);
+        console.log(`🔹 Tipe stok: ${typeof stokTerpilih.stok}`);
+
+        if (stokTerpilih.stok == null) {
+            console.error("❌ Stok bernilai null, Shopee tidak bisa menerima null sebagai normal_stock");
+            return res.status(400).json({ error: "Stok tidak boleh null" });
+        }
 
         // 4️⃣ Upload gambar ke Shopee
         const timestamp = Math.floor(Date.now() / 1000);
@@ -276,7 +283,7 @@ const createProductShopee = async (req, res) => {
                 },
             ],
             category_id: Number(category_id),
-            normal_stock: Number(stokTerpilih.stok), // gunakan stok sesuai satuan yang dipilih
+            normal_stock: Number(stokTerpilih.stok), // stok sesuai satuan
             condition: condition || "NEW",
             image: {
                 image_id_list: [uploadedImageId],
@@ -297,6 +304,7 @@ const createProductShopee = async (req, res) => {
         const createResponse = await axios.post(addItemUrl, body, { headers: { "Content-Type": "application/json" } });
 
         if (createResponse.data.error) {
+            console.error("❌ Shopee response error:", JSON.stringify(createResponse.data, null, 2));
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message,
@@ -322,7 +330,13 @@ const createProductShopee = async (req, res) => {
 
     } catch (err) {
         console.error("❌ Shopee Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message });
+        if (err.response?.data) {
+            console.error("🔹 Full Shopee error response:", JSON.stringify(err.response.data, null, 2));
+        }
+        return res.status(500).json({
+            error: err.response?.data || err.message,
+            message: "Gagal menambahkan produk ke Shopee. Periksa console log."
+        });
     }
 };
 
