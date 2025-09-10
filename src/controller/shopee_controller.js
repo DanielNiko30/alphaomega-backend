@@ -288,4 +288,78 @@ const createProductShopee = async (req, res) => {
     }
 };
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee };
+const getShopeeCategories = async (req, res) => {
+    try {
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData || !shopeeData.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/get_category";
+
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        console.log("Shopee Get Category URL:", url);
+
+        const response = await getJSON(url);
+
+        if (response.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.message || "Gagal mengambil kategori Shopee",
+                shopee_response: response
+            });
+        }
+
+        return res.json({
+            success: true,
+            data: response.response?.category_list || [],
+        });
+    } catch (err) {
+        console.error("Shopee Get Category Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const getShopeeLogistics = async (req, res) => {
+    try {
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData || !shopeeData.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/get_channel_list";
+
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        console.log("Shopee Get Logistic URL:", url);
+
+        const response = await getJSON(url);
+
+        if (response.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.message || "Gagal mengambil logistic Shopee",
+                shopee_response: response
+            });
+        }
+
+        return res.json({
+            success: true,
+            data: response.response?.logistics || [],
+        });
+    } catch (err) {
+        console.error("Shopee Get Logistic Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics };
