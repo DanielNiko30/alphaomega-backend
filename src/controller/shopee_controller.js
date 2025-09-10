@@ -1,11 +1,16 @@
 const crypto = require("crypto");
 const https = require("https");
-const { Shopee } = require("../model/shopee_model"); // Import model
+const { Product } = require("../model/product_model");
+const { Stok } = require("../model/stok_model");
+const { Shopee } = require("../model/shopee_model");
 
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
 
+/* =============================
+    Helper: POST Request ke Shopee
+============================= */
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -39,6 +44,9 @@ function postJSON(url, body) {
     });
 }
 
+/* =============================
+    Helper: GET Request ke Shopee
+============================= */
 function getJSON(url) {
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(url);
@@ -66,11 +74,17 @@ function getJSON(url) {
     });
 }
 
+/* =============================
+    Helper: Generate Signature Shopee
+============================= */
 function generateSign(path, timestamp, access_token, shop_id) {
     const baseString = `${PARTNER_ID}${path}${timestamp}${access_token}${shop_id}`;
     return crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 }
 
+/* =============================
+    1. Callback Auth Shopee
+============================= */
 const shopeeCallback = async (req, res) => {
     try {
         const { code, shop_id, state } = req.query;
@@ -84,26 +98,21 @@ const shopeeCallback = async (req, res) => {
 
         // BaseString hanya partner_id + path + timestamp
         const baseString = `${PARTNER_ID}${path}${timestamp}`;
-
         const sign = crypto
             .createHmac("sha256", PARTNER_KEY)
             .update(baseString)
             .digest("hex");
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
-
         const body = { code, shop_id, partner_id: PARTNER_ID };
 
         console.log("REQUEST TO SHOPEE:", { url, body });
 
         const shopeeResponse = await postJSON(url, body);
 
-        // ✅ Jika sukses, simpan ke DB
+        // Simpan token ke database
         if (shopeeResponse.access_token && shopeeResponse.refresh_token) {
-            // Hapus semua data lama
-            await Shopee.destroy({ where: {} });
-
-            // Simpan data token terbaru
+            await Shopee.destroy({ where: {} }); // hapus semua token lama
             await Shopee.create({
                 shop_id: shop_id,
                 access_token: shopeeResponse.access_token,
@@ -136,28 +145,26 @@ const shopeeCallback = async (req, res) => {
     }
 };
 
+/* =============================
+    2. Get Product List dari Shopee
+============================= */
 const getShopeeItemList = async (req, res) => {
     try {
-        // Ambil token terbaru dari database
         const shopeeData = await Shopee.findOne();
         if (!shopeeData || !shopeeData.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
 
         const { shop_id, access_token } = shopeeData;
-
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/get_item_list";
 
-        // Generate signature
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // Build URL ke Shopee
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=0&page_size=10&item_status=NORMAL`;
 
         console.log("Shopee Get Item List URL:", url);
 
-        // Request GET ke Shopee API
         const response = await getJSON(url);
 
         return res.json({
@@ -173,4 +180,110 @@ const getShopeeItemList = async (req, res) => {
     }
 };
 
-module.exports = { shopeeCallback, getShopeeItemList };
+/* =============================
+    3. Create Product di Shopee
+============================= */
+const createProductShopee = async (req, res) => {
+    try {
+        const { id_product } = req.params;
+
+        const {
+            logistic_id,
+            weight,
+            category_id,
+            dimension,
+            condition,
+            item_sku,
+        } = req.body;
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData || !shopeeData.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+        const { shop_id, access_token } = shopeeData;
+
+        // Ambil produk dari DB lokal
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
+
+        if (!product) {
+            return res.status(404).json({ error: "Produk tidak ditemukan" });
+        }
+
+        if (product.id_product_shopee) {
+            return res.status(400).json({ error: "Produk ini sudah terdaftar di Shopee" });
+        }
+
+        // Validasi stok
+        const stokUtama = product.stok[0];
+        if (!stokUtama) {
+            return res.status(400).json({ error: "Produk tidak memiliki stok!" });
+        }
+
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/add_item";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const body = {
+            original_price: stokUtama.harga,
+            description: product.deskripsi_product || "Deskripsi tidak tersedia",
+            item_name: product.nama_product,
+            item_sku: item_sku || null,
+            logistic_info: [
+                {
+                    logistic_id: logistic_id,
+                    enabled: true,
+                    is_free: false,
+                },
+            ],
+            weight,
+            category_id,
+            dimension,
+            condition,
+            normal_stock: stokUtama.stok,
+            images: [
+                {
+                    url: `data:image/png;base64,${product.gambar_product.toString("base64")}`,
+                },
+            ],
+        };
+
+        console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
+
+        const shopeeResponse = await postJSON(url, body);
+
+        if (shopeeResponse.error) {
+            return res.status(400).json({
+                success: false,
+                message: shopeeResponse.message || "Gagal membuat produk di Shopee",
+                shopee_response: shopeeResponse,
+            });
+        }
+
+        const newShopeeId = shopeeResponse.response?.item_id;
+
+        if (newShopeeId) {
+            await product.update({ id_product_shopee: newShopeeId });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Produk berhasil ditambahkan ke Shopee",
+            shopee_response: shopeeResponse,
+            updated_product: {
+                id_product: product.id_product,
+                nama_product: product.nama_product,
+                id_product_shopee: newShopeeId,
+            },
+        });
+    } catch (err) {
+        console.error("Shopee Create Product Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee };
