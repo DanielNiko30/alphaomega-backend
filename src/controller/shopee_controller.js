@@ -267,12 +267,16 @@ const createProductShopee = async (req, res) => {
 
         console.log("✅ Image uploaded successfully. Image ID:", uploadedImageId);
 
-        // 4️⃣ Body Add Item
+        // 4️⃣ Body Add Item (update sesuai requirement terbaru)
         const body = {
             original_price: Number(stokUtama.harga),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: product.nama_product,
             item_sku: item_sku || null,
+            weight: Number(weight),
+            package_height: Number(dimension.height),
+            package_length: Number(dimension.length),
+            package_width: Number(dimension.width),
             logistic_info: [
                 {
                     logistic_id: Number(logistic_id),
@@ -280,16 +284,13 @@ const createProductShopee = async (req, res) => {
                     is_free: false,
                 },
             ],
-            weight: Number(weight),
             category_id: Number(category_id),
-            dimension: {
-                width: Number(dimension.width),
-                height: Number(dimension.height),
-                length: Number(dimension.length),
-            },
-            condition,
-            normal_stock: Number(stokUtama.stok),
-            image_ids: [uploadedImageId], // HARUS pakai image_id
+            stock: Number(stokUtama.stok),
+            condition: condition || "NEW",
+            image: {
+                image_id_list: [uploadedImageId],
+                image_ratio: "1:1"
+            }
         };
 
         console.log("🔹 Shopee Add Item body:", JSON.stringify(body, null, 2));
