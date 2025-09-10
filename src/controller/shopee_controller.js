@@ -283,7 +283,12 @@ const createProductShopee = async (req, res) => {
                 },
             ],
             category_id: Number(category_id),
-            seller_stock: Number(stokTerpilih.stok), // stok sesuai satuan
+            seller_stock: [
+                {
+                    stock_location_id: 0,
+                    normal_stock: Number(stokTerpilih.stok)
+                }
+            ],
             condition: condition || "NEW",
             image: {
                 image_id_list: [uploadedImageId],
