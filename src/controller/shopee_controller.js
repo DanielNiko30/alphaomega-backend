@@ -180,9 +180,6 @@ const getShopeeItemList = async (req, res) => {
     }
 };
 
-/* =============================
-    3. Create Product di Shopee
-============================= */
 const createProductShopee = async (req, res) => {
     try {
         const { id_product } = req.params;
@@ -196,13 +193,14 @@ const createProductShopee = async (req, res) => {
             item_sku,
         } = req.body;
 
+        // Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData || !shopeeData.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
         const { shop_id, access_token } = shopeeData;
 
-        // Ambil produk dari DB lokal
+        // Ambil produk lokal
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -222,12 +220,14 @@ const createProductShopee = async (req, res) => {
             return res.status(400).json({ error: "Produk tidak memiliki stok!" });
         }
 
+        // Generate timestamp & sign
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/add_item";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
+        // Body untuk Shopee
         const body = {
             original_price: stokUtama.harga,
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
@@ -242,8 +242,8 @@ const createProductShopee = async (req, res) => {
             ],
             weight,
             category_id,
-            dimension,
-            condition,
+            dimension, // { width, height, length }
+            condition, // "NEW" atau "USED"
             normal_stock: stokUtama.stok,
             images: [
                 {
@@ -254,6 +254,7 @@ const createProductShopee = async (req, res) => {
 
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
 
+        // Request ke Shopee
         const shopeeResponse = await postJSON(url, body);
 
         if (shopeeResponse.error) {
@@ -266,6 +267,7 @@ const createProductShopee = async (req, res) => {
 
         const newShopeeId = shopeeResponse.response?.item_id;
 
+        // Update id_product_shopee di database
         if (newShopeeId) {
             await product.update({ id_product_shopee: newShopeeId });
         }
