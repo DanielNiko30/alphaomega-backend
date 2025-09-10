@@ -189,7 +189,6 @@ const createProductShopee = async (req, res) => {
         // 1️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
-            console.log("❌ Shopee token tidak ditemukan");
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
         const { shop_id, access_token } = shopeeData;
@@ -199,7 +198,6 @@ const createProductShopee = async (req, res) => {
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
         });
-
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
@@ -219,14 +217,14 @@ const createProductShopee = async (req, res) => {
         const logisticUrl = `https://partner.shopeemobile.com${logisticPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${logisticSign}`;
 
         const logisticResponse = await getJSON(logisticUrl);
-        const validChannels = (logisticResponse.response?.logistics_channel_list || []).filter(
-            ch => ch.enabled === true && ch.seller_logistic_has_configuration === true
-        );
+        const validChannels = (logisticResponse.response?.logistics_channel_list || []).filter(ch => ch.enabled === true);
         if (!validChannels.length) {
             return res.status(400).json({ error: "Tidak ada channel logistik Shopee yang valid. Periksa pengaturan shipping di Seller Center." });
         }
-        const selectedChannel = validChannels[0]; // pakai channel pertama yang valid
-        console.log("🔹 Selected logistics channel:", selectedChannel.logistics_channel_id, selectedChannel.logistics_channel_name);
+
+        // Pilih channel pertama
+        const selectedChannel = validChannels[0];
+        console.log("🔹 Selected logistics channel:", selectedChannel.id, selectedChannel.name);
 
         // 5️⃣ Upload gambar
         const uploadPath = "/api/v2/media_space/upload_image";
@@ -253,7 +251,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistics_channel_id: Number(selectedChannel.logistics_channel_id),
+                    logistics_channel_id: Number(selectedChannel.id),
                     enabled: true,
                     is_free: false
                 }
@@ -278,14 +276,12 @@ const createProductShopee = async (req, res) => {
         const createResponse = await axios.post(addItemUrl, body, { headers: { "Content-Type": "application/json" } });
 
         if (createResponse.data.error) {
-            console.error("❌ Shopee response error:", JSON.stringify(createResponse.data, null, 2));
             return res.status(400).json({ success: false, message: createResponse.data.message, shopee_response: createResponse.data });
         }
 
         const newShopeeId = createResponse.data.response?.item_id;
         if (newShopeeId) await product.update({ id_product_shopee: newShopeeId });
 
-        console.log("✅ Produk berhasil ditambahkan ke Shopee. Item ID:", newShopeeId);
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Shopee",
@@ -295,7 +291,6 @@ const createProductShopee = async (req, res) => {
 
     } catch (err) {
         console.error("❌ Shopee Create Product Error:", err.response?.data || err.message);
-        if (err.response?.data) console.error("🔹 Full Shopee error response:", JSON.stringify(err.response.data, null, 2));
         return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal menambahkan produk ke Shopee. Periksa console log." });
     }
 };
