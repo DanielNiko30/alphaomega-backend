@@ -182,61 +182,37 @@ const getShopeeItemList = async (req, res) => {
 const createProductShopee = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const {
-            logistic_id,
-            weight,
-            category_id,
-            dimension, // { width, height, length }
-            condition, // "NEW" atau "USED"
-            item_sku,
-        } = req.body;
+        const { logistic_id, weight, category_id, dimension, condition, item_sku } = req.body;
 
-        // === 1. Ambil token Shopee dari DB ===
+        // 1️⃣ Ambil token Shopee dari DB
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData || !shopeeData.access_token) {
-            return res.status(400).json({
-                error: "Shopee token not found. Please authorize first.",
-            });
-        }
+        if (!shopeeData?.access_token)
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+
         const { shop_id, access_token } = shopeeData;
 
-        // === 2. Ambil data produk lokal ===
+        // 2️⃣ Ambil data produk lokal
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
         });
+        if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
+        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
+        if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
 
-        if (!product) {
-            return res.status(404).json({ error: "Produk tidak ditemukan" });
-        }
-
-        if (!product.gambar_product) {
-            return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
-        }
-
-        if (product.id_product_shopee) {
-            return res.status(400).json({ error: "Produk ini sudah terdaftar di Shopee" });
-        }
-
-        // === 3. Validasi stok ===
         const stokUtama = product.stok[0];
-        if (!stokUtama) {
-            return res.status(400).json({ error: "Produk tidak memiliki stok!" });
-        }
+        if (!stokUtama) return res.status(400).json({ error: "Produk tidak memiliki stok!" });
 
-        // === 4. Upload gambar ke Shopee ===
-        // === 4. Upload gambar ke Shopee ===
+        // 3️⃣ Upload gambar ke Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
-
         const uploadUrl = `https://partner.shopeemobile.com${uploadPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${uploadSign}`;
 
+        // Pastikan BLOB menjadi Buffer
         const imageBuffer = Buffer.from(product.gambar_product);
-
-        if (imageBuffer.length === 0) {
-            return res.status(400).json({ error: "Gambar di database kosong!" });
-        }
+        if (!imageBuffer || imageBuffer.length === 0)
+            return res.status(400).json({ error: "Gambar kosong!" });
 
         const formData = new FormData();
         formData.append("image", imageBuffer, {
@@ -245,86 +221,59 @@ const createProductShopee = async (req, res) => {
         });
 
         console.log("Uploading image to Shopee...");
-
-        const uploadResponse = await axios.post(uploadUrl, formData, {
-            headers: formData.getHeaders(),
-        });
-
+        const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
         console.log("Shopee Upload Response:", JSON.stringify(uploadResponse.data, null, 2));
 
-        // === Ambil URL gambar Shopee ===
         const uploadedImageUrl =
-            uploadResponse.data?.response?.image_info?.image_url_list?.find(
-                img => img.image_url_region === "ID"
-            )?.image_url ||
+            uploadResponse.data?.response?.image_info?.image_url_list?.find(img => img.image_url_region === "ID")?.image_url ||
             uploadResponse.data?.response?.image_info?.image_url_list?.[0]?.image_url;
+
+        if (!uploadedImageUrl)
+            return res.status(400).json({
+                success: false,
+                message: "Gagal mendapatkan URL gambar Shopee",
+                shopee_response: uploadResponse.data,
+            });
 
         console.log("Uploaded Image URL:", uploadedImageUrl);
 
-        if (!uploadedImageUrl || !uploadedImageUrl.startsWith("http")) {
-            return res.status(400).json({
-                success: false,
-                message: "URL gambar tidak valid setelah upload",
-                shopee_response: uploadResponse.data,
-            });
-        }
-
-        // === 6. Body final untuk Shopee Add Item ===
+        // 4️⃣ Body final untuk Shopee Add Item
         const body = {
             original_price: Number(stokUtama.harga),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: product.nama_product,
             item_sku: item_sku || null,
-            logistic_info: [
-                {
-                    logistic_id: logistic_id,
-                    enabled: true,
-                    is_free: false,
-                },
-            ],
+            logistic_info: [{ logistic_id: Number(logistic_id), enabled: true, is_free: false }],
             weight: Number(weight),
             category_id: Number(category_id),
-            dimension: {
-                width: Number(dimension.width),
-                height: Number(dimension.height),
-                length: Number(dimension.length),
-            },
+            dimension: { width: Number(dimension.width), height: Number(dimension.height), length: Number(dimension.length) },
             condition,
             normal_stock: Number(stokUtama.stok),
-            images: [uploadedImageUrl], // ✅ Array of string
+            images: [uploadedImageUrl], // HARUS array string URL
         };
 
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
 
-        // === 7. Request ke Shopee Add Item ===
+        // 5️⃣ Request ke Shopee Add Item
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
-
         const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
 
-        const createResponse = await axios.post(addItemUrl, body, {
-            headers: { "Content-Type": "application/json" },
-        });
-
+        const createResponse = await axios.post(addItemUrl, body, { headers: { "Content-Type": "application/json" } });
         console.log("Shopee Create Product Response:", JSON.stringify(createResponse.data, null, 2));
 
-        // Jika Shopee mengembalikan error
-        if (createResponse.data.error) {
+        if (createResponse.data.error)
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message || "Gagal membuat produk di Shopee",
                 shopee_response: createResponse.data,
             });
-        }
 
+        // 6️⃣ Update id_product_shopee di DB
         const newShopeeId = createResponse.data.response?.item_id;
+        if (newShopeeId) await product.update({ id_product_shopee: newShopeeId });
 
-        // === 8. Update id_product_shopee di DB ===
-        if (newShopeeId) {
-            await product.update({ id_product_shopee: newShopeeId });
-        }
-
-        // === 9. Response akhir ===
+        // 7️⃣ Response akhir
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Shopee",
@@ -337,9 +286,7 @@ const createProductShopee = async (req, res) => {
         });
     } catch (err) {
         console.error("Shopee Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({
-            error: err.response?.data || err.message,
-        });
+        return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
 
