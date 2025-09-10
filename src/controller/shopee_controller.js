@@ -217,6 +217,7 @@ const createProductShopee = async (req, res) => {
         const logisticUrl = `https://partner.shopeemobile.com${logisticPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${logisticSign}`;
 
         const logisticResponse = await getJSON(logisticUrl);
+        // Ambil channel yang enabled dan memiliki konfigurasi
         const validChannels = (logisticResponse.response?.logistics_channel_list || []).filter(ch => ch.enabled === true);
         if (!validChannels.length) {
             return res.status(400).json({ error: "Tidak ada channel logistik Shopee yang valid. Periksa pengaturan shipping di Seller Center." });
@@ -239,7 +240,7 @@ const createProductShopee = async (req, res) => {
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 6️⃣ Body Add Item
+        // 6️⃣ Body Add Item (gunakan logistic_id)
         const body = {
             original_price: Number(stokTerpilih.harga),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
@@ -251,7 +252,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistics_channel_id: Number(selectedChannel.id),
+                    logistic_id: Number(selectedChannel.id), // <-- perbaikan di sini
                     enabled: true,
                     is_free: false
                 }
