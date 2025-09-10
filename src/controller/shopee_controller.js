@@ -399,47 +399,26 @@ const getShopeeLogistics = async (req, res) => {
 
 const getBrandListShopee = async (req, res) => {
     try {
-        // 1️⃣ Ambil parameter dari body (POST JSON)
-        const {
-            category_id,
-            status = 1,
-            offset = 0,
-            page_size = 10,
-            language = "en"
-        } = req.body;
+        const { category_id, status = 1, offset = 0, page_size = 10, language = "en" } = req.body;
 
-        if (!category_id) {
-            return res.status(400).json({ error: "category_id is required" });
-        }
+        if (!category_id) return res.status(400).json({ error: "category_id is required" });
 
-        // 2️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
-        }
+        if (!shopeeData?.access_token) return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+
         const { shop_id, access_token } = shopeeData;
 
-        // 3️⃣ Generate URL + Sign
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/brand/get_brand_list";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // 4️⃣ Body request Shopee
-        const bodyShopee = {
-            category_id: Number(category_id),
-            status: Number(status),
-            offset: Number(offset),
-            page_size: Number(page_size),
-            language: language
-        };
+        // Buat query string
+        const query = `category_id=${category_id}&status=${status}&offset=${offset}&page_size=${page_size}&language=${language}`;
+        const sign = generateSign(path, timestamp, access_token, shop_id); // biasanya hanya path, cek dokumentasi Shopee
 
-        // 5️⃣ Request ke Shopee
-        const response = await axios.post(url, bodyShopee, {
-            headers: { "Content-Type": "application/json" }
-        });
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&${query}`;
 
-        // 6️⃣ Tangani error_not_found tanpa throw
+        const response = await axios.get(url);
+
         if (response.data.error === "error_not_found") {
             return res.status(200).json({
                 success: true,
@@ -448,16 +427,14 @@ const getBrandListShopee = async (req, res) => {
             });
         }
 
-        // 7️⃣ Tangani error lain dari Shopee
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message || "Shopee returned an error",
+                message: response.data.message,
                 shopee_response: response.data
             });
         }
 
-        // 8️⃣ Return data brand
         return res.status(200).json({
             success: true,
             message: "Brand list retrieved successfully",
@@ -465,11 +442,10 @@ const getBrandListShopee = async (req, res) => {
         });
 
     } catch (err) {
-        // Tangani network / unexpected error tanpa menampilkan stack Shopee
         return res.status(500).json({
             success: false,
             message: "Gagal mendapatkan brand dari Shopee",
-            error: err.message || err
+            error: err.response?.data || err.message
         });
     }
 };
