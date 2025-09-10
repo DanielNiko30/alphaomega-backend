@@ -411,30 +411,24 @@ const getShopeeLogistics = async (req, res) => {
 
         const allChannels = response.response?.logistics_channel_list || [];
 
-        // Debug: tampilkan detail semua channel
-        allChannels.forEach((ch, idx) => {
-            console.log(`📦 Channel ${idx + 1}:`, {
-                id: ch.logistics_channel_id,
-                name: ch.logistics_channel_name,
-                enabled: ch.enabled,
-                seller_logistic_has_configuration: ch.seller_logistic_has_configuration,
-                cod_enabled: ch.cod_enabled,
-                fee_type: ch.fee_type,
-            });
-        });
+        // Debug: tampilkan detail semua channel supaya bisa ambil ID
+        const channelDetails = allChannels.map((ch) => ({
+            id: ch.logistics_channel_id,
+            name: ch.logistics_channel_name,
+            enabled: ch.enabled,
+            cod_enabled: ch.cod_enabled,
+            fee_type: ch.fee_type,
+            seller_logistic_has_configuration: ch.seller_logistic_has_configuration,
+            force_enable: ch.force_enable,
+            mask_channel_id: ch.mask_channel_id,
+        }));
 
-        // Filter channel yang valid untuk create item
-        const validChannels = allChannels.filter(
-            ch => ch.enabled === true && ch.seller_logistic_has_configuration === true
-        );
-
-        console.log("🔹 Total channel diterima:", allChannels.length);
-        console.log("🔹 Total channel valid:", validChannels.length);
+        console.log("🔹 Semua channel detail:", JSON.stringify(channelDetails, null, 2));
 
         return res.json({
             success: true,
             total_channels: allChannels.length,
-            valid_channels: validChannels,
+            channels: channelDetails,
         });
 
     } catch (err) {
