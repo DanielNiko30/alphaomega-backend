@@ -259,14 +259,24 @@ const createProductShopee = async (req, res) => {
             return res.status(400).json({ success: false, message: createResponse.data.message, shopee_response: createResponse.data });
         }
 
+        // ✅ Simpan id_product_shopee di tabel Stok sesuai satuan
         const newShopeeId = createResponse.data.response?.item_id;
-        if (newShopeeId) await product.update({ id_product_shopee: newShopeeId });
+        if (newShopeeId) {
+            await Stok.update(
+                { id_product_shopee: newShopeeId },
+                { where: { id_stok: stokTerpilih.id_stok } }
+            );
+        }
 
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Shopee",
             shopee_response: createResponse.data,
-            updated_product: { id_product: product.id_product, nama_product: product.nama_product, id_product_shopee: newShopeeId },
+            updated_stock: {
+                id_stok: stokTerpilih.id_stok,
+                satuan: stokTerpilih.satuan,
+                id_product_shopee: newShopeeId
+            }
         });
 
     } catch (err) {
