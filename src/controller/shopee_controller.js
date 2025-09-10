@@ -203,17 +203,19 @@ const createProductShopee = async (req, res) => {
         const stokUtama = product.stok[0];
         if (!stokUtama) return res.status(400).json({ error: "Produk tidak memiliki stok!" });
 
-        // 3️⃣ Upload gambar ke Shopee
+        // 3️⃣ Upload gambar ke Shopee (gunakan base64)
         const timestamp = Math.floor(Date.now() / 1000);
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
         const uploadUrl = `https://partner.shopeemobile.com${uploadPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${uploadSign}`;
 
-        const imageBuffer = Buffer.from(product.gambar_product);
-        if (!imageBuffer || imageBuffer.length === 0) return res.status(400).json({ error: "Gambar kosong!" });
+        // Convert BLOB ke base64 string
+        const base64Image = product.gambar_product.toString("base64");
+        if (!base64Image) return res.status(400).json({ error: "Gambar kosong!" });
 
+        const FormData = require("form-data");
         const formData = new FormData();
-        formData.append("image", imageBuffer, { filename: `${product.id_product}.png`, contentType: "image/png" });
+        formData.append("image", Buffer.from(base64Image, "base64"), { filename: `${product.id_product}.png`, contentType: "image/png" });
 
         const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
 
@@ -234,10 +236,14 @@ const createProductShopee = async (req, res) => {
             logistic_info: [{ logistic_id: Number(logistic_id), enabled: true, is_free: false }],
             weight: Number(weight),
             category_id: Number(category_id),
-            dimension: { width: Number(dimension.width), height: Number(dimension.height), length: Number(dimension.length) },
+            dimension: {
+                width: Number(dimension.width),
+                height: Number(dimension.height),
+                length: Number(dimension.length),
+            },
             condition,
             normal_stock: Number(stokUtama.stok),
-            image_ids: [uploadedImageId], // ⚠️ HARUS image_id, URL optional
+            image_ids: [uploadedImageId], // HARUS pakai image_id
         };
 
         const addItemPath = "/api/v2/product/add_item";
