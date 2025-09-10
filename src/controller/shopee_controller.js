@@ -399,7 +399,14 @@ const getShopeeLogistics = async (req, res) => {
 
 const getBrandListShopee = async (req, res) => {
     try {
-        const { category_id, status = 1, offset = 0, page_size = 10, language = "en" } = req.query;
+        // Ambil parameter dari body, bukan query
+        const {
+            category_id,
+            status = 1,
+            offset = 0,
+            page_size = 10,
+            language = "en"
+        } = req.body;
 
         if (!category_id) {
             return res.status(400).json({ error: "category_id is required" });
@@ -418,7 +425,7 @@ const getBrandListShopee = async (req, res) => {
         const sign = generateSign(path, timestamp, access_token, shop_id);
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        const body = {
+        const bodyShopee = {
             category_id: Number(category_id),
             status: Number(status),
             offset: Number(offset),
@@ -427,7 +434,7 @@ const getBrandListShopee = async (req, res) => {
         };
 
         // 3️⃣ Request ke Shopee
-        const response = await axios.post(url, body, {
+        const response = await axios.post(url, bodyShopee, {
             headers: { "Content-Type": "application/json" }
         });
 
