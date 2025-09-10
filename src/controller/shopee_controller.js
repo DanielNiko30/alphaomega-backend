@@ -285,8 +285,8 @@ const createProductShopee = async (req, res) => {
             category_id: Number(category_id),
             seller_stock: [
                 {
-                    stock_location_id: 0,
-                    normal_stock: Number(stokTerpilih.stok)
+                    stock_location_id: 0,  // default warehouse
+                    stock: Number(stokTerpilih.stok)
                 }
             ],
             condition: condition || "NEW",
