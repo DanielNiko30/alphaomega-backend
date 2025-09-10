@@ -12,14 +12,6 @@ const Product = db.define(
       type: DataTypes.STRING(10),
       primaryKey: true,
     },
-    id_product_shopee: {
-      type: DataTypes.BIGINT,
-      allowNull: true,
-    },
-    id_product_lazada: {
-      type: DataTypes.BIGINT,
-      allowNull: true,
-    },
     product_kategori: {
       type: DataTypes.STRING(10),
       allowNull: false,
