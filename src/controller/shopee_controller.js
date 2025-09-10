@@ -409,17 +409,31 @@ const getShopeeLogistics = async (req, res) => {
             });
         }
 
-        // Filter channel yang valid
-        const validChannels = (response.response?.logistics_channel_list || []).filter(
+        const allChannels = response.response?.logistics_channel_list || [];
+
+        // Debug: tampilkan detail semua channel
+        allChannels.forEach((ch, idx) => {
+            console.log(`📦 Channel ${idx + 1}:`, {
+                id: ch.logistics_channel_id,
+                name: ch.logistics_channel_name,
+                enabled: ch.enabled,
+                seller_logistic_has_configuration: ch.seller_logistic_has_configuration,
+                cod_enabled: ch.cod_enabled,
+                fee_type: ch.fee_type,
+            });
+        });
+
+        // Filter channel yang valid untuk create item
+        const validChannels = allChannels.filter(
             ch => ch.enabled === true && ch.seller_logistic_has_configuration === true
         );
 
-        console.log("🔹 Total channel diterima:", response.response?.logistics_channel_list?.length || 0);
+        console.log("🔹 Total channel diterima:", allChannels.length);
         console.log("🔹 Total channel valid:", validChannels.length);
 
         return res.json({
             success: true,
-            total_channels: response.response?.logistics_channel_list?.length || 0,
+            total_channels: allChannels.length,
             valid_channels: validChannels,
         });
 
