@@ -410,13 +410,32 @@ const getBrandListShopee = async (req, res) => {
 
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/brand/get_brand_list";
-        const query = `category_id=${category_id}&status=${status}&offset=${offset}&page_size=${page_size}&language=${language}`;
         const sign = generateSign(path, timestamp, access_token, shop_id);
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&${query}`;
 
-        const response = await axios.get(url);
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // Tangani kasus kategori valid tapi belum ada brand
+        const bodyShopee = {
+            category_id: Number(category_id),
+            status: Number(status),
+            offset: Number(offset),
+            page_size: Number(page_size),
+            language: language
+        };
+
+        console.log("🔹 Shopee Request URL:", url);
+        console.log("🔹 Shopee Request Body:", JSON.stringify(bodyShopee, null, 2));
+
+        // 3️⃣ Request ke Shopee
+        const response = await axios.post(url, bodyShopee, {
+            headers: { "Content-Type": "application/json" },
+            validateStatus: () => true // supaya axios tidak throw error untuk status 4xx/5xx
+        });
+
+        console.log("🔹 Shopee Response Status:", response.status);
+        console.log("🔹 Shopee Response Data:", JSON.stringify(response.data, null, 2));
+        console.log("🔹 Shopee Response Headers:", JSON.stringify(response.headers, null, 2));
+
+        // Tangani error_not_found
         if (response.data.error === "error_not_found") {
             return res.status(200).json({
                 success: true,
@@ -425,7 +444,6 @@ const getBrandListShopee = async (req, res) => {
             });
         }
 
-        // Tangani error lain
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
@@ -449,5 +467,6 @@ const getBrandListShopee = async (req, res) => {
         });
     }
 };
+
 
 module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee };
