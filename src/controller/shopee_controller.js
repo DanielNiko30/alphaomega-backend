@@ -297,6 +297,11 @@ const createProductShopee = async (req, res) => {
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
 
         // === 7. Request ke Shopee Add Item ===
+        const addItemPath = "/api/v2/product/add_item";
+        const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
+
+        const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
+
         const createResponse = await axios.post(addItemUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
