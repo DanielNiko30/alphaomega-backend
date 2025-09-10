@@ -232,7 +232,6 @@ const createProductShopee = async (req, res) => {
 
         console.log("🔹 Upload URL:", uploadUrl);
 
-        // pastikan gambar berupa Buffer
         const imageBuffer = Buffer.isBuffer(product.gambar_product)
             ? product.gambar_product
             : Buffer.from(product.gambar_product);
@@ -249,8 +248,10 @@ const createProductShopee = async (req, res) => {
             contentType: "image/png",
         });
 
-        console.log("🔹 Sending image to Shopee...");
-        const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
+        console.log("🔹 Mengirim gambar ke Shopee...");
+        const uploadResponse = await axios.post(uploadUrl, formData, {
+            headers: formData.getHeaders(),
+        });
 
         console.log("🔹 Shopee upload response:", JSON.stringify(uploadResponse.data, null, 2));
 
@@ -272,7 +273,13 @@ const createProductShopee = async (req, res) => {
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: product.nama_product,
             item_sku: item_sku || null,
-            logistic_info: [{ logistic_id: Number(logistic_id), enabled: true, is_free: false }],
+            logistic_info: [
+                {
+                    logistic_id: Number(logistic_id),
+                    enabled: true,
+                    is_free: false,
+                },
+            ],
             weight: Number(weight),
             category_id: Number(category_id),
             dimension: {
@@ -290,6 +297,8 @@ const createProductShopee = async (req, res) => {
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
         const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
+
+        console.log("🔹 Add Item URL:", addItemUrl);
 
         const createResponse = await axios.post(addItemUrl, body, { headers: { "Content-Type": "application/json" } });
 
