@@ -434,33 +434,30 @@ const getBrandListShopee = async (req, res) => {
             language: language
         };
 
-        console.log("🔹 Shopee request body:", bodyShopee);
-        console.log("🔹 Shopee URL:", url);
-
         // 5️⃣ Request ke Shopee
         const response = await axios.post(url, bodyShopee, {
             headers: { "Content-Type": "application/json" }
         });
 
-        // 6️⃣ Tangani error Shopee
-        if (response.data.error) {
-            // Jika Shopee mengembalikan error_not_found, artinya kategori belum ada brand
-            if (response.data.error === "error_not_found") {
-                return res.status(200).json({
-                    success: true,
-                    message: "Kategori valid tapi belum ada brand",
-                    shopee_response: { brands: [] }
-                });
-            }
+        // 6️⃣ Tangani error_not_found tanpa throw
+        if (response.data.error === "error_not_found") {
+            return res.status(200).json({
+                success: true,
+                message: "Kategori valid tapi belum ada brand",
+                shopee_response: { brands: [] }
+            });
+        }
 
+        // 7️⃣ Tangani error lain dari Shopee
+        if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message,
+                message: response.data.message || "Shopee returned an error",
                 shopee_response: response.data
             });
         }
 
-        // 7️⃣ Return data brand
+        // 8️⃣ Return data brand
         return res.status(200).json({
             success: true,
             message: "Brand list retrieved successfully",
@@ -468,12 +465,11 @@ const getBrandListShopee = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ Shopee Get Brand List Error:", err.response?.data || err.message);
-
-        // Jika Shopee error 500 / not found, tetap kembalikan response aman
+        // Tangani network / unexpected error tanpa menampilkan stack Shopee
         return res.status(500).json({
-            error: err.response?.data || err.message,
-            message: "Gagal mendapatkan brand dari Shopee"
+            success: false,
+            message: "Gagal mendapatkan brand dari Shopee",
+            error: err.message || err
         });
     }
 };
