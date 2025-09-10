@@ -386,22 +386,22 @@ const getShopeeLogistics = async (req, res) => {
     try {
         const shopeeData = await Shopee.findOne();
         if (!shopeeData || !shopeeData.access_token) {
+            console.log("❌ Shopee token tidak ditemukan");
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/logistics/get_channel_list";
-
         const sign = generateSign(path, timestamp, access_token, shop_id);
-
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        console.log("Shopee Get Logistic URL:", url);
+        console.log("🔹 Shopee Get Logistic URL:", url);
 
         const response = await getJSON(url);
 
         if (response.error) {
+            console.error("❌ Shopee API Error:", response);
             return res.status(400).json({
                 success: false,
                 message: response.message || "Gagal mengambil logistic Shopee",
@@ -409,12 +409,22 @@ const getShopeeLogistics = async (req, res) => {
             });
         }
 
+        // Filter channel yang valid
+        const validChannels = (response.response?.logistics_channel_list || []).filter(
+            ch => ch.enabled === true && ch.seller_logistic_has_configuration === true
+        );
+
+        console.log("🔹 Total channel diterima:", response.response?.logistics_channel_list?.length || 0);
+        console.log("🔹 Total channel valid:", validChannels.length);
+
         return res.json({
             success: true,
-            data: response.response?.logistics || [],
+            total_channels: response.response?.logistics_channel_list?.length || 0,
+            valid_channels: validChannels,
         });
+
     } catch (err) {
-        console.error("Shopee Get Logistic Error:", err);
+        console.error("❌ Shopee Get Logistic Error:", err);
         return res.status(500).json({ error: err.message });
     }
 };
