@@ -410,15 +410,13 @@ const getBrandListShopee = async (req, res) => {
 
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/brand/get_brand_list";
-
-        // Buat query string
         const query = `category_id=${category_id}&status=${status}&offset=${offset}&page_size=${page_size}&language=${language}`;
-        const sign = generateSign(path, timestamp, access_token, shop_id); // biasanya hanya path, cek dokumentasi Shopee
-
+        const sign = generateSign(path, timestamp, access_token, shop_id);
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&${query}`;
 
         const response = await axios.get(url);
 
+        // Tangani kasus kategori valid tapi belum ada brand
         if (response.data.error === "error_not_found") {
             return res.status(200).json({
                 success: true,
@@ -427,6 +425,7 @@ const getBrandListShopee = async (req, res) => {
             });
         }
 
+        // Tangani error lain
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
@@ -442,6 +441,7 @@ const getBrandListShopee = async (req, res) => {
         });
 
     } catch (err) {
+        console.error("❌ Shopee Get Brand List Error:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal mendapatkan brand dari Shopee",
