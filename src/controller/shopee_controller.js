@@ -197,24 +197,12 @@ const createProductShopee = async (req, res) => {
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
         });
-        if (!product) {
-            console.log("❌ Produk tidak ditemukan");
-            return res.status(404).json({ error: "Produk tidak ditemukan" });
-        }
-        if (!product.gambar_product) {
-            console.log("❌ Produk tidak memiliki gambar");
-            return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
-        }
-        if (product.id_product_shopee) {
-            console.log("❌ Produk sudah terdaftar di Shopee");
-            return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
-        }
+        if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
+        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
+        if (product.id_product_shopee) return res.status(400).json({ error: "Produk sudah terdaftar di Shopee" });
 
         const stokUtama = product.stok[0];
-        if (!stokUtama) {
-            console.log("❌ Produk tidak memiliki stok");
-            return res.status(400).json({ error: "Produk tidak memiliki stok!" });
-        }
+        if (!stokUtama) return res.status(400).json({ error: "Produk tidak memiliki stok!" });
 
         // 3️⃣ Upload gambar ke Shopee
         const timestamp = Math.floor(Date.now() / 1000);
@@ -226,10 +214,7 @@ const createProductShopee = async (req, res) => {
         console.log("🔹 Size gambar BLOB:", product.gambar_product.length);
 
         const imageBuffer = Buffer.from(product.gambar_product); // pastikan Buffer
-        if (!imageBuffer || imageBuffer.length === 0) {
-            console.log("❌ Gambar kosong setelah convert Buffer");
-            return res.status(400).json({ error: "Gambar kosong!" });
-        }
+        if (!imageBuffer || imageBuffer.length === 0) return res.status(400).json({ error: "Gambar kosong!" });
 
         const FormData = require("form-data");
         const formData = new FormData();
@@ -238,17 +223,18 @@ const createProductShopee = async (req, res) => {
         const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
         console.log("🔹 Shopee Upload Response:", JSON.stringify(uploadResponse.data, null, 2));
 
+        // Ambil image_id atau URL
+        const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         const uploadedImageUrl =
-            uploadResponse.data?.response?.image_info?.image_url_list?.find(img => img.image_url_region === "ID")?.image_url ||
-            uploadResponse.data?.response?.image_info?.image_url_list?.[0]?.image_url;
+            uploadResponse.data?.response?.image_info?.image_url_list?.[0]?.image_url || null;
 
+        console.log("🔹 Uploaded Image ID:", uploadedImageId);
         console.log("🔹 Uploaded Image URL:", uploadedImageUrl);
 
-        if (!uploadedImageUrl || !uploadedImageUrl.startsWith("http")) {
-            console.log("❌ URL gambar tidak valid");
+        if (!uploadedImageId && !uploadedImageUrl) {
             return res.status(400).json({
                 success: false,
-                message: "URL gambar tidak valid setelah upload",
+                message: "Gagal mendapatkan image_id atau URL dari Shopee",
                 shopee_response: uploadResponse.data,
             });
         }
@@ -262,10 +248,15 @@ const createProductShopee = async (req, res) => {
             logistic_info: [{ logistic_id: Number(logistic_id), enabled: true, is_free: false }],
             weight: Number(weight),
             category_id: Number(category_id),
-            dimension: { width: Number(dimension.width), height: Number(dimension.height), length: Number(dimension.length) },
+            dimension: {
+                width: Number(dimension.width),
+                height: Number(dimension.height),
+                length: Number(dimension.length),
+            },
             condition,
             normal_stock: Number(stokUtama.stok),
-            images: [uploadedImageUrl], // HARUS array string
+            images: uploadedImageUrl ? [uploadedImageUrl] : undefined, // pakai URL yang valid
+            image_ids: uploadedImageId ? [uploadedImageId] : undefined, // atau image_id
         };
 
         console.log("🔹 Shopee Add Item Body:", JSON.stringify(body, null, 2));
@@ -280,7 +271,6 @@ const createProductShopee = async (req, res) => {
         console.log("🔹 Shopee Create Product Response:", JSON.stringify(createResponse.data, null, 2));
 
         if (createResponse.data.error) {
-            console.log("❌ Shopee Add Item Error:", createResponse.data);
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message || "Gagal membuat produk di Shopee",
@@ -297,6 +287,7 @@ const createProductShopee = async (req, res) => {
             shopee_response: createResponse.data,
             updated_product: { id_product: product.id_product, nama_product: product.nama_product, id_product_shopee: newShopeeId },
         });
+
     } catch (err) {
         console.error("❌ Shopee Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({ error: err.response?.data || err.message });
