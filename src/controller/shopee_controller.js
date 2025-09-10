@@ -194,9 +194,9 @@ const createProductShopee = async (req, res) => {
         // === 1. Ambil token Shopee dari DB ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData || !shopeeData.access_token) {
-            return res
-                .status(400)
-                .json({ error: "Shopee token not found. Please authorize first." });
+            return res.status(400).json({
+                error: "Shopee token not found. Please authorize first.",
+            });
         }
         const { shop_id, access_token } = shopeeData;
 
@@ -234,7 +234,7 @@ const createProductShopee = async (req, res) => {
         // Convert BLOB → Buffer
         const imageBuffer = Buffer.from(product.gambar_product);
 
-        // Buat form-data
+        // Buat form-data untuk upload gambar
         const formData = new FormData();
         formData.append("image", imageBuffer, {
             filename: `${product.id_product}.png`,
@@ -247,6 +247,9 @@ const createProductShopee = async (req, res) => {
             headers: formData.getHeaders(),
         });
 
+        console.log("Shopee Upload Response:", JSON.stringify(uploadResponse.data, null, 2));
+
+        // Cek apakah upload berhasil
         if (
             !uploadResponse.data ||
             !uploadResponse.data.response ||
@@ -286,11 +289,7 @@ const createProductShopee = async (req, res) => {
             dimension,
             condition,
             normal_stock: stokUtama.stok,
-            images: [
-                {
-                    url: shopeeImageUrl,
-                },
-            ],
+            images: [shopeeImageUrl], // ✅ array of string, bukan object
         };
 
         console.log("Shopee Add Product Body:", JSON.stringify(body, null, 2));
@@ -300,7 +299,10 @@ const createProductShopee = async (req, res) => {
             headers: { "Content-Type": "application/json" },
         });
 
-        if (createResponse.data.error) {
+        console.log("Shopee Create Product Response:", JSON.stringify(createResponse.data, null, 2));
+
+        // Jika Shopee mengembalikan error
+        if (createResponse.data.error || createResponse.data.message) {
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message || "Gagal membuat produk di Shopee",
@@ -328,7 +330,9 @@ const createProductShopee = async (req, res) => {
         });
     } catch (err) {
         console.error("Shopee Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({
+            error: err.response?.data || err.message,
+        });
     }
 };
 
