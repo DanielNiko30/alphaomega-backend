@@ -535,7 +535,7 @@ const ProductController = {
     getLatestProduct: async (req, res) => {
         try {
             const latestProduct = await Product.findOne({
-                order: [['createdAt', 'DESC']],
+                order: [['id_product', 'DESC']], // ✅ pakai id_product untuk urutan terbaru
                 include: [{ model: Stok, as: "stok" }]
             });
 
@@ -543,31 +543,31 @@ const ProductController = {
                 return res.status(404).json({ message: "Belum ada produk di database" });
             }
 
-            // Jika gambar_product sudah string atau URL
-            const imageUrl = latestProduct.gambar_product || null;
+            // ✅ Convert gambar ke Base64 jika ada
+            const imageUrl = latestProduct.gambar_product
+                ? `data:image/png;base64,${latestProduct.gambar_product.toString('base64')}`
+                : null;
 
+            // ✅ Sesuaikan format agar cocok dengan frontend
             res.json({
-                idProduct: latestProduct.id_product,
-                namaProduct: latestProduct.nama_product,
-                productKategori: latestProduct.product_kategori,
-                gambarProduct: imageUrl,
-                deskripsiProduct: latestProduct.deskripsi_product,
-                stokList: latestProduct.stok.map(s => ({
-                    idStok: s.id_stok,
+                id_product: latestProduct.id_product,
+                nama_product: latestProduct.nama_product,
+                product_kategori: latestProduct.product_kategori,
+                gambar_product: imageUrl,
+                deskripsi_product: latestProduct.deskripsi_product,
+                stok: latestProduct.stok.map(s => ({
+                    id_stok: s.id_stok,
                     satuan: s.satuan,
                     harga: s.harga,
-                    jumlah: s.jumlah, // ✅ perbaikan
-                    idProductShopee: s.id_product_shopee,
-                    idProductLazada: s.id_product_lazada
+                    jumlah: s.jumlah,
+                    id_product_shopee: s.id_product_shopee,
+                    id_product_lazada: s.id_product_lazada,
                 }))
             });
 
         } catch (error) {
             console.error("❌ Error getLatestProduct:", error);
-            res.status(500).json({
-                message: "Terjadi kesalahan server",
-                error: error.message
-            });
+            res.status(500).json({ message: "Terjadi kesalahan server", error: error.message });
         }
     }
 };
