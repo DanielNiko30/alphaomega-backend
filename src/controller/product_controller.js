@@ -535,7 +535,7 @@ const ProductController = {
     getLatestProduct: async (req, res) => {
         try {
             const latestProduct = await Product.findOne({
-                order: [['createdAt', 'DESC']], // Urut berdasarkan produk terbaru
+                order: [['createdAt', 'DESC']],
                 include: [{ model: Stok, as: "stok" }]
             });
 
@@ -543,25 +543,22 @@ const ProductController = {
                 return res.status(404).json({ message: "Belum ada produk di database" });
             }
 
-            // Konversi gambar ke base64
-            const imageUrl = latestProduct.gambar_product
-                ? `data:image/png;base64,${latestProduct.gambar_product.toString('base64')}`
-                : null;
+            // Jika gambar_product sudah string atau URL
+            const imageUrl = latestProduct.gambar_product || null;
 
-            // Response JSON sesuai dengan model Flutter
             res.json({
                 idProduct: latestProduct.id_product,
-                productKategori: latestProduct.product_kategori,
                 namaProduct: latestProduct.nama_product,
+                productKategori: latestProduct.product_kategori,
                 gambarProduct: imageUrl,
                 deskripsiProduct: latestProduct.deskripsi_product,
                 stokList: latestProduct.stok.map(s => ({
                     idStok: s.id_stok,
                     satuan: s.satuan,
                     harga: s.harga,
-                    jumlah: s.stok, // stok barang
+                    jumlah: s.jumlah, // ✅ perbaikan
                     idProductShopee: s.id_product_shopee,
-                    idProductLazada: s.id_product_lazada,
+                    idProductLazada: s.id_product_lazada
                 }))
             });
 
