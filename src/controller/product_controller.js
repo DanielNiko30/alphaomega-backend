@@ -535,7 +535,7 @@ const ProductController = {
     getLatestProduct: async (req, res) => {
         try {
             const latestProduct = await Product.findOne({
-                order: [['id_product', 'DESC']], // ✅ pakai id_product untuk urutan terbaru
+                order: [['id_product', 'DESC']], // urutkan berdasarkan id_product
                 include: [{ model: Stok, as: "stok" }]
             });
 
@@ -543,25 +543,19 @@ const ProductController = {
                 return res.status(404).json({ message: "Belum ada produk di database" });
             }
 
-            // ✅ Convert gambar ke Base64 jika ada
             const imageUrl = latestProduct.gambar_product
                 ? `data:image/png;base64,${latestProduct.gambar_product.toString('base64')}`
                 : null;
 
-            // ✅ Sesuaikan format agar cocok dengan frontend
             res.json({
-                id_product: latestProduct.id_product,
-                nama_product: latestProduct.nama_product,
-                product_kategori: latestProduct.product_kategori,
-                gambar_product: imageUrl,
-                deskripsi_product: latestProduct.deskripsi_product,
-                stok: latestProduct.stok.map(s => ({
-                    id_stok: s.id_stok,
+                idProduct: latestProduct.id_product,
+                namaProduct: latestProduct.nama_product,
+                productKategori: latestProduct.product_kategori,
+                gambarProduct: imageUrl,
+                stokList: latestProduct.stok.map(s => ({
                     satuan: s.satuan,
                     harga: s.harga,
-                    jumlah: s.jumlah,
-                    id_product_shopee: s.id_product_shopee,
-                    id_product_lazada: s.id_product_lazada,
+                    stokQty: s.stok // ✅ gunakan nama yang jelas
                 }))
             });
 
