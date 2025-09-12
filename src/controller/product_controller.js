@@ -195,18 +195,23 @@ const ProductController = {
 
             // === Response disesuaikan dengan model frontend (snake_case) ===
             return res.status(201).json({
-                id_product: updatedProduct.id_product,
-                product_kategori: updatedProduct.product_kategori,
-                nama_product: updatedProduct.nama_product,
-                gambar_product: imageUrl,
-                deskripsi_product: updatedProduct.deskripsi_product,
-                stok: updatedProduct.stok.map((item) => ({
-                    satuan: item.satuan,
-                    jumlah: item.stok, // frontend pakai "jumlah" bukan "stok"
-                    harga: item.harga,
-                })),
-                kategori: kategori.nama_kategori,
+                success: true,
+                message: "Produk berhasil ditambahkan",
+                data: {
+                    id_product: updatedProduct.id_product,
+                    product_kategori: updatedProduct.product_kategori,
+                    nama_product: updatedProduct.nama_product,
+                    gambar_product: imageUrl,
+                    deskripsi_product: updatedProduct.deskripsi_product,
+                    stok: updatedProduct.stok.map((item) => ({
+                        satuan: item.satuan,
+                        jumlah: item.stok, // frontend pakai "jumlah" bukan "stok"
+                        harga: item.harga,
+                    })),
+                    kategori: kategori.nama_kategori,
+                }
             });
+
 
         } catch (error) {
             console.error("❌ Error saat create produk:", error);
