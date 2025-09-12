@@ -193,16 +193,16 @@ const ProductController = {
 
             const imageUrl = `data:image/png;base64,${gambarBuffer.toString('base64')}`;
 
-            // Kirim response
+            // === Response disesuaikan dengan model frontend (snake_case) ===
             return res.status(201).json({
-                idProduct: updatedProduct.id_product,
-                productKategori: updatedProduct.product_kategori,
-                namaProduct: updatedProduct.nama_product,
-                gambarProduct: imageUrl,
-                deskripsiProduct: updatedProduct.deskripsi_product,
-                stokList: updatedProduct.stok.map((item) => ({
+                id_product: updatedProduct.id_product,
+                product_kategori: updatedProduct.product_kategori,
+                nama_product: updatedProduct.nama_product,
+                gambar_product: imageUrl,
+                deskripsi_product: updatedProduct.deskripsi_product,
+                stok: updatedProduct.stok.map((item) => ({
                     satuan: item.satuan,
-                    stok: item.stok,
+                    jumlah: item.stok, // frontend pakai "jumlah" bukan "stok"
                     harga: item.harga,
                 })),
                 kategori: kategori.nama_kategori,
