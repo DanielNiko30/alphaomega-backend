@@ -540,33 +540,47 @@ const ProductController = {
     getLatestProduct: async (req, res) => {
         try {
             const latestProduct = await Product.findOne({
-                order: [['id_product', 'DESC']], // urutkan berdasarkan id_product
+                order: [['id_product', 'DESC']], // ambil produk terakhir
                 include: [{ model: Stok, as: "stok" }]
             });
 
             if (!latestProduct) {
-                return res.status(404).json({ message: "Belum ada produk di database" });
+                return res.status(404).json({
+                    success: false,
+                    message: "Belum ada produk di database"
+                });
             }
 
+            // Konversi gambar ke Base64 jika ada
             const imageUrl = latestProduct.gambar_product
                 ? `data:image/png;base64,${latestProduct.gambar_product.toString('base64')}`
                 : null;
 
-            res.json({
-                idProduct: latestProduct.id_product,
-                namaProduct: latestProduct.nama_product,
-                productKategori: latestProduct.product_kategori,
-                gambarProduct: imageUrl,
-                stokList: latestProduct.stok.map(s => ({
-                    satuan: s.satuan,
-                    harga: s.harga,
-                    stokQty: s.stok // ✅ gunakan nama yang jelas
-                }))
+            // ✅ Pastikan struktur sesuai dengan Flutter Product.fromJson
+            res.status(200).json({
+                success: true,
+                message: "Produk terbaru berhasil diambil",
+                data: {
+                    id_product: latestProduct.id_product,
+                    nama_product: latestProduct.nama_product,
+                    product_kategori: latestProduct.product_kategori,
+                    gambar_product: imageUrl,
+                    deskripsi_product: latestProduct.deskripsi_product || "",
+                    stok: latestProduct.stok.map(s => ({
+                        satuan: s.satuan,
+                        harga: s.harga,
+                        stokQty: s.stok // ✅ gunakan nama yang sama seperti di Flutter
+                    }))
+                }
             });
 
         } catch (error) {
             console.error("❌ Error getLatestProduct:", error);
-            res.status(500).json({ message: "Terjadi kesalahan server", error: error.message });
+            res.status(500).json({
+                success: false,
+                message: "Terjadi kesalahan server",
+                error: error.message
+            });
         }
     }
 };
