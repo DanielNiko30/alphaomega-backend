@@ -447,5 +447,130 @@ const getBrandListShopee = async (req, res) => {
     }
 };
 
+const updateProductShopee = async (req, res) => {
+    try {
+        const { id_product } = req.params;
+        const { weight, category_id, dimension, condition, item_sku, brand_id, brand_name, selected_unit, logistic_id } = req.body;
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee };
+        // 1️⃣ Ambil token Shopee
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+        const { shop_id, access_token } = shopeeData;
+
+        // 2️⃣ Ambil data produk + stok
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
+
+        if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
+
+        // 3️⃣ Pilih stok sesuai satuan
+        const stokTerpilih = selected_unit
+            ? product.stok.find(s => s.satuan === selected_unit)
+            : product.stok[0];
+
+        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+
+        if (!stokTerpilih.id_product_shopee) {
+            return res.status(400).json({ error: "Produk ini belum memiliki id_product_shopee, silakan add_item terlebih dahulu." });
+        }
+
+        // 4️⃣ Upload gambar (optional: jika user ingin ganti gambar baru)
+        let uploadedImageId = null;
+        if (product.gambar_product) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const uploadPath = "/api/v2/media_space/upload_image";
+            const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
+            const uploadUrl = `https://partner.shopeemobile.com${uploadPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${uploadSign}`;
+
+            const imageBuffer = Buffer.isBuffer(product.gambar_product) ? product.gambar_product : Buffer.from(product.gambar_product);
+            const formData = new FormData();
+            formData.append("image", imageBuffer, {
+                filename: `${product.id_product}.png`,
+                contentType: "image/png"
+            });
+
+            const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
+            uploadedImageId = uploadResponse.data?.response?.image_info?.image_id || null;
+
+            if (!uploadedImageId) {
+                return res.status(400).json({ error: "Gagal upload image ke Shopee", shopee_response: uploadResponse.data });
+            }
+        }
+
+        // 5️⃣ Body Update Item
+        if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
+
+        const body = {
+            item_id: Number(stokTerpilih.id_product_shopee), // ID produk di Shopee
+            original_price: Number(stokTerpilih.harga),
+            description: product.deskripsi_product || "Deskripsi tidak tersedia",
+            item_name: product.nama_product,
+            item_sku: item_sku || null,
+            weight: Number(weight),
+            package_height: Number(dimension.height),
+            package_length: Number(dimension.length),
+            package_width: Number(dimension.width),
+            logistic_info: [
+                {
+                    logistic_id: Number(logistic_id), // mask_channel_id diambil dari frontend
+                    enabled: true,
+                    is_free: false
+                }
+            ],
+            category_id: Number(category_id),
+            seller_stock: [
+                {
+                    stock_location_id: 0,
+                    stock: Number(stokTerpilih.stok)
+                }
+            ],
+            condition: condition || "NEW",
+            brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" }
+        };
+
+        // Tambahkan gambar jika ada perubahan
+        if (uploadedImageId) {
+            body.image = { image_id_list: [uploadedImageId], image_ratio: "1:1" };
+        }
+
+        // 6️⃣ Request ke Shopee Update API
+        const timestamp = Math.floor(Date.now() / 1000);
+        const updatePath = "/api/v2/product/update_item";
+        const updateSign = generateSign(updatePath, timestamp, access_token, shop_id);
+        const updateUrl = `https://partner.shopeemobile.com${updatePath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${updateSign}`;
+
+        const updateResponse = await axios.post(updateUrl, body, {
+            headers: { "Content-Type": "application/json" }
+        });
+
+        if (updateResponse.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: updateResponse.data.message,
+                shopee_response: updateResponse.data
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Produk berhasil diupdate di Shopee",
+            shopee_response: updateResponse.data,
+            updated_stock: {
+                id_stok: stokTerpilih.id_stok,
+                satuan: stokTerpilih.satuan,
+                id_product_shopee: stokTerpilih.id_product_shopee
+            }
+        });
+
+    } catch (err) {
+        console.error("❌ Shopee Update Product Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal update produk di Shopee." });
+    }
+};
+
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee};
