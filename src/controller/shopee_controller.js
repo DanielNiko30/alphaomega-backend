@@ -572,5 +572,102 @@ const updateProductShopee = async (req, res) => {
     }
 };
 
+const getShopeeItemInfo = async (req, res) => {
+    try {
+        const { id_product } = req.params;
+        const { selected_unit } = req.query; // Satuan produk seperti 'kg', 'g', dll
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee};
+        // 1️⃣ Ambil token Shopee
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+        const { shop_id, access_token } = shopeeData;
+
+        // 2️⃣ Ambil data produk + stok
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }]
+        });
+
+        if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
+
+        // 3️⃣ Cari stok sesuai satuan
+        const stokTerpilih = selected_unit
+            ? product.stok.find(s => s.satuan === selected_unit)
+            : product.stok[0];
+
+        if (!stokTerpilih) {
+            return res.status(400).json({ error: `Stok dengan satuan ${selected_unit} tidak ditemukan` });
+        }
+
+        if (!stokTerpilih.id_product_shopee) {
+            return res.status(400).json({
+                error: "Produk ini belum terhubung ke Shopee (id_product_shopee tidak ada)."
+            });
+        }
+
+        const item_id = stokTerpilih.id_product_shopee;
+
+        // 4️⃣ Generate Signature untuk Shopee API
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/get_item_base_info";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&item_id_list=${item_id}&need_tax_info=false&need_complaint_policy=false`;
+
+        console.log("🔹 Shopee Get Item Base Info URL:", url);
+
+        // 5️⃣ Request ke Shopee
+        const response = await axios.get(url, {
+            headers: { "Content-Type": "application/json" }
+        });
+
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data
+            });
+        }
+
+        const item = response.data.response?.item_list?.[0];
+        if (!item) {
+            return res.status(404).json({
+                success: false,
+                message: "Data produk Shopee tidak ditemukan",
+                shopee_response: response.data
+            });
+        }
+
+        // 6️⃣ Ambil field yang dibutuhkan untuk form edit
+        const result = {
+            item_id: item.item_id,
+            weight: item.weight,
+            category_id: item.category_id,
+            length: item.package_length,
+            width: item.package_width,
+            height: item.package_height,
+            condition: item.condition,
+            item_sku: item.item_sku,
+            brand_name: item.brand?.original_brand_name || "No Brand"
+        };
+
+        return res.json({
+            success: true,
+            data: result,
+            raw_response: response.data
+        });
+
+    } catch (err) {
+        console.error("❌ Shopee Get Item Info Error:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil informasi produk dari Shopee",
+            error: err.response?.data || err.message
+        });
+    }
+};
+
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo };
