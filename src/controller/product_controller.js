@@ -311,7 +311,7 @@ const ProductController = {
                 deskripsiProduct: updatedProduct.deskripsi_product,
                 stokList: updatedProduct.stok.map((item) => ({
                     satuan: item.satuan,
-                    stok: item.stok, // ✅ Nama properti mengikuti model di Flutter
+                    jumlah: item.stok, // ✅ Nama properti mengikuti model di Flutter
                     harga: item.harga,
                 })),
                 kategori: kategori.nama_kategori,
