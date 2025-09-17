@@ -226,14 +226,27 @@ const ProductController = {
         try {
             let { product_kategori, nama_product, deskripsi_product, stok_list } = req.body;
 
-            // Parsing JSON stok_list agar langsung bisa digunakan di database
-            if (typeof stok_list === "string") {
-                try {
-                    stok_list = JSON.parse(stok_list);
-                } catch (error) {
-                    return res.status(400).json({ message: "Format data stok_list harus berupa JSON array!" });
+            // Parsing stok_list agar selalu jadi array of objects
+            if (!Array.isArray(stok_list)) {
+                if (typeof stok_list === "string") {
+                    try {
+                        stok_list = JSON.parse(stok_list);
+                    } catch (error) {
+                        return res.status(400).json({ message: "Format data stok_list harus berupa JSON array!" });
+                    }
+                } else {
+                    return res.status(400).json({ message: "stok_list harus berupa array" });
                 }
             }
+
+            // Validasi setiap item stok_list
+            stok_list = stok_list.map(item => {
+                return {
+                    satuan: item.satuan ?? "",
+                    stok: parseInt(item.jumlah) || 0,
+                    harga: parseInt(item.harga) || 0
+                };
+            });
 
             // Pastikan kategori ada di database
             const kategori = await Kategori.findOne({ where: { id_kategori: product_kategori } });
@@ -247,10 +260,9 @@ const ProductController = {
                 return res.status(404).json({ message: "Produk tidak ditemukan!" });
             }
 
-            // Handle gambar: Jika ada gambar baru, simpan sebagai buffer
-            let newImageBuffer = product.gambar_product; // Gunakan gambar lama jika tidak ada perubahan
+            // Handle gambar
+            let newImageBuffer = product.gambar_product;
             let imageUrl = "";
-
             if (req.file) {
                 newImageBuffer = req.file.buffer;
                 imageUrl = `data:image/png;base64,${newImageBuffer.toString('base64')}`;
@@ -258,30 +270,22 @@ const ProductController = {
                 imageUrl = `data:image/png;base64,${product.gambar_product.toString('base64')}`;
             }
 
-            // **Update data produk**
+            // Update data produk
             await Product.update(
-                {
-                    product_kategori,
-                    nama_product,
-                    deskripsi_product,
-                    gambar_product: newImageBuffer
-                },
+                { product_kategori, nama_product, deskripsi_product, gambar_product: newImageBuffer },
                 { where: { id_product: req.params.id } }
             );
 
             // Ambil stok yang sudah ada
             const existingStok = await Stok.findAll({ where: { id_product_stok: req.params.id } });
-
-            // Buat mapping stok berdasarkan satuan
             const stokMap = {};
-            existingStok.forEach((item) => {
+            existingStok.forEach(item => {
                 stokMap[item.satuan] = { id: item.id_stok, stok: item.stok, harga: item.harga };
             });
 
-            // Update stok jika sudah ada, atau tambahkan baru jika belum ada
+            // Update atau create stok baru
             for (let stokItem of stok_list) {
                 const { satuan, harga, stok } = stokItem;
-
                 if (stokMap[satuan]) {
                     await Stok.update({ stok, harga }, { where: { id_stok: stokMap[satuan].id } });
                 } else {
@@ -291,28 +295,28 @@ const ProductController = {
                         id_product_stok: req.params.id,
                         satuan,
                         stok,
-                        harga,
+                        harga
                     });
                 }
             }
 
-            // **Ambil data produk yang telah diperbarui**
+            // Ambil data produk terbaru
             const updatedProduct = await Product.findOne({
                 where: { id_product: req.params.id },
                 include: [{ model: Stok, as: "stok" }],
             });
 
-            // ✅ **Format respons agar cocok dengan Flutter**
+            // Response untuk Flutter
             return res.status(200).json({
                 idProduct: updatedProduct.id_product,
                 productKategori: updatedProduct.product_kategori,
                 namaProduct: updatedProduct.nama_product,
-                gambarProduct: imageUrl, // ✅ Gambar dalam format Base64 agar cocok dengan Flutter
+                gambarProduct: imageUrl,
                 deskripsiProduct: updatedProduct.deskripsi_product,
-                stokList: updatedProduct.stok.map((item) => ({
+                stokList: updatedProduct.stok.map(item => ({
                     satuan: item.satuan,
-                    jumlah: item.stok, // ✅ Nama properti mengikuti model di Flutter
-                    harga: item.harga,
+                    jumlah: item.stok,
+                    harga: item.harga
                 })),
                 kategori: kategori.nama_kategori,
             });
