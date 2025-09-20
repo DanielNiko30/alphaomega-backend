@@ -575,7 +575,12 @@ const ProductController = {
                 ? `data:image/png;base64,${productQuery.gambar_product.toString('base64')}`
                 : null;
 
-            // ✅ Struktur response tetap sama seperti sebelumnya
+            // ✅ Cek apakah salah satu stok sudah punya id_product_shopee
+            const isShopeeExists = productQuery.stok.some(
+                (s) => s.id_product_shopee !== null
+            );
+
+            // ✅ Struktur response lengkap
             return res.status(200).json({
                 success: true,
                 message: id_product
@@ -587,14 +592,20 @@ const ProductController = {
                     product_kategori: productQuery.product_kategori,
                     gambar_product: imageUrl,
                     deskripsi_product: productQuery.deskripsi_product || "",
-                    stok: productQuery.stok.map(s => ({
+
+                    // Flag Shopee untuk memunculkan tombol Edit Shopee di frontend
+                    is_shopee_exists: isShopeeExists,
+
+                    // Mapping stok
+                    stok: productQuery.stok.map((s) => ({
+                        id_stok: s.id_stok,
                         satuan: s.satuan,
                         harga: s.harga,
-                        stokQty: s.stok // ✅ pakai stokQty sesuai kebutuhan Flutter
+                        stokQty: s.stok, // ✅ gunakan stokQty sesuai kebutuhan Flutter
+                        id_product_shopee: s.id_product_shopee // Wajib dikirim agar bisa dicek
                     }))
                 }
             });
-
         } catch (error) {
             console.error("❌ Error getLatestProduct:", error);
             return res.status(500).json({
@@ -604,7 +615,6 @@ const ProductController = {
             });
         }
     }
-
 };
 
 module.exports = ProductController;
