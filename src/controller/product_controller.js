@@ -543,50 +543,68 @@ const ProductController = {
 
     getLatestProduct: async (req, res) => {
         try {
-            const latestProduct = await Product.findOne({
-                order: [['id_product', 'DESC']], // ambil produk terakhir
-                include: [{ model: Stok, as: "stok" }]
-            });
+            const { id_product } = req.query; // Ambil id_product dari query param jika ada
+            let productQuery;
 
-            if (!latestProduct) {
+            if (id_product) {
+                // Jika ada id_product, ambil berdasarkan ID
+                productQuery = await Product.findOne({
+                    where: { id_product: id_product },
+                    include: [{ model: Stok, as: "stok" }]
+                });
+            } else {
+                // Jika tidak ada id_product, ambil produk terbaru
+                productQuery = await Product.findOne({
+                    order: [['id_product', 'DESC']],
+                    include: [{ model: Stok, as: "stok" }]
+                });
+            }
+
+            // Jika produk tidak ditemukan
+            if (!productQuery) {
                 return res.status(404).json({
                     success: false,
-                    message: "Belum ada produk di database"
+                    message: id_product
+                        ? `Produk dengan id ${id_product} tidak ditemukan`
+                        : "Belum ada produk di database"
                 });
             }
 
             // Konversi gambar ke Base64 jika ada
-            const imageUrl = latestProduct.gambar_product
-                ? `data:image/png;base64,${latestProduct.gambar_product.toString('base64')}`
+            const imageUrl = productQuery.gambar_product
+                ? `data:image/png;base64,${productQuery.gambar_product.toString('base64')}`
                 : null;
 
-            // ✅ Pastikan struktur sesuai dengan Flutter Product.fromJson
-            res.status(200).json({
+            // ✅ Struktur response tetap sama seperti sebelumnya
+            return res.status(200).json({
                 success: true,
-                message: "Produk terbaru berhasil diambil",
+                message: id_product
+                    ? `Produk dengan id ${id_product} berhasil diambil`
+                    : "Produk terbaru berhasil diambil",
                 data: {
-                    id_product: latestProduct.id_product,
-                    nama_product: latestProduct.nama_product,
-                    product_kategori: latestProduct.product_kategori,
+                    id_product: productQuery.id_product,
+                    nama_product: productQuery.nama_product,
+                    product_kategori: productQuery.product_kategori,
                     gambar_product: imageUrl,
-                    deskripsi_product: latestProduct.deskripsi_product || "",
-                    stok: latestProduct.stok.map(s => ({
+                    deskripsi_product: productQuery.deskripsi_product || "",
+                    stok: productQuery.stok.map(s => ({
                         satuan: s.satuan,
                         harga: s.harga,
-                        stokQty: s.stok // ✅ gunakan nama yang sama seperti di Flutter
+                        stokQty: s.stok // ✅ pakai stokQty sesuai kebutuhan Flutter
                     }))
                 }
             });
 
         } catch (error) {
             console.error("❌ Error getLatestProduct:", error);
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Terjadi kesalahan server",
                 error: error.message
             });
         }
     }
+
 };
 
 module.exports = ProductController;
