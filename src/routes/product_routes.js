@@ -13,7 +13,7 @@ router.delete("/stok/:id", ProductController.deleteStok);
 
 router.get("/", ProductController.getAllProducts);
 router.get("/search/:name", ProductController.getProductByName);
-router.get("/latest", ProductController.getLatestProduct);
+router.get("/latest/:productId?", ProductController.getLatestProduct);
 router.get("/:id", ProductController.getProductById);
 router.post("/", upload.single("gambar_product"), ProductController.createProduct);
 router.put("/:id", upload.single("gambar_product"), ProductController.updateProduct);
