@@ -110,7 +110,7 @@ const ProductController = {
     },
 
 
-    createProduct: async (req, res) => 
+    createProduct: async (req, res) => {
         try {
             const newId = await generateProductId();
 
