@@ -89,9 +89,12 @@ const ProductController = {
 
             const stok = product.stok.length > 0
                 ? product.stok.map((item) => ({
+                    id_stok: item.id_stok,
                     satuan: item.satuan,
                     jumlah: item.stok,
                     harga: item.harga,
+                    id_product_shopee: item.id_product_shopee,  // ✅ wajib
+                    id_product_lazada: item.id_product_lazada,  // ✅ wajib
                 }))
                 : [];
 
@@ -106,7 +109,8 @@ const ProductController = {
         }
     },
 
-    createProduct: async (req, res) => {
+
+    createProduct: async (req, res) => 
         try {
             const newId = await generateProductId();
 
@@ -342,7 +346,6 @@ const ProductController = {
             return res.status(500).json({ message: "Terjadi kesalahan server", error: error.message });
         }
     },
-
 
     deleteProduct: async (req, res) => {
         try {
