@@ -628,7 +628,7 @@ const getShopeeItemInfo = async (req, res) => {
 
         // 4️⃣ Buat signature untuk request Shopee
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/product/get_item_base_info";
+        const path = "/api/v2/order/get_order_list";
 
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
