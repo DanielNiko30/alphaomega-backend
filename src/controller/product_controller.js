@@ -543,48 +543,46 @@ const ProductController = {
 
     getLatestProduct: async (req, res) => {
         try {
-            const { id_product } = req.query; // Ambil id_product dari query param jika ada
+            // Ambil ID dari path param atau query param
+            const productId = req.params.productId || req.query.id_product;
+
             let productQuery;
 
-            if (id_product) {
-                // Jika ada id_product, ambil berdasarkan ID
+            if (productId) {
+                // Ambil produk sesuai ID
                 productQuery = await Product.findOne({
-                    where: { id_product: id_product },
+                    where: { id_product: productId },
                     include: [{ model: Stok, as: "stok" }]
                 });
             } else {
-                // Jika tidak ada id_product, ambil produk terbaru
+                // Ambil produk terbaru
                 productQuery = await Product.findOne({
                     order: [['id_product', 'DESC']],
                     include: [{ model: Stok, as: "stok" }]
                 });
             }
 
-            // Jika produk tidak ditemukan
             if (!productQuery) {
                 return res.status(404).json({
                     success: false,
-                    message: id_product
-                        ? `Produk dengan id ${id_product} tidak ditemukan`
+                    message: productId
+                        ? `Produk dengan id ${productId} tidak ditemukan`
                         : "Belum ada produk di database"
                 });
             }
 
-            // Konversi gambar ke Base64 jika ada
             const imageUrl = productQuery.gambar_product
                 ? `data:image/png;base64,${productQuery.gambar_product.toString('base64')}`
                 : null;
 
-            // ✅ Cek apakah salah satu stok sudah punya id_product_shopee
             const isShopeeExists = productQuery.stok.some(
                 (s) => s.id_product_shopee !== null
             );
 
-            // ✅ Struktur response lengkap
             return res.status(200).json({
                 success: true,
-                message: id_product
-                    ? `Produk dengan id ${id_product} berhasil diambil`
+                message: productId
+                    ? `Produk dengan id ${productId} berhasil diambil`
                     : "Produk terbaru berhasil diambil",
                 data: {
                     id_product: productQuery.id_product,
@@ -592,17 +590,13 @@ const ProductController = {
                     product_kategori: productQuery.product_kategori,
                     gambar_product: imageUrl,
                     deskripsi_product: productQuery.deskripsi_product || "",
-
-                    // Flag Shopee untuk memunculkan tombol Edit Shopee di frontend
                     is_shopee_exists: isShopeeExists,
-
-                    // Mapping stok
                     stok: productQuery.stok.map((s) => ({
                         id_stok: s.id_stok,
                         satuan: s.satuan,
                         harga: s.harga,
-                        stokQty: s.stok, // ✅ gunakan stokQty sesuai kebutuhan Flutter
-                        id_product_shopee: s.id_product_shopee // Wajib dikirim agar bisa dicek
+                        stokQty: s.stok,
+                        id_product_shopee: s.id_product_shopee
                     }))
                 }
             });
@@ -615,6 +609,7 @@ const ProductController = {
             });
         }
     }
+
 };
 
 module.exports = ProductController;
