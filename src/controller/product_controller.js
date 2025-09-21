@@ -265,9 +265,9 @@ const ProductController = {
             let imageUrl = "";
             if (req.file) {
                 newImageBuffer = req.file.buffer;
-                imageUrl = `data:image/png;base64,${newImageBuffer.toString('base64')}`;
+                imageUrl = `data:image/png;base64,${newImageBuffer.toString("base64")}`;
             } else if (product.gambar_product) {
-                imageUrl = `data:image/png;base64,${product.gambar_product.toString('base64')}`;
+                imageUrl = `data:image/png;base64,${product.gambar_product.toString("base64")}`;
             }
 
             // Update data produk
@@ -300,10 +300,23 @@ const ProductController = {
                 }
             }
 
-            // Ambil data produk terbaru
+            // Ambil data produk terbaru + stok lengkap
             const updatedProduct = await Product.findOne({
                 where: { id_product: req.params.id },
-                include: [{ model: Stok, as: "stok" }],
+                include: [
+                    {
+                        model: Stok,
+                        as: "stok",
+                        attributes: [
+                            "id_stok",
+                            "satuan",
+                            "stok",
+                            "harga",
+                            "id_product_shopee", // ✅ Tambahkan Shopee ID
+                            "id_product_lazada"  // ✅ Tambahkan Lazada ID
+                        ]
+                    }
+                ]
             });
 
             // Response untuk Flutter
@@ -314,11 +327,14 @@ const ProductController = {
                 gambarProduct: imageUrl,
                 deskripsiProduct: updatedProduct.deskripsi_product,
                 stokList: updatedProduct.stok.map(item => ({
+                    idStok: item.id_stok,
                     satuan: item.satuan,
                     jumlah: item.stok,
-                    harga: item.harga
+                    harga: item.harga,
+                    idProductShopee: item.id_product_shopee, // ✅ ikut dikirim ke Flutter
+                    idProductLazada: item.id_product_lazada  // ✅ ikut dikirim ke Flutter
                 })),
-                kategori: kategori.nama_kategori,
+                kategori: kategori.nama_kategori
             });
 
         } catch (error) {
@@ -326,6 +342,7 @@ const ProductController = {
             return res.status(500).json({ message: "Terjadi kesalahan server", error: error.message });
         }
     },
+
 
     deleteProduct: async (req, res) => {
         try {
