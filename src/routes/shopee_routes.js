@@ -9,6 +9,6 @@ router.get('/categories', getShopeeCategories);
 router.get('/logistics', getShopeeLogistics);
 router.get('/brand', getBrandListShopee);
 router.put('/product/update/:id_product', updateProductShopee);
-router.get('/product/item-info/:id_product', getShopeeItemInfo);
+router.post('/product/item-info/:id_product', getShopeeItemInfo);
 
 module.exports = router;
