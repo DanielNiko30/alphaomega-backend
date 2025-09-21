@@ -688,12 +688,22 @@ const getShopeeItemInfo = async (req, res) => {
 
 const getShopeeOrders = async (req, res) => {
     try {
-        const { time_range_field, time_from, time_to, page_size = 20, cursor = "", order_status = "READY_TO_SHIP" } = req.body;
+        const {
+            time_range_field = "create_time",
+            time_from,
+            time_to,
+            page_size = 20,
+            cursor = "",
+            order_status = "READY_TO_SHIP"
+        } = req.query; // pakai query untuk GET
 
-        if (!time_range_field || !time_from || !time_to) {
-            return res.status(400).json({ error: "time_range_field, time_from, dan time_to wajib diisi" });
+        if (!time_from || !time_to) {
+            return res.status(400).json({
+                error: "time_from dan time_to wajib diisi (timestamp)"
+            });
         }
 
+        // Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
@@ -702,35 +712,56 @@ const getShopeeOrders = async (req, res) => {
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_list";
+
+        // Generate signature
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-
-        const body = {
+        // Buat URL query string
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp: timestamp,
+            access_token: access_token,
+            shop_id: shop_id,
+            sign: sign,
             time_range_field,
             time_from,
             time_to,
-            page_size: Number(page_size),
+            page_size,
             cursor,
             order_status
-        };
+        }).toString();
 
-        const response = await axios.post(url, body, { headers: { "Content-Type": "application/json" } });
+        const url = `https://partner.shopeemobile.com${path}?${params}`;
+
+        console.log("🔹 Shopee Get Orders URL:", url);
+
+        // Request ke Shopee
+        const response = await axios.get(url, {
+            headers: { "Content-Type": "application/json" }
+        });
 
         if (response.data.error) {
-            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data
+            });
         }
 
-        return res.json({ success: true, data: response.data.response });
+        return res.json({
+            success: true,
+            data: response.data.response
+        });
     } catch (err) {
         console.error("❌ Shopee Get Orders Error:", err.response?.data || err.message);
-        return res.status(500).json({ success: false, message: "Gagal mengambil pesanan Shopee", error: err.response?.data || err.message });
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil pesanan Shopee",
+            error: err.response?.data || err.message
+        });
     }
 };
 
-// =====================================
-// 2️⃣ Atur Pickup Barang / Confirm Pickup
-// =====================================
 const setShopeePickup = async (req, res) => {
     try {
         const { order_list } = req.body;
