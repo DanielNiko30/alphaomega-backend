@@ -686,5 +686,110 @@ const getShopeeItemInfo = async (req, res) => {
     }
 };
 
+const getShopeeOrders = async (req, res) => {
+    try {
+        const { time_range_field, time_from, time_to, page_size = 20, cursor = "", order_status = "READY_TO_SHIP" } = req.body;
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo };
+        if (!time_range_field || !time_from || !time_to) {
+            return res.status(400).json({ error: "time_range_field, time_from, dan time_to wajib diisi" });
+        }
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/order/get_order_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const body = {
+            time_range_field,
+            time_from,
+            time_to,
+            page_size: Number(page_size),
+            cursor,
+            order_status
+        };
+
+        const response = await axios.post(url, body, { headers: { "Content-Type": "application/json" } });
+
+        if (response.data.error) {
+            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+        }
+
+        return res.json({ success: true, data: response.data.response });
+    } catch (err) {
+        console.error("❌ Shopee Get Orders Error:", err.response?.data || err.message);
+        return res.status(500).json({ success: false, message: "Gagal mengambil pesanan Shopee", error: err.response?.data || err.message });
+    }
+};
+
+// =====================================
+// 2️⃣ Atur Pickup Barang / Confirm Pickup
+// =====================================
+const setShopeePickup = async (req, res) => {
+    try {
+        const { order_list } = req.body;
+
+        if (!order_list || !Array.isArray(order_list) || order_list.length === 0) {
+            return res.status(400).json({ success: false, message: "Field 'order_list' wajib diisi dan tidak boleh kosong" });
+        }
+
+        if (order_list.length > 50) {
+            return res.status(400).json({ success: false, message: "Maksimal 50 order dalam 1 request" });
+        }
+
+        // 1️⃣ Ambil token Shopee
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ success: false, message: "Shopee token tidak ditemukan. Harap authorize ulang." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+
+        // 2️⃣ Generate signature & URL
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/create_shipping_document";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        console.log("🔹 Shopee Create Shipping Document URL:", url);
+        console.log("🔹 Body:", JSON.stringify({ order_list }, null, 2));
+
+        // 3️⃣ Request ke Shopee
+        const response = await axios.post(url, { order_list }, {
+            headers: { "Content-Type": "application/json" },
+            validateStatus: () => true
+        });
+
+        // 4️⃣ Tangani response
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message || "Gagal membuat shipping document",
+                shopee_response: response.data
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Shipping document / pickup berhasil dibuat",
+            shopee_response: response.data
+        });
+
+    } catch (err) {
+        console.error("❌ Shopee Set Pickup Error:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal membuat shipping document / atur pickup",
+            error: err.response?.data || err.message
+        });
+    }
+};
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo, getShopeeOrders, setShopeePickup };
