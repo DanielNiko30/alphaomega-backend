@@ -825,21 +825,21 @@ const getOrderDetail = async (req, res) => {
         }
 
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/order/get_order_detail"; // ✅ HARUS pakai '/' di depan
+        const path = "/api/v2/order/get_order_detail";
         const sign = generateSign(path, timestamp, shop.access_token, shop.shop_id);
 
         const BASE_URL = "https://partner.shopeemobile.com";
 
-        // Build URL Shopee
         const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${shop.access_token}&shop_id=${shop.shop_id}&sign=${sign}&order_sn_list=${encodeURIComponent(order_sn_list)}&request_order_status_pending=true&response_optional_fields=buyer_username,item_list,total_amount,recipient_address,package_list`;
 
-        console.log("Shopee Get Order Detail URL:", url);
+        console.log("🔹 FINAL URL Shopee:", url);
 
-        // Call Shopee API
         const response = await axios.get(url, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true
         });
+
+        console.log("🔹 RESPONSE Shopee:", response.data);
 
         if (response.data.error) {
             return res.status(400).json({
