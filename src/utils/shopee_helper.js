@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { Shopee } = require("../models/shopee_model");
+const { Shopee } = require("../model/shopee_model");
 
 function isTokenExpired(shop) {
     const now = Math.floor(Date.now() / 1000);
