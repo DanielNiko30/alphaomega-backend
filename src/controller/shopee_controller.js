@@ -825,18 +825,33 @@ const getOrderDetail = async (req, res) => {
         }
 
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "api/v2/order/get_order_detail";
+        const path = "/api/v2/order/get_order_detail"; // ✅ HARUS pakai '/' di depan
         const sign = generateSign(path, timestamp, shop.access_token, shop.shop_id);
 
+        const BASE_URL = "https://partner.shopeemobile.com";
+
         // Build URL Shopee
-        const url = `${BASE_URL}${path}?access_token=${shop.access_token}&order_sn_list=${encodeURIComponent(order_sn_list)}&partner_id=${PARTNER_ID}&shop_id=${shop.shop_id}&sign=${sign}&timestamp=${timestamp}&request_order_status_pending=true&response_optional_fields=buyer_username,item_list,total_amount,recipient_address,package_list`;
+        const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${shop.access_token}&shop_id=${shop.shop_id}&sign=${sign}&order_sn_list=${encodeURIComponent(order_sn_list)}&request_order_status_pending=true&response_optional_fields=buyer_username,item_list,total_amount,recipient_address,package_list`;
+
+        console.log("Shopee Get Order Detail URL:", url);
 
         // Call Shopee API
-        const response = await axios.get(url);
+        const response = await axios.get(url, {
+            headers: { "Content-Type": "application/json" },
+            validateStatus: () => true
+        });
+
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data
+            });
+        }
 
         return res.json({
             success: true,
-            data: response.data
+            data: response.data.response
         });
 
     } catch (error) {

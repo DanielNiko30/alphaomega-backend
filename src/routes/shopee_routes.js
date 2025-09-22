@@ -12,6 +12,6 @@ router.put('/product/update/:id_product', updateProductShopee);
 router.post('/product/item-info/:id_product', getShopeeItemInfo);
 router.post('/pickup', setShopeePickup);
 router.get('/orders', getShopeeOrders);
-router.get("/get_order_detail", getOrderDetail);
+router.get("/order-detail", getOrderDetail);
 
 module.exports = router;
