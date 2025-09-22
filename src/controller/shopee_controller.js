@@ -808,19 +808,20 @@ const getOrderDetail = async (req, res) => {
     try {
         const { order_sn_list } = req.query;
 
+        // Validasi input
         if (!order_sn_list) {
             return res.status(400).json({
                 success: false,
-                message: "order_sn_list wajib dikirim, pisahkan dengan koma jika lebih dari satu"
+                message: "order_sn_list wajib dikirim. Pisahkan dengan koma jika lebih dari satu"
             });
         }
 
         // Ambil token Shopee
         const shop = await Shopee.findOne();
-        if (!shop?.access_token) {
+        if (!shop?.access_token || !shop?.shop_id) {
             return res.status(400).json({
                 success: false,
-                message: "Shopee token tidak ditemukan di database"
+                message: "Shopee token atau shop_id tidak ditemukan di database"
             });
         }
 
@@ -828,27 +829,38 @@ const getOrderDetail = async (req, res) => {
 
         // Generate sign
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/order/get_order_detail"; // WAJIB pakai slash di depan
+        const path = "/api/v2/order/get_order_detail";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // Build URL
+        // Build URL Shopee
         const BASE_URL = "https://partner.shopeemobile.com";
-        const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&order_sn_list=${encodeURIComponent(order_sn_list)}&response_optional_fields=buyer_username,item_list,total_amount,recipient_address,package_list`;
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp: timestamp,
+            access_token: access_token,
+            shop_id: shop_id,
+            sign: sign,
+            order_sn_list: order_sn_list, // jangan encode manual, URLSearchParams yang handle
+            response_optional_fields: "buyer_username,item_list,total_amount,recipient_address,package_list"
+        });
 
-        console.log("🔹 FINAL Shopee URL:", url);
+        const finalUrl = `${BASE_URL}${path}?${params.toString()}`;
+
+        console.log("🔹 FINAL Shopee URL:", finalUrl);
 
         // Call Shopee API
-        const response = await axios.get(url, {
+        const response = await axios.get(finalUrl, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true
         });
 
-        console.log("🔹 Shopee RESPONSE:", response.data);
+        console.log("🔹 Shopee RESPONSE:", JSON.stringify(response.data, null, 2));
 
+        // Jika Shopee return error
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message,
+                message: response.data.message || "Shopee API Error",
                 shopee_response: response.data
             });
         }
