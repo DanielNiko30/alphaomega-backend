@@ -2,10 +2,15 @@ const cron = require("node-cron");
 const { Shopee } = require("../model/shopee_model");
 const { isTokenExpired, refreshShopeeToken } = require("../utils/shopee_helper");
 
-cron.schedule("*/1 * * * *", async () => { // sementara tiap 1 menit untuk testing
-    try {
-        console.log(`[CRON] Cek token Shopee... ${new Date().toISOString()}`);
+/**
+ * CRON untuk cek token Shopee
+ * - Setiap 4 jam akan dicek otomatis
+ * - Jika expired, langsung refresh token
+ */
+cron.schedule("0 */4 * * *", async () => {
+    console.log(`[CRON] Cek token Shopee... ${new Date().toISOString()}`);
 
+    try {
         const shops = await Shopee.findAll();
 
         for (let shop of shops) {

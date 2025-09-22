@@ -3,8 +3,8 @@ const crypto = require("crypto");
 const { Shopee } = require("../model/shopee_model");
 
 /**
- * Fungsi untuk mengecek apakah token sudah expired
- * @param {Object} shop - data dari tabel shopee_routes
+ * Mengecek apakah token sudah expired
+ * @param {Object} shop
  * @returns {boolean}
  */
 function isTokenExpired(shop) {
@@ -14,28 +14,30 @@ function isTokenExpired(shop) {
 }
 
 /**
- * Fungsi untuk refresh token Shopee
+ * Refresh token Shopee
  * @param {Object} shop - data shop dari database
  */
 async function refreshShopeeToken(shop) {
     const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
-    let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
+    const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
 
     const timestamp = Math.floor(Date.now() / 1000);
     const path = "/api/v2/auth/access_token/get";
 
-    // ✅ Base string harus menggunakan partner_id + path + timestamp
+    // 🔹 Buat signature
     const baseString = `${PARTNER_ID}${path}${timestamp}`;
     const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
-    // ✅ Kirim refresh token lewat query string, bukan body
+    // 🔹 URL dengan query string
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
     console.log(`[CRON] 🔄 Refreshing token untuk shop_id: ${shop.shop_id}`);
     console.log(`[CRON] URL refresh: ${url}`);
 
     try {
+        // Body WAJIB berisi partner_id, shop_id, refresh_token
         const response = await axios.post(url, {
+            partner_id: PARTNER_ID,
             shop_id: shop.shop_id,
             refresh_token: shop.refresh_token,
         });
@@ -45,11 +47,11 @@ async function refreshShopeeToken(shop) {
         const data = response.data;
 
         if (data && data.access_token) {
-            // Simpan token baru ke DB
+            // ✅ Simpan token baru ke DB
             await Shopee.update(
                 {
                     access_token: data.access_token,
-                    refresh_token: data.refresh_token, // update refresh token juga
+                    refresh_token: data.refresh_token, // refresh_token juga berubah
                     expire_in: data.expire_in,
                     last_updated: Math.floor(Date.now() / 1000),
                 },
