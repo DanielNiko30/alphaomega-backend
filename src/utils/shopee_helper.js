@@ -18,40 +18,40 @@ function isTokenExpired(shop) {
  * @param {Object} shop - data shop dari database
  */
 async function refreshShopeeToken(shop) {
-    const PARTNER_ID = process.env.SHOPEE_PARTNER_ID;
-    let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
-    if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
+    const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
+    let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
 
     const timestamp = Math.floor(Date.now() / 1000);
-    const path = "/api/v2/auth/access_token/get"; // endpoint Shopee untuk refresh token
-    const url = `https://partner.shopeemobile.com${path}`;
+    const path = "/api/v2/auth/access_token/get";
 
-    // HMAC untuk tanda tangan (sign)
-    const baseString = `${PARTNER_ID}${path}${timestamp}${shop.refresh_token}`;
+    // ✅ Base string harus menggunakan partner_id + path + timestamp
+    const baseString = `${PARTNER_ID}${path}${timestamp}`;
     const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
+    // ✅ Kirim refresh token lewat query string, bukan body
+    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
+
     console.log(`[CRON] 🔄 Refreshing token untuk shop_id: ${shop.shop_id}`);
+    console.log(`[CRON] URL refresh: ${url}`);
 
     try {
         const response = await axios.post(url, {
-            partner_id: Number(PARTNER_ID),
-            refresh_token: shop.refresh_token,
             shop_id: shop.shop_id,
-            timestamp,
-            sign
+            refresh_token: shop.refresh_token,
         });
 
-        const data = response.data;
-        console.log("[CRON] Shopee Refresh Response:", data);
+        console.log("[CRON] Shopee Refresh Response:", response.data);
 
-        // Validasi apakah response sukses
+        const data = response.data;
+
         if (data && data.access_token) {
+            // Simpan token baru ke DB
             await Shopee.update(
                 {
                     access_token: data.access_token,
                     refresh_token: data.refresh_token, // update refresh token juga
                     expire_in: data.expire_in,
-                    last_updated: Math.floor(Date.now() / 1000) // simpan waktu sekarang
+                    last_updated: Math.floor(Date.now() / 1000),
                 },
                 { where: { shop_id: shop.shop_id } }
             );
@@ -61,7 +61,10 @@ async function refreshShopeeToken(shop) {
             console.error("[CRON] ❌ Gagal refresh token Shopee:", data);
         }
     } catch (error) {
-        console.error("[CRON] ❌ Error saat refresh token Shopee:", error.response?.data || error.message);
+        console.error(
+            "[CRON] ❌ Error saat refresh token Shopee:",
+            error.response?.data || error.message
+        );
     }
 }
 
