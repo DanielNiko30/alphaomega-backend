@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { getDB } = require('./config/sequelize');
-
+require("./cron/refreshShopeeToken");
 const app = express();
 
 // Middleware
