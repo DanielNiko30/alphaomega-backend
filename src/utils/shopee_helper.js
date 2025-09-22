@@ -21,18 +21,18 @@ async function refreshShopeeToken(shop) {
     const timestamp = Math.floor(Date.now() / 1000);
     const path = "/api/v2/auth/access_token/get";
 
-    // 🔹 Buat signature
+    // 🔹 Buat signature HMAC
     const baseString = `${PARTNER_ID}${path}${timestamp}`;
     const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
-    // 🔹 URL dengan query string (partner_id, timestamp, sign)
+    // 🔹 URL query string
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
     console.log(`[CRON] 🔄 Refreshing token untuk shop_id: ${shop.shop_id}`);
     console.log(`[CRON] URL refresh: ${url}`);
 
     try {
-        // Body WAJIB berisi partner_id, shop_id, refresh_token
+        // Body harus lengkap: partner_id, shop_id, refresh_token
         const body = {
             partner_id: PARTNER_ID,
             shop_id: shop.shop_id,
@@ -42,9 +42,7 @@ async function refreshShopeeToken(shop) {
         console.log("[CRON] Request body:", body);
 
         const response = await axios.post(url, body, {
-            headers: {
-                "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
         });
 
         console.log("[CRON] Shopee Refresh Response:", response.data);
@@ -56,22 +54,18 @@ async function refreshShopeeToken(shop) {
             await Shopee.update(
                 {
                     access_token: data.access_token,
-                    refresh_token: data.refresh_token, // refresh_token juga berubah
+                    refresh_token: data.refresh_token, // refresh_token baru
                     expire_in: data.expire_in,
                     last_updated: Math.floor(Date.now() / 1000),
                 },
                 { where: { shop_id: shop.shop_id } }
             );
-
             console.log(`[CRON] ✅ Token baru berhasil disimpan untuk shop_id: ${shop.shop_id}`);
         } else {
             console.error("[CRON] ❌ Gagal refresh token Shopee:", data);
         }
     } catch (error) {
-        console.error(
-            "[CRON] ❌ Error saat refresh token Shopee:",
-            error.response?.data || error.message
-        );
+        console.error("[CRON] ❌ Error saat refresh token Shopee:", error.response?.data || error.message);
     }
 }
 
