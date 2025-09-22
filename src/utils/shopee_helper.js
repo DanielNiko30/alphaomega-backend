@@ -4,8 +4,6 @@ const { Shopee } = require("../model/shopee_model");
 
 /**
  * Mengecek apakah token sudah expired
- * @param {Object} shop
- * @returns {boolean}
  */
 function isTokenExpired(shop) {
     const now = Math.floor(Date.now() / 1000); // detik
@@ -15,7 +13,6 @@ function isTokenExpired(shop) {
 
 /**
  * Refresh token Shopee
- * @param {Object} shop - data shop dari database
  */
 async function refreshShopeeToken(shop) {
     const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
@@ -28,7 +25,7 @@ async function refreshShopeeToken(shop) {
     const baseString = `${PARTNER_ID}${path}${timestamp}`;
     const sign = crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 
-    // 🔹 URL dengan query string
+    // 🔹 URL dengan query string (partner_id, timestamp, sign)
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}`;
 
     console.log(`[CRON] 🔄 Refreshing token untuk shop_id: ${shop.shop_id}`);
@@ -36,10 +33,18 @@ async function refreshShopeeToken(shop) {
 
     try {
         // Body WAJIB berisi partner_id, shop_id, refresh_token
-        const response = await axios.post(url, {
+        const body = {
             partner_id: PARTNER_ID,
             shop_id: shop.shop_id,
             refresh_token: shop.refresh_token,
+        };
+
+        console.log("[CRON] Request body:", body);
+
+        const response = await axios.post(url, body, {
+            headers: {
+                "Content-Type": "application/json",
+            },
         });
 
         console.log("[CRON] Shopee Refresh Response:", response.data);
