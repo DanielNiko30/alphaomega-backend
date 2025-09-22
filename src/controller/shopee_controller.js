@@ -804,4 +804,49 @@ const setShopeePickup = async (req, res) => {
     }
 };
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo, getShopeeOrders, setShopeePickup };
+const getOrderDetail = async (req, res) => {
+    try {
+        const { order_sn_list } = req.query;
+
+        if (!order_sn_list) {
+            return res.status(400).json({
+                success: false,
+                message: "order_sn_list wajib dikirim, pisahkan dengan koma jika lebih dari satu"
+            });
+        }
+
+        // Ambil token dari database
+        const shop = await Shopee.findOne();
+        if (!shop) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token tidak ditemukan di database"
+            });
+        }
+
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/order/get_order_detail";
+        const sign = generateSign(path, timestamp, shop.access_token, shop.shop_id);
+
+        // Build URL Shopee
+        const url = `${BASE_URL}${path}?access_token=${shop.access_token}&order_sn_list=${encodeURIComponent(order_sn_list)}&partner_id=${PARTNER_ID}&shop_id=${shop.shop_id}&sign=${sign}&timestamp=${timestamp}&request_order_status_pending=true&response_optional_fields=buyer_username,item_list,total_amount,recipient_address,package_list`;
+
+        // Call Shopee API
+        const response = await axios.get(url);
+
+        return res.json({
+            success: true,
+            data: response.data
+        });
+
+    } catch (error) {
+        console.error("❌ Error getOrderDetail:", error.response?.data || error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil detail order",
+            error: error.response?.data || error.message
+        });
+    }
+};
+
+module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo, getShopeeOrders, setShopeePickup, getOrderDetail };
