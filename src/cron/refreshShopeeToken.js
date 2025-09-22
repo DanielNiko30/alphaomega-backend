@@ -1,5 +1,5 @@
 const cron = require("node-cron");
-const { Shopee } = require("../models/shopee_model"); // sesuaikan path model
+const { Shopee } = require("../model/shopee_model"); // sesuaikan path model
 const { isTokenExpired, refreshShopeeToken } = require("../utils/shopee_helper"); // helper untuk cek & refresh token
 
 // Cron job: setiap 4 jam
