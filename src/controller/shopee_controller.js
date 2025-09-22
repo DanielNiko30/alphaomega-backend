@@ -825,7 +825,7 @@ const getOrderDetail = async (req, res) => {
         }
 
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/order/get_order_detail";
+        const path = "api/v2/order/get_order_detail";
         const sign = generateSign(path, timestamp, shop.access_token, shop.shop_id);
 
         // Build URL Shopee
