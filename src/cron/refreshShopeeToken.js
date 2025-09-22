@@ -1,4 +1,6 @@
 const cron = require("node-cron");
+const { Shopee } = require("../model/shopee_model");
+
 console.log("[CRON] 🔹 Cron job file loaded"); // ✅ log pasti muncul
 
 cron.schedule("*/1 * * * *", async () => { // test setiap 1 menit dulu
