@@ -1,26 +1,17 @@
 const cron = require("node-cron");
-const { Shopee } = require("../model/shopee_model");
-const { isTokenExpired, refreshShopeeToken } = require("../utils/shopee_helper");
+console.log("[CRON] 🔹 Cron job file loaded"); // ✅ log pasti muncul
 
-/**
- * Cron job cek & refresh token Shopee setiap 4 jam
- */
-cron.schedule("0 */4 * * *", async () => {
-    console.log(`[CRON] Cek token Shopee... ${new Date().toISOString()}`);
+cron.schedule("*/1 * * * *", async () => { // test setiap 1 menit dulu
+    console.log("[CRON] 🔹 Cron tick:", new Date().toISOString());
 
     try {
         const shops = await Shopee.findAll();
+        console.log("[CRON] 🔹 Shops found:", shops.length);
 
         for (let shop of shops) {
-            console.log(`[CRON] Shop ID ${shop.shop_id} | last_updated: ${shop.last_updated}, expire_in: ${shop.expire_in}`);
-            if (isTokenExpired(shop)) {
-                console.log(`[CRON] Token expired! Mulai refresh...`);
-                await refreshShopeeToken(shop);
-            } else {
-                console.log(`[CRON] Token masih aktif ✅`);
-            }
+            console.log(`[CRON] Checking shop_id: ${shop.shop_id}`);
         }
     } catch (err) {
-        console.error(`[CRON ERROR]`, err.message);
+        console.error("[CRON ERROR]", err.message);
     }
 });
