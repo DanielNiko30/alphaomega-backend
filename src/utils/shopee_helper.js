@@ -44,7 +44,10 @@ async function refreshShopeeToken(shop) {
             headers: { "Content-Type": "application/json" },
         });
 
+        console.log("[CRON] Shopee response:", response.data); // ✅ log response
+
         const data = response.data;
+
 
         if (data && data.access_token) {
             await Shopee.update(
