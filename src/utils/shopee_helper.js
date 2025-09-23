@@ -13,8 +13,10 @@ let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY?.trim();
 function isTokenExpired(shop) {
     const now = Math.floor(Date.now() / 1000);
     const tokenExpireAt = shop.last_updated + shop.expire_in;
+    console.log(`[DEBUG] shop_id: ${shop.shop_id} | now: ${now} | last_updated: ${shop.last_updated} | expire_in: ${shop.expire_in} | tokenExpireAt: ${tokenExpireAt}`);
     return now >= tokenExpireAt;
 }
+
 
 /**
  * Refresh token Shopee
