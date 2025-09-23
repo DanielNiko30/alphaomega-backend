@@ -697,11 +697,10 @@ const getShopeeOrders = async (req, res) => {
 
         // Hitung timestamp hari ini (awal dan akhir)
         const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 hari sebelumnya
 
-        const time_from = 0; // dari awal waktu
-        const time_to = Math.floor(Date.now() / 1000); // sampai sekarang
+        const time_from = Math.floor(oneWeekAgo.getTime() / 1000);
+        const time_to = Math.floor(now.getTime() / 1000);
 
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
@@ -719,7 +718,7 @@ const getShopeeOrders = async (req, res) => {
             access_token,
             shop_id,
             sign,
-            time_range_field:"create_time",
+            time_range_field: "create_time",
             time_from,
             time_to,
             page_size,
