@@ -1,6 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo, getShopeeOrders, setShopeePickup, getOrderDetail } = require('../controller/shopee_controller');
+const { shopeeCallback, 
+    getShopeeItemList, 
+    createProductShopee, 
+    getShopeeCategories, 
+    getShopeeLogistics, 
+    getBrandListShopee, 
+    updateProductShopee, 
+    getShopeeItemInfo, 
+    getShopeeOrders, 
+    setShopeePickup, 
+    getOrderDetail } = require('../controller/shopee_controller');
 
 router.get('/callback', shopeeCallback);
 router.get('/products', getShopeeItemList);

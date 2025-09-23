@@ -97,7 +97,7 @@ const TransJualController = {
                     }
                 });
 
-                const jumlahKurangi = Math.ceil(Number(item.jumlah_barang)); // bulatkan ke atas
+                const jumlahKurangi = Math.ceil(Number(item.jumlah_barang));
                 if (!stock || stock.stok < jumlahKurangi) {
                     stokTidakCukup.push({
                         id_produk: item.id_produk,
@@ -119,14 +119,14 @@ const TransJualController = {
             const id_htrans_jual = await generateHTransJualId();
             const nomor_invoice = await generateInvoiceNumber();
 
-            // 3️⃣ Simpan HTransJual (total_harga tetap int)
+            // 3️⃣ Simpan HTransJual
             const newTransaction = await HTransJual.create({
                 id_htrans_jual,
                 id_user,
                 id_user_penjual,
                 nama_pembeli,
                 tanggal,
-                total_harga: Math.floor(Number(total_harga)), // pastikan int
+                total_harga: Math.floor(Number(total_harga)),
                 metode_pembayaran,
                 nomor_invoice,
                 status: "Pending",
@@ -137,18 +137,16 @@ const TransJualController = {
                 const id_dtrans_jual = await generateDTransJualId();
                 const jumlahKurangi = Math.ceil(Number(item.jumlah_barang));
 
-                // Simpan detail transaksi (jumlah_barang tetap desimal)
                 await DTransJual.create({
                     id_dtrans_jual,
                     id_htrans_jual,
                     id_produk: item.id_produk,
                     satuan: item.satuan,
-                    jumlah_barang: Number(item.jumlah_barang), // tetap desimal
+                    jumlah_barang: Number(item.jumlah_barang),
                     harga_satuan: Number(item.harga_satuan),
-                    subtotal: Math.floor(Number(item.subtotal)), // subtotal tetap int
+                    subtotal: Math.floor(Number(item.subtotal)),
                 });
 
-                // Update stok
                 const stock = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
@@ -158,7 +156,18 @@ const TransJualController = {
                 await stock.update({ stok: stock.stok - jumlahKurangi });
             }
 
-            // 5️⃣ Response sukses
+            // 5️⃣ Emit notifikasi realtime ke pegawai yang ditugaskan
+            if (global.io && id_user_penjual) {
+                global.io.to(String(id_user_penjual)).emit("newTransaction", {
+                    id_htrans_jual,
+                    nama_pembeli,
+                    total_harga,
+                    detail,
+                    message: `Ada transaksi baru untuk ${nama_pembeli}`
+                });
+            }
+
+            // 6️⃣ Response sukses
             return res.status(201).json({
                 message: "Transaksi jual berhasil dibuat",
                 invoice: nomor_invoice,
@@ -226,9 +235,7 @@ const TransJualController = {
                 const key = `${oldItem.id_produk}_${oldItem.satuan}`;
                 const newItem = newDetailMap[key];
 
-                // Barang lama yang dihapus
                 if (!newItem) {
-                    // Kembalikan stok penuh
                     const stok = await Stok.findOne({
                         where: {
                             id_product_stok: oldItem.id_produk,
@@ -243,7 +250,6 @@ const TransJualController = {
                         );
                     }
 
-                    // Hapus dari tabel detail
                     await DTransJual.destroy({
                         where: { id_dtrans_jual: oldItem.id_dtrans_jual },
                         transaction: t
@@ -257,7 +263,6 @@ const TransJualController = {
                 const oldItem = oldDetailMap[key];
 
                 if (oldItem) {
-                    // Barang lama → hitung selisih
                     const selisih = item.jumlah_barang - oldItem.jumlah_barang;
 
                     if (selisih !== 0) {
@@ -271,19 +276,16 @@ const TransJualController = {
 
                         if (!stok) throw new Error(`Stok tidak ditemukan untuk ${item.id_produk} (${item.satuan})`);
 
-                        // Jika nambah barang cek stok
                         if (selisih > 0 && stok.stok < selisih) {
                             throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
                         }
 
-                        // Update stok
                         await stok.update(
                             { stok: stok.stok - selisih },
                             { transaction: t }
                         );
                     }
 
-                    // Update detail lama
                     await DTransJual.update(
                         {
                             jumlah_barang: item.jumlah_barang,
@@ -296,7 +298,6 @@ const TransJualController = {
                         }
                     );
                 } else {
-                    // Barang baru → insert + kurangi stok
                     const stok = await Stok.findOne({
                         where: {
                             id_product_stok: item.id_produk,
@@ -330,6 +331,18 @@ const TransJualController = {
             }
 
             await t.commit();
+
+            // Emit notifikasi realtime ke pegawai yang ditugaskan
+            if (global.io && id_user_penjual) {
+                global.io.to(String(id_user_penjual)).emit("updateTransaction", {
+                    id_htrans_jual,
+                    nama_pembeli,
+                    total_harga,
+                    detail,
+                    message: `Transaksi ${id_htrans_jual} telah diupdate`
+                });
+            }
+
             res.json({ message: "Transaksi berhasil diperbarui" });
         } catch (error) {
             await t.rollback();

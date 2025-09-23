@@ -575,9 +575,17 @@ const updateProductShopee = async (req, res) => {
 const getShopeeItemInfo = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { satuan } = req.body; // satuan optional, tapi tetap bisa pakai Shopee
+        const { satuan } = req.body; // satuan wajib dikirim di body
 
-        // Ambil data Shopee (token & shop_id)
+        // 1️⃣ Validasi satuan wajib
+        if (!satuan) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'satuan' wajib dikirim di body request",
+            });
+        }
+
+        // 2️⃣ Ambil data Shopee (token & shop_id)
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -587,39 +595,48 @@ const getShopeeItemInfo = async (req, res) => {
         }
         const { shop_id, access_token } = shopeeData;
 
-        let item_id = null;
+        // 3️⃣ Ambil data produk + stok sesuai satuan
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
 
-        // Cek DB lokal dulu
-        if (id_product) {
-            const product = await Product.findOne({
-                where: { id_product },
-                include: [{ model: Stok, as: "stok" }],
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Produk tidak ditemukan di database lokal",
             });
-
-            if (product && product.stok.length > 0) {
-                // Ambil stok sesuai satuan jika ada
-                const stokTerpilih = satuan
-                    ? product.stok.find((s) => s.satuan === satuan)
-                    : product.stok[0];
-
-                if (stokTerpilih?.id_product_shopee) {
-                    item_id = stokTerpilih.id_product_shopee;
-                }
-            }
         }
 
-        // Jika item_id masih null, fallback pakai id_product langsung (asumsi item_id Shopee sama dengan id_product)
-        if (!item_id) {
-            item_id = id_product;
+        const stokTerpilih = product.stok.find((s) => s.satuan === satuan);
+
+        if (!stokTerpilih) {
+            return res.status(404).json({
+                success: false,
+                message: `Stok dengan satuan '${satuan}' tidak ditemukan untuk produk ini`,
+            });
         }
 
-        // Buat signature Shopee
+        if (!stokTerpilih.id_product_shopee) {
+            return res.status(400).json({
+                success: false,
+                message: `Produk dengan satuan '${satuan}' belum memiliki id_product_shopee. Tidak dapat mengambil data Shopee.`,
+            });
+        }
+
+        const item_id = stokTerpilih.id_product_shopee;
+
+        // 4️⃣ Buat signature untuk request Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/get_item_base_info";
+
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&item_id_list=${item_id}&need_tax_info=false&need_complaint_policy=false`;
 
+        console.log("🔹 Shopee Get Item Info URL:", url);
+
+        // 5️⃣ Request ke Shopee
         const response = await axios.get(url, {
             headers: { "Content-Type": "application/json" },
         });
@@ -641,11 +658,9 @@ const getShopeeItemInfo = async (req, res) => {
             });
         }
 
-        // Ambil field yang dibutuhkan frontend
+        // 6️⃣ Ambil field yang dibutuhkan untuk frontend
         const result = {
             item_id: item.item_id,
-            name: item.name,
-            images: item.images,
             weight: item.weight,
             category_id: item.category_id,
             length: item.package_length,
@@ -864,4 +879,17 @@ const getOrderDetail = async (req, res) => {
     }
 };
 
-module.exports = { shopeeCallback, getShopeeItemList, createProductShopee, getShopeeCategories, getShopeeLogistics, getBrandListShopee, updateProductShopee, getShopeeItemInfo, getShopeeOrders, setShopeePickup, getOrderDetail };
+module.exports = {
+    shopeeCallback,
+    getShopeeItemList,
+    createProductShopee,
+    getShopeeCategories,
+    getShopeeLogistics,
+    getBrandListShopee,
+    updateProductShopee,
+    getShopeeItemInfo,
+    getShopeeOrders,
+    setShopeePickup,
+    getOrderDetail,
+    getShopeeItemInfoByOrder
+};
