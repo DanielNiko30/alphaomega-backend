@@ -1,23 +1,34 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const http = require('http'); // <-- tambahkan ini
+const http = require('http');
 const { getDB } = require('./config/sequelize');
+
 const app = express();
 
-// Middleware
+// =================== MIDDLEWARE ===================
+// ✅ Fix CORS
+app.use(cors({
+  origin: '*', // atau ['http://localhost:50726'] jika ingin spesifik
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// ✅ Untuk menangani preflight request OPTIONS
+app.options('*', cors());
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(cors({ origin: '*' }));
 
+// =================== CRON JOB ===================
 require("./cron/refreshShopeeToken");
 
-// Root route
+// =================== ROOT ROUTE ===================
 app.get('/', (req, res) => {
   res.send('✅ Server Express berjalan dengan baik! Akses /api/health untuk cek database.');
 });
 
-// Route sementara untuk generate Shopee login URL
+// =================== SHOPEE LOGIN URL ===================
 app.get('/api/shopee/generate-login-url', (req, res) => {
   try {
     const PARTNER_ID = Number(2012319);
@@ -42,7 +53,7 @@ app.get('/api/shopee/generate-login-url', (req, res) => {
   }
 });
 
-// Endpoint Lazada
+// =================== LAZADA CALLBACK ===================
 app.post('/api/lazada/callback', (req, res) => {
   console.log('📦 Lazada Push Received:', req.body);
 
@@ -53,7 +64,7 @@ app.post('/api/lazada/callback', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Routes lain
+// =================== ROUTES ===================
 app.use('/api/shopee', require('./routes/shopee_routes'));
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
@@ -62,13 +73,13 @@ app.use('/api/auth', require('./routes/auth_routes'));
 app.use('/api/transaksiBeli', require('./routes/trans_beli_routes'));
 app.use('/api/transaksiJual', require('./routes/trans_jual_routes'));
 
-// -------------------- SOCKET.IO --------------------
+// =================== SOCKET.IO ===================
 const server = http.createServer(app);
 const { Server } = require('socket.io');
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // izinkan semua origin
     methods: ["GET", "POST"]
   }
 });
@@ -88,8 +99,8 @@ io.on("connection", (socket) => {
     console.log("User disconnected:", socket.id);
   });
 });
-// -----------------------------------------------------
 
+// =================== START SERVER ===================
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running at http://0.0.0.0:${PORT}`);
