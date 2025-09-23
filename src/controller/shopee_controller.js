@@ -891,5 +891,4 @@ module.exports = {
     getShopeeOrders,
     setShopeePickup,
     getOrderDetail,
-    getShopeeItemInfoByOrder
 };
