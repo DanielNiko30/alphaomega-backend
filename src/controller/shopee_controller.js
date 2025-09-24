@@ -963,8 +963,8 @@ const searchShopeeProductByName = async (req, res) => {
 
 const getShopeeOrdersWithItems = async (req, res) => {
     try {
-        // 1️⃣ Ambil list orders dari Shopee
-        const orderListResp = await axios.get("https://tokalphaomegaploso.my.id/shopee/orders");
+        // 1️⃣ Ambil daftar order dari Shopee
+        const orderListResp = await axios.get("https://tokalphaomegaploso.my.id/api/shopee/orders");
         const orderList = orderListResp.data?.data?.order_list || [];
 
         if (orderList.length === 0) {
@@ -980,7 +980,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
         // 2️⃣ Loop setiap order untuk ambil detail dan mapping item
         for (const order of orderList) {
             const orderDetailResp = await axios.get(
-                `https://tokalphaomegaploso.my.id/shopee/order-detail/${order.order_sn}`
+                `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
             );
 
             const orderDetail = orderDetailResp.data?.data;
@@ -989,7 +989,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                // 3️⃣ Cek apakah item_id ada di DB lokal
+                // 3️⃣ Cek apakah produk ada di database lokal
                 const stok = await db.query(
                     `
                     SELECT 
@@ -1024,9 +1024,9 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         from_db: true,
                     });
                 } else {
-                    // ❌ Produk tidak ditemukan di DB → Ambil dari Shopee API
+                    // ❌ Produk tidak ditemukan di DB → Ambil dari Shopee API item-info
                     const productInfoResp = await axios.post(
-                        `https://tokalphaomegaploso.my.id/shopee/product/item-info/${item.item_id}`,
+                        `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
                         { satuan: item.variation_name }
                     );
 
@@ -1043,7 +1043,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 }
             }
 
-            // 4️⃣ Simpan data order → hanya tampilkan 1 gambar & nama dari item pertama
+            // 4️⃣ Simpan data order
             finalOrders.push({
                 order_sn: order.order_sn,
                 buyer_username: order.buyer_username,
@@ -1053,10 +1053,10 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 create_time: order.create_time,
                 items: [
                     {
-                        ...items[0], // hanya tampilkan 1 barang untuk list utama
+                        ...items[0], // hanya satu item untuk tampilan list utama
                     },
                 ],
-                full_items: items, // semua detail produk ditaruh di sini
+                full_items: items, // semua item lengkap untuk detail popup
             });
         }
 
