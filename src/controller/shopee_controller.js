@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const https = require("https");
 const FormData = require("form-data");
 const axios = require("axios");
+const { QueryTypes } = require("sequelize");
 const { Product } = require("../model/product_model");
 const { Stok } = require("../model/stok_model");
 const { Shopee } = require("../model/shopee_model");
