@@ -5,6 +5,9 @@ const axios = require("axios");
 const { Product } = require("../model/product_model");
 const { Stok } = require("../model/stok_model");
 const { Shopee } = require("../model/shopee_model");
+const { getDB } = require("../config/sequelize");
+
+const db = getDB();
 
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
