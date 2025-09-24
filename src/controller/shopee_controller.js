@@ -879,18 +879,19 @@ const getOrderDetail = async (req, res) => {
     }
 };
 
+const axios = require("axios");
+const { Shopee } = require("../model/shopee_model");
+const generateSign = require("../utils/shopeeSign");
+
+/**
+ * Get item list dari Shopee dengan filter keyword
+ * Mendukung offset dan page_size
+ */
 const searchShopeeProductByName = async (req, res) => {
     try {
-        const { keyword } = req.query;
+        const { keyword = "", offset = 0, page_size = 50 } = req.query;
 
-        if (!keyword) {
-            return res.status(400).json({
-                success: false,
-                message: "Query 'keyword' wajib diisi untuk mencari produk."
-            });
-        }
-
-        // Ambil token Shopee
+        // 1️⃣ Ambil data Shopee token
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -899,72 +900,71 @@ const searchShopeeProductByName = async (req, res) => {
             });
         }
 
-        const { access_token, shop_id } = shopeeData;
+        const { shop_id, access_token } = shopeeData;
 
-        /**
-         * 1️⃣ Ambil daftar item_id dari get_item_list
-         */
+        // 2️⃣ Generate sign
         const timestamp = Math.floor(Date.now() / 1000);
-        const pathList = "/api/v2/product/get_item_list";
+        const path = "/api/v2/product/get_item_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const signList = generateSign(pathList, timestamp, access_token, shop_id);
-        const listUrl = `https://partner.shopeemobile.com${pathList}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signList}&offset=0&page_size=50&item_status=NORMAL`;
+        // 3️⃣ Panggil get_item_list dengan offset & page_size
+        const listUrl = `https://partner.shopeemobile.com${path}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=${offset}&page_size=${page_size}&item_status=NORMAL`;
 
-        const listResponse = await axios.get(listUrl);
-
-        console.log("DEBUG ITEM LIST RESPONSE:", JSON.stringify(listResponse.data, null, 2));
+        const listResponse = await axios.get(listUrl, {
+            headers: { "Content-Type": "application/json" },
+        });
 
         const items = listResponse.data.response?.item || [];
         if (items.length === 0) {
-            return res.status(404).json({ success: false, message: "Tidak ada produk Shopee ditemukan di get_item_list." });
+            return res.json({
+                success: true,
+                message: "Tidak ada produk ditemukan di Shopee.",
+                data: [],
+                pagination: {
+                    offset: Number(offset),
+                    page_size: Number(page_size),
+                    total_count: 0
+                }
+            });
         }
 
-        const itemIds = items.map(item => item.item_id).slice(0, 50); // limit 50
+        // 4️⃣ Ambil detail produk pakai get_item_base_info (maks 50 per request)
+        const detailPath = "/api/v2/product/get_item_base_info";
+        const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
 
-        /**
-         * 2️⃣ Ambil detail produk
-         */
-        const pathDetail = "/api/v2/product/get_item_base_info";
-        const detailSign = generateSign(pathDetail, timestamp, access_token, shop_id);
+        const itemIds = items.map(i => i.item_id).slice(0, 50).join(",");
 
-        const detailUrl = `https://partner.shopeemobile.com${pathDetail}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${detailSign}&item_id_list=${itemIds.join(",")}`;
+        const detailUrl = `https://partner.shopeemobile.com${detailPath}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${detailSign}&item_id_list=${itemIds}`;
 
-        console.log("DEBUG DETAIL URL:", detailUrl);
-
-        const detailResponse = await axios.get(detailUrl);
-
-        console.log("DEBUG ITEM DETAIL RESPONSE:", JSON.stringify(detailResponse.data, null, 2));
+        const detailResponse = await axios.get(detailUrl, {
+            headers: { "Content-Type": "application/json" },
+        });
 
         const detailItems = detailResponse.data.response?.item_list || [];
 
-        if (detailItems.length === 0) {
-            return res.status(404).json({ success: false, message: "Tidak ada detail produk ditemukan." });
-        }
-
-        /**
-         * 3️⃣ Filter berdasarkan keyword
-         */
-        const filtered = detailItems.filter(item =>
-            (item.item_name || "").toLowerCase().includes((keyword || "").toLowerCase())
+        // 5️⃣ Filter produk berdasarkan keyword (case-insensitive)
+        const filteredItems = detailItems.filter(item =>
+            item.item_name?.toLowerCase().includes(keyword.toLowerCase())
         );
 
         return res.json({
             success: true,
-            keyword,
-            total_found: filtered.length,
-            data: filtered.map(item => ({
-                item_id: item.item_id,
-                name: item.item_name,
-                price: item.price_info?.[0]?.current_price || 0,
-                stock: item.stock_info?.summary_info?.total_stock || 0,
-                sku: item.item_sku
-            }))
+            message: "Data produk berhasil diambil",
+            data: filteredItems,
+            pagination: {
+                offset: Number(offset),
+                page_size: Number(page_size),
+                total_count: listResponse.data.response?.total_count || 0,
+                has_next_page: listResponse.data.response?.has_next_page || false
+            }
         });
+
     } catch (err) {
-        console.error("❌ Error searchShopeeProductByName:", err.response?.data || err.message);
+        console.error("❌ Shopee Search Item Error:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: err.response?.data?.message || err.message
+            message: "Gagal mengambil data produk Shopee",
+            error: err.response?.data || err.message,
         });
     }
 };
