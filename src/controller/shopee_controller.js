@@ -961,6 +961,88 @@ const searchShopeeProductByName = async (req, res) => {
     }
 };
 
+const getShopeeOrdersWithItems = async (req, res) => {
+  try {
+    // 1. Get list orders dari Shopee
+    const orderListResp = await axios.get("http://localhost:5000/shopee/orders"); 
+    const orderList = orderListResp.data.data.order_list || [];
+
+    const finalOrders = [];
+
+    for (const order of orderList) {
+      // 2. Get detail order per order_sn
+      const orderDetailResp = await axios.get(`http://localhost:5000/shopee/orders/${order.order_sn}`);
+      const orderDetail = orderDetailResp.data.data;
+
+      const items = [];
+      for (const item of orderDetail.item_list) {
+        // 3. Cek apakah item_id ada di stok
+        const stok = await db.query(
+          `
+          SELECT s.id_product, s.id_product_shopee, p.nama_product, p.image_url 
+          FROM stok s
+          JOIN product p ON p.id_product = s.id_product
+          WHERE s.id_product_shopee = :itemId
+          LIMIT 1
+          `,
+          {
+            replacements: { itemId: item.item_id },
+            type: QueryTypes.SELECT,
+          }
+        );
+
+        if (stok.length > 0) {
+          // Jika ketemu di DB lokal
+          items.push({
+            item_id: item.item_id,
+            name: stok[0].nama_product,
+            image_url: stok[0].image_url,
+            variation_name: item.variation_name,
+            quantity: item.model_quantity_purchased,
+            price: item.model_discounted_price,
+            from_db: true,
+          });
+        } else {
+          // Jika tidak ketemu, ambil dari Shopee API item-info
+          const productInfoResp = await axios.post(`http://localhost:5000/shopee/product/item-info/${item.item_id}`, {
+            satuan: item.variation_name
+          });
+
+          const productInfo = productInfoResp.data.data;
+          items.push({
+            item_id: item.item_id,
+            name: productInfo.name,
+            image_url: productInfo.image,
+            variation_name: item.variation_name,
+            quantity: item.model_quantity_purchased,
+            price: item.model_discounted_price,
+            from_db: false,
+          });
+        }
+      }
+
+      // 4. Gabungkan ke finalOrders
+      finalOrders.push({
+        order_sn: order.order_sn,
+        buyer_username: order.buyer_username,
+        status: order.order_status,
+        total_amount: order.total_amount,
+        shipping_method: order.shipping_method,
+        create_time: order.create_time,
+        items,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: finalOrders,
+    });
+  } catch (err) {
+    console.error("Error getShopeeOrdersWithItems:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -973,5 +1055,6 @@ module.exports = {
     getShopeeOrders,
     setShopeePickup,
     getOrderDetail,
-    searchShopeeProductByName
+    searchShopeeProductByName,
+    getShopeeOrdersWithItems
 };
