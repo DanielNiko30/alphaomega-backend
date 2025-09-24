@@ -10,7 +10,8 @@ const { shopeeCallback,
     getShopeeItemInfo, 
     getShopeeOrders, 
     setShopeePickup, 
-    getOrderDetail } = require('../controller/shopee_controller');
+    getOrderDetail,
+    getShopeeItemByName } = require('../controller/shopee_controller');
 
 router.get('/callback', shopeeCallback);
 router.get('/products', getShopeeItemList);
@@ -23,5 +24,6 @@ router.post('/product/item-info/:id_product', getShopeeItemInfo);
 router.post('/pickup', setShopeePickup);
 router.get('/orders', getShopeeOrders);
 router.get("/order-detail", getOrderDetail);
+router.get('/getitembyname', getShopeeItemByName);
 
 module.exports = router;

@@ -879,6 +879,75 @@ const getOrderDetail = async (req, res) => {
     }
 };
 
+const getShopeeItemByName = async (req, res) => {
+    try {
+        const { name } = req.query;
+
+        if (!name || name.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "Query parameter 'name' wajib diisi. Contoh: ?name=beras"
+            });
+        }
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData || !shopeeData.access_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token tidak ditemukan. Silakan authorize terlebih dahulu."
+            });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/get_item_list";
+
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        // Ambil 100 data pertama
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=0&page_size=100&item_status=NORMAL`;
+
+        console.log("Shopee Get Item List URL:", url);
+
+        const response = await getJSON(url);
+
+        if (!response || !response.response || !response.response.item) {
+            return res.status(404).json({
+                success: false,
+                message: "Tidak ada item Shopee ditemukan",
+                shopee_response: response
+            });
+        }
+
+        // Filter produk berdasarkan nama
+        const searchName = name.toLowerCase();
+        const filteredItems = response.response.item.filter(item =>
+            item.item_name.toLowerCase().includes(searchName)
+        );
+
+        if (filteredItems.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `Tidak ada item dengan nama mengandung '${name}'`
+            });
+        }
+
+        return res.json({
+            success: true,
+            total_items: filteredItems.length,
+            data: filteredItems.map(item => ({
+                item_id: item.item_id,
+                name: item.item_name,
+                status: item.item_status
+            }))
+        });
+
+    } catch (err) {
+        console.error("Shopee Get Item By Name Error:", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -891,4 +960,5 @@ module.exports = {
     getShopeeOrders,
     setShopeePickup,
     getOrderDetail,
+    getShopeeItemByName
 };
