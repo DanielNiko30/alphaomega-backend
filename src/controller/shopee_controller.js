@@ -890,7 +890,7 @@ const searchShopeeProductByName = async (req, res) => {
             });
         }
 
-        // Ambil token Shopee dari database
+        // Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -901,41 +901,51 @@ const searchShopeeProductByName = async (req, res) => {
 
         const { access_token, shop_id } = shopeeData;
 
-        /** 
+        /**
          * 1️⃣ Ambil daftar item_id dari get_item_list
          */
         const timestamp = Math.floor(Date.now() / 1000);
         const pathList = "/api/v2/product/get_item_list";
 
         const signList = generateSign(pathList, timestamp, access_token, shop_id);
-        const listUrl = `https://partner.shopeemobile.com${pathList}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signList}&offset=0&page_size=100&item_status=NORMAL`;
+        const listUrl = `https://partner.shopeemobile.com${pathList}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signList}&offset=0&page_size=50&item_status=NORMAL`;
 
         const listResponse = await axios.get(listUrl);
 
+        console.log("DEBUG ITEM LIST RESPONSE:", JSON.stringify(listResponse.data, null, 2));
+
         const items = listResponse.data.response?.item || [];
         if (items.length === 0) {
-            return res.status(404).json({ success: false, message: "Tidak ada produk Shopee ditemukan." });
+            return res.status(404).json({ success: false, message: "Tidak ada produk Shopee ditemukan di get_item_list." });
         }
 
-        const itemIds = items.map(item => item.item_id);
+        const itemIds = items.map(item => item.item_id).slice(0, 50); // limit 50
 
         /**
-         * 2️⃣ Ambil detail produk dari get_item_base_info (max 50 per batch)
+         * 2️⃣ Ambil detail produk
          */
         const pathDetail = "/api/v2/product/get_item_base_info";
         const detailSign = generateSign(pathDetail, timestamp, access_token, shop_id);
 
-        const detailUrl = `https://partner.shopeemobile.com${pathDetail}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${detailSign}&item_id_list=${itemIds.join(",")}&need_tax_info=false&need_complaint_policy=false`;
+        const detailUrl = `https://partner.shopeemobile.com${pathDetail}?partner_id=${process.env.SHOPEE_PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${detailSign}&item_id_list=${itemIds.join(",")}`;
+
+        console.log("DEBUG DETAIL URL:", detailUrl);
 
         const detailResponse = await axios.get(detailUrl);
 
+        console.log("DEBUG ITEM DETAIL RESPONSE:", JSON.stringify(detailResponse.data, null, 2));
+
         const detailItems = detailResponse.data.response?.item_list || [];
 
+        if (detailItems.length === 0) {
+            return res.status(404).json({ success: false, message: "Tidak ada detail produk ditemukan." });
+        }
+
         /**
-         * 3️⃣ Filter produk berdasarkan nama yang dicari
+         * 3️⃣ Filter berdasarkan keyword
          */
         const filtered = detailItems.filter(item =>
-            item.item_name.toLowerCase().includes(keyword.toLowerCase())
+            (item.item_name || "").toLowerCase().includes((keyword || "").toLowerCase())
         );
 
         return res.json({
