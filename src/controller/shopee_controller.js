@@ -964,7 +964,7 @@ const searchShopeeProductByName = async (req, res) => {
 const getShopeeOrdersWithItems = async (req, res) => {
     try {
         // 1️⃣ Ambil list orders dari Shopee
-        const orderListResp = await axios.get("http://localhost:5000/shopee/orders");
+        const orderListResp = await axios.get("https://tokalphaomegaploso.my.id/shopee/orders");
         const orderList = orderListResp.data?.data?.order_list || [];
 
         if (orderList.length === 0) {
@@ -979,9 +979,8 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
         // 2️⃣ Loop setiap order untuk ambil detail dan mapping item
         for (const order of orderList) {
-            // Ambil detail order berdasarkan order_sn
             const orderDetailResp = await axios.get(
-                `http://localhost:5000/shopee/orders/${order.order_sn}`
+                `https://tokalphaomegaploso.my.id/shopee/order-detail/${order.order_sn}`
             );
 
             const orderDetail = orderDetailResp.data?.data;
@@ -990,15 +989,19 @@ const getShopeeOrdersWithItems = async (req, res) => {
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                // 3️⃣ Cek apakah item_id ada di DB lokal (tabel stok + product)
+                // 3️⃣ Cek apakah item_id ada di DB lokal
                 const stok = await db.query(
                     `
-          SELECT s.id_product, s.id_product_shopee, p.nama_product, p.image_url
-          FROM stok s
-          JOIN product p ON p.id_product = s.id_product
-          WHERE s.id_product_shopee = :itemId
-          LIMIT 1
-          `,
+                    SELECT 
+                        s.id_product_stok AS id_product,
+                        s.id_product_shopee,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
                     {
                         replacements: { itemId: item.item_id },
                         type: QueryTypes.SELECT,
@@ -1007,10 +1010,14 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
                 if (stok.length > 0) {
                     // ✅ Produk ditemukan di DB lokal
+                    const gambarBase64 = stok[0].gambar_product
+                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                        : null;
+
                     items.push({
                         item_id: item.item_id,
                         name: stok[0].nama_product,
-                        image_url: stok[0].image_url,
+                        image_url: gambarBase64,
                         variation_name: item.variation_name,
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
@@ -1019,8 +1026,8 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 } else {
                     // ❌ Produk tidak ditemukan di DB → Ambil dari Shopee API
                     const productInfoResp = await axios.post(
-                        `http://localhost:5000/shopee/product/item-info/${item.item_id}`,
-                        { satuan: item.variation_name } // body wajib kirim satuan
+                        `https://tokalphaomegaploso.my.id/shopee/product/item-info/${item.item_id}`,
+                        { satuan: item.variation_name }
                     );
 
                     const productInfo = productInfoResp.data?.data;
@@ -1036,7 +1043,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 }
             }
 
-            // 4️⃣ Push ke finalOrders (hanya tampilkan 1 gambar & nama dari item pertama)
+            // 4️⃣ Simpan data order → hanya tampilkan 1 gambar & nama dari item pertama
             finalOrders.push({
                 order_sn: order.order_sn,
                 buyer_username: order.buyer_username,
@@ -1046,10 +1053,10 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 create_time: order.create_time,
                 items: [
                     {
-                        ...items[0], // hanya ambil satu produk pertama untuk list
+                        ...items[0], // hanya tampilkan 1 barang untuk list utama
                     },
                 ],
-                full_items: items, // simpan semua detail di sini untuk popup detail
+                full_items: items, // semua detail produk ditaruh di sini
             });
         }
 
