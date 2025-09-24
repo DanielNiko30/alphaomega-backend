@@ -904,7 +904,6 @@ const getShopeeItemByName = async (req, res) => {
 
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // Ambil 100 data pertama
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&offset=0&page_size=100&item_status=NORMAL`;
 
         console.log("Shopee Get Item List URL:", url);
@@ -919,10 +918,13 @@ const getShopeeItemByName = async (req, res) => {
             });
         }
 
-        // Filter produk berdasarkan nama
+        // Debugging struktur data
+        console.log("Shopee Response Items:", response.response.item);
+
+        // Filter produk berdasarkan nama (pastikan item_name tidak undefined)
         const searchName = name.toLowerCase();
         const filteredItems = response.response.item.filter(item =>
-            item.item_name.toLowerCase().includes(searchName)
+            item.item_name && item.item_name.toLowerCase().includes(searchName)
         );
 
         if (filteredItems.length === 0) {
