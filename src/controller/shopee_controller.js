@@ -879,14 +879,6 @@ const getOrderDetail = async (req, res) => {
     }
 };
 
-const axios = require("axios");
-const { Shopee } = require("../model/shopee_model");
-const generateSign = require("../utils/shopeeSign");
-
-/**
- * Get item list dari Shopee dengan filter keyword
- * Mendukung offset dan page_size
- */
 const searchShopeeProductByName = async (req, res) => {
     try {
         const { keyword = "", offset = 0, page_size = 50 } = req.query;
