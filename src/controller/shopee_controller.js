@@ -985,7 +985,6 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
         // 2️⃣ Loop setiap order → ambil detail dan mapping item
         for (const order of orderList) {
-            // Ambil detail per order
             const orderDetailResp = await axios.get(
                 `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
             );
@@ -997,6 +996,12 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
             // 3️⃣ Loop setiap item dalam order
             for (const item of orderDetail.item_list) {
+                // Debug untuk memastikan struktur item dari Shopee
+                console.log("DEBUG SHOPEE ITEM:", JSON.stringify(item, null, 2));
+
+                // Pastikan `satuan` tidak kosong
+                const satuan = item.model_name || item.variation_name || "PCS";
+
                 // Query ke DB lokal untuk cek apakah produk ada
                 const stok = await db.query(
                     `
@@ -1026,7 +1031,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         item_id: item.item_id,
                         name: stok[0].nama_product,
                         image_url: gambarBase64,
-                        variation_name: item.model_name, // model_name dari Shopee
+                        variation_name: satuan,
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
                         from_db: true,
@@ -1035,7 +1040,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                     // ❌ Produk tidak ditemukan → ambil dari Shopee API item-info
                     const productInfoResp = await axios.post(
                         `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                        { satuan: item.model_name } // body wajib
+                        { satuan } // body wajib selalu ada
                     );
 
                     const productInfo = productInfoResp.data?.data;
@@ -1044,7 +1049,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         item_id: item.item_id,
                         name: productInfo?.name || "Produk Tidak Diketahui",
                         image_url: productInfo?.image || null,
-                        variation_name: item.model_name,
+                        variation_name: satuan,
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
                         from_db: false,
