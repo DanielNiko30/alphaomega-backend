@@ -967,7 +967,6 @@ const searchShopeeProductByName = async (req, res) => {
 
 const getShopeeOrdersWithItems = async (req, res) => {
     try {
-        // 1️⃣ Ambil daftar order dari Shopee
         const orderListResp = await axios.get(
             "https://tokalphaomegaploso.my.id/api/shopee/orders?page_size=20&order_status=READY_TO_SHIP"
         );
@@ -983,7 +982,6 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
         const finalOrders = [];
 
-        // 2️⃣ Loop setiap order → ambil detail dan mapping item
         for (const order of orderList) {
             const orderDetailResp = await axios.get(
                 `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
@@ -994,18 +992,17 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
             const items = [];
 
-            // 3️⃣ Loop setiap item dalam order
             for (const item of orderDetail.item_list) {
-                // Query ke DB lokal untuk cek apakah produk ada
+                // Cek produk di DB lokal berdasarkan id_product_shopee
                 const stok = await db.query(
                     `
                     SELECT 
-                        s.id_product,
+                        s.id_product_stok,
                         s.id_product_shopee,
                         p.nama_product,
                         p.gambar_product
                     FROM stok s
-                    JOIN product p ON p.id_product = s.id_product
+                    JOIN product p ON p.id_product = s.id_product_stok
                     WHERE s.id_product_shopee = :itemId
                     LIMIT 1
                     `,
@@ -1016,7 +1013,6 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 );
 
                 if (stok.length > 0) {
-                    // ✅ Produk ditemukan di DB lokal → gunakan data dari DB
                     const gambarBase64 = stok[0].gambar_product
                         ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
                         : null;
@@ -1031,11 +1027,11 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         from_db: true,
                     });
                 } else {
-                    // ❌ Produk tidak ditemukan → ambil dari Shopee API
+                    // Fallback ke Shopee API jika tidak ada di DB lokal
                     try {
                         const productInfoResp = await axios.post(
                             `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                            { satuan: item.model_name } // body wajib
+                            { satuan: item.model_name }
                         );
 
                         const productInfo = productInfoResp.data?.data;
@@ -1050,8 +1046,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                             from_db: false,
                         });
                     } catch (err) {
-                        console.error("❌ Gagal ambil data dari Shopee API:", err.message);
-                        // fallback terakhir supaya UI tidak crash
+                        console.error("❌ Fallback gagal:", err.message);
                         items.push({
                             item_id: item.item_id,
                             name: "Produk Tidak Diketahui",
@@ -1065,7 +1060,6 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 }
             }
 
-            // 4️⃣ Simpan data order → hanya tampilkan 1 item pertama untuk list
             finalOrders.push({
                 order_sn: order.order_sn,
                 buyer_username: order.buyer_username,
@@ -1073,12 +1067,8 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 total_amount: order.total_amount,
                 shipping_method: order.package_list?.[0]?.shipping_carrier || "",
                 create_time: order.create_time,
-                items: [
-                    {
-                        ...items[0], // tampilkan hanya 1 item pertama
-                    },
-                ],
-                full_items: items, // semua item lengkap untuk detail
+                items: [items[0]],
+                full_items: items,
             });
         }
 
