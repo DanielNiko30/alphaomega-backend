@@ -996,27 +996,21 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
             // 3️⃣ Loop setiap item dalam order
             for (const item of orderDetail.item_list) {
-                // Debug untuk memastikan struktur item dari Shopee
-                console.log("DEBUG SHOPEE ITEM:", JSON.stringify(item, null, 2));
-
-                // Pastikan `satuan` tidak kosong
-                const satuan = item.model_name || item.variation_name || "PCS";
-
                 // Query ke DB lokal untuk cek apakah produk ada
                 const stok = await db.query(
                     `
                     SELECT 
-                        s.id_product_stok AS id_product,
+                        s.id_product,
                         s.id_product_shopee,
                         p.nama_product,
                         p.gambar_product
                     FROM stok s
-                    JOIN product p ON p.id_product = s.id_product_stok
+                    JOIN product p ON p.id_product = s.id_product
                     WHERE s.id_product_shopee = :itemId
                     LIMIT 1
                     `,
                     {
-                        replacements: { itemId: item.item_id },
+                        replacements: { itemId: String(item.item_id) },
                         type: QueryTypes.SELECT,
                     }
                 );
@@ -1031,29 +1025,43 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         item_id: item.item_id,
                         name: stok[0].nama_product,
                         image_url: gambarBase64,
-                        variation_name: satuan,
+                        variation_name: item.model_name,
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
                         from_db: true,
                     });
                 } else {
-                    // ❌ Produk tidak ditemukan → ambil dari Shopee API item-info
-                    const productInfoResp = await axios.post(
-                        `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                        { satuan } // body wajib selalu ada
-                    );
+                    // ❌ Produk tidak ditemukan → ambil dari Shopee API
+                    try {
+                        const productInfoResp = await axios.post(
+                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
+                            { satuan: item.model_name } // body wajib
+                        );
 
-                    const productInfo = productInfoResp.data?.data;
+                        const productInfo = productInfoResp.data?.data;
 
-                    items.push({
-                        item_id: item.item_id,
-                        name: productInfo?.name || "Produk Tidak Diketahui",
-                        image_url: productInfo?.image || null,
-                        variation_name: satuan,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: false,
-                    });
+                        items.push({
+                            item_id: item.item_id,
+                            name: productInfo?.name || "Produk Tidak Diketahui",
+                            image_url: productInfo?.image || null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
+                        });
+                    } catch (err) {
+                        console.error("❌ Gagal ambil data dari Shopee API:", err.message);
+                        // fallback terakhir supaya UI tidak crash
+                        items.push({
+                            item_id: item.item_id,
+                            name: "Produk Tidak Diketahui",
+                            image_url: null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
+                        });
+                    }
                 }
             }
 
