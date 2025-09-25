@@ -746,67 +746,6 @@ const getShopeeOrders = async (req, res) => {
     }
 };
 
-const setShopeePickup = async (req, res) => {
-    try {
-        const { order_list } = req.body;
-
-        if (!order_list || !Array.isArray(order_list) || order_list.length === 0) {
-            return res.status(400).json({ success: false, message: "Field 'order_list' wajib diisi dan tidak boleh kosong" });
-        }
-
-        if (order_list.length > 50) {
-            return res.status(400).json({ success: false, message: "Maksimal 50 order dalam 1 request" });
-        }
-
-        // 1️⃣ Ambil token Shopee
-        const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
-            return res.status(400).json({ success: false, message: "Shopee token tidak ditemukan. Harap authorize ulang." });
-        }
-
-        const { shop_id, access_token } = shopeeData;
-
-        // 2️⃣ Generate signature & URL
-        const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/logistics/create_shipping_document";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-
-        console.log("🔹 Shopee Create Shipping Document URL:", url);
-        console.log("🔹 Body:", JSON.stringify({ order_list }, null, 2));
-
-        // 3️⃣ Request ke Shopee
-        const response = await axios.post(url, { order_list }, {
-            headers: { "Content-Type": "application/json" },
-            validateStatus: () => true
-        });
-
-        // 4️⃣ Tangani response
-        if (response.data.error) {
-            return res.status(400).json({
-                success: false,
-                message: response.data.message || "Gagal membuat shipping document",
-                shopee_response: response.data
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "Shipping document / pickup berhasil dibuat",
-            shopee_response: response.data
-        });
-
-    } catch (err) {
-        console.error("❌ Shopee Set Pickup Error:", err.response?.data || err.message);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal membuat shipping document / atur pickup",
-            error: err.response?.data || err.message
-        });
-    }
-};
-
 const getOrderDetail = async (req, res) => {
     try {
         const { order_sn_list } = req.query;
@@ -1087,6 +1026,176 @@ const getShopeeOrdersWithItems = async (req, res) => {
     }
 };
 
+const getShippingParameter = async (req, res) => {
+  try {
+    const { order_sn } = req.body;
+
+    if (!order_sn) {
+      return res.status(400).json({
+        success: false,
+        message: "Field 'order_sn' wajib dikirim di body request",
+      });
+    }
+
+    // Ambil token dan data shop dari DB
+    const shopeeData = await Shopee.findOne();
+    if (!shopeeData?.access_token) {
+      return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+    }
+
+    const { shop_id, access_token } = shopeeData;
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const path = "/api/v2/logistics/get_shipping_parameter";
+    const sign = generateSign(path, timestamp, access_token, shop_id);
+
+    // Endpoint Shopee
+    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+    // Request ke Shopee
+    const response = await axios.post(url, { order_sn });
+
+    if (response.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: response.data.message || "Gagal mendapatkan shipping parameter",
+        shopee_response: response.data,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: response.data.response,
+    });
+  } catch (err) {
+    console.error("❌ Error getShippingParameter:", err.response?.data || err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mendapatkan shipping parameter",
+      error: err.response?.data || err.message,
+    });
+  }
+};
+
+const setShopeePickup = async (req, res) => {
+  try {
+    const { order_sn, package_number, address_id, pickup_time_id } = req.body;
+
+    // Validasi
+    if (!order_sn || !address_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Field 'order_sn' dan 'address_id' wajib diisi",
+      });
+    }
+
+    // Ambil token Shopee dari DB
+    const shopeeData = await Shopee.findOne();
+    if (!shopeeData?.access_token) {
+      return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+    }
+
+    const { shop_id, access_token } = shopeeData;
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const path = "/api/v2/logistics/ship_order";
+    const sign = generateSign(path, timestamp, access_token, shop_id);
+
+    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+    // Data body ke Shopee
+    const payload = {
+      order_sn,
+      package_number: package_number || "",
+      pickup: {
+        address_id,
+      },
+    };
+
+    // Jika ada pickup_time_id, sertakan
+    if (pickup_time_id) {
+      payload.pickup.pickup_time_id = pickup_time_id;
+    }
+
+    // Request ke Shopee
+    const response = await axios.post(url, payload);
+
+    if (response.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: response.data.message || "Gagal mengatur pickup order",
+        shopee_response: response.data,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Pickup order berhasil diatur",
+      data: response.data,
+    });
+  } catch (err) {
+    console.error("❌ Error setShopeePickup:", err.response?.data || err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mengatur pickup order",
+      error: err.response?.data || err.message,
+    });
+  }
+};
+
+const createShippingDocumentJob = async (req, res) => {
+  try {
+    const { order_sn, package_number } = req.body;
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const partner_id = process.env.SHOPEE_PARTNER_ID;
+    const shop_id = process.env.SHOPEE_SHOP_ID;
+    const partner_key = process.env.SHOPEE_PARTNER_KEY;
+    const access_token = process.env.SHOPEE_ACCESS_TOKEN;
+
+    const path = "/api/v2/logistics/create_shipping_document_job";
+    const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
+    const sign = crypto
+      .createHmac('sha256', partner_key)
+      .update(baseString)
+      .digest('hex');
+
+    const response = await axios.post(
+      `https://partner.shopeemobile.com${path}`,
+      {
+        shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
+        order_list: [
+          {
+            order_sn,
+            package_number
+          }
+        ]
+      },
+      {
+        params: {
+          partner_id,
+          timestamp,
+          access_token,
+          shop_id,
+          sign
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      data: response.data
+    });
+  } catch (error) {
+    console.error("Error create shipping document:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: "Gagal membuat shipping document",
+      error: error.response?.data || error.message
+    });
+  }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -1097,8 +1206,10 @@ module.exports = {
     updateProductShopee,
     getShopeeItemInfo,
     getShopeeOrders,
-    setShopeePickup,
     getOrderDetail,
     searchShopeeProductByName,
-    getShopeeOrdersWithItems
+    getShopeeOrdersWithItems,
+    getShippingParameter,
+    setShopeePickup,
+    createShippingDocumentJob
 };
