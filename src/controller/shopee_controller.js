@@ -692,20 +692,6 @@ const getShopeeItemInfo = async (req, res) => {
 
 const getShopeeOrders = async (req, res) => {
     try {
-        const {
-            time_range_field = "create_time",
-            page_size = 20,
-            cursor = "",
-            order_status = "READY_TO_SHIP,SHIPPED"
-        } = req.query;
-
-        // Hitung timestamp hari ini (awal dan akhir)
-        const now = new Date();
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 hari sebelumnya
-
-        const time_from = Math.floor(oneWeekAgo.getTime() / 1000);
-        const time_to = Math.floor(now.getTime() / 1000);
-
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
@@ -714,31 +700,41 @@ const getShopeeOrders = async (req, res) => {
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_list";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const params = new URLSearchParams({
-            partner_id: PARTNER_ID,
-            timestamp,
-            access_token,
-            shop_id,
-            sign,
-            time_range_field: "create_time",
-            time_from,
-            time_to,
-            page_size,
-            cursor,
-            order_status
-        }).toString();
+        const fetchByStatus = async (status) => {
+            const sign = generateSign(path, timestamp, access_token, shop_id);
+            const now = new Date();
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        const url = `https://partner.shopeemobile.com${path}?${params}`;
+            const params = new URLSearchParams({
+                partner_id: PARTNER_ID,
+                timestamp,
+                access_token,
+                shop_id,
+                sign,
+                time_range_field: "create_time",
+                time_from: Math.floor(oneWeekAgo.getTime() / 1000),
+                time_to: Math.floor(now.getTime() / 1000),
+                page_size: 50, // sesuaikan
+                cursor: "",
+                order_status: status
+            }).toString();
 
-        const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
+            const url = `https://partner.shopeemobile.com${path}?${params}`;
+            const response = await axios.get(url);
+            if (response.data.error) throw new Error(response.data.message);
+            return response.data.response.order_list || [];
+        };
 
-        if (response.data.error) {
-            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
-        }
+        // Fetch READY_TO_SHIP dan SHIPPED
+        const [readyOrders, shippedOrders] = await Promise.all([
+            fetchByStatus("READY_TO_SHIP"),
+            fetchByStatus("SHIPPED")
+        ]);
 
-        return res.json({ success: true, data: response.data.response });
+        const allOrders = [...readyOrders, ...shippedOrders];
+
+        return res.json({ success: true, data: allOrders });
 
     } catch (err) {
         console.error("❌ Shopee Get Orders Error:", err.response?.data || err.message);
