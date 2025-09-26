@@ -746,6 +746,62 @@ const getShopeeOrders = async (req, res) => {
     }
 };
 
+const getShopeeShippedOrders = async (req, res) => {
+    try {
+        const {
+            time_range_field = "create_time",
+            page_size = 20,
+            cursor = "",
+            order_status = "SHIPPED" // 🔹 khusus shipped
+        } = req.query;
+
+        // Hitung timestamp hari ini (awal dan akhir)
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 hari sebelumnya
+
+        const time_from = Math.floor(oneWeekAgo.getTime() / 1000);
+        const time_to = Math.floor(now.getTime() / 1000);
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/order/get_order_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp,
+            access_token,
+            shop_id,
+            sign,
+            time_range_field,
+            time_from,
+            time_to,
+            page_size,
+            cursor,
+            order_status // tetap SHIPPED
+        }).toString();
+
+        const url = `https://partner.shopeemobile.com${path}?${params}`;
+
+        const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
+
+        if (response.data.error) {
+            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+        }
+
+        return res.json({ success: true, data: response.data.response });
+
+    } catch (err) {
+        console.error("❌ Shopee Get Shipped Orders Error:", err.response?.data || err.message);
+        return res.status(500).json({ success: false, message: "Gagal mengambil pesanan Shopee (Shipped)", error: err.response?.data || err.message });
+    }
+};
+
 const getOrderDetail = async (req, res) => {
     try {
         const { order_sn_list } = req.query;
@@ -1275,6 +1331,7 @@ module.exports = {
     updateProductShopee,
     getShopeeItemInfo,
     getShopeeOrders,
+    getShopeeShippedOrders,
     getOrderDetail,
     searchShopeeProductByName,
     getShopeeOrdersWithItems,

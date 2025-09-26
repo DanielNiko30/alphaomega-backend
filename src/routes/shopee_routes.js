@@ -16,7 +16,8 @@ const {
     searchShopeeProductByName,
     getShopeeOrdersWithItems,
     getShippingParameter,
-    createShippingDocumentJob
+    createShippingDocumentJob,
+    getShopeeShippedOrders
 } = require('../controller/shopee_controller');
 
 // Shopee basic
@@ -31,6 +32,7 @@ router.post('/product/item-info/:id_product', getShopeeItemInfo);
 
 // Orders
 router.get('/orders', getShopeeOrders);
+router.get('/orders/shipped', getShopeeShippedOrders);
 router.get("/order-detail", getOrderDetail);
 router.get('/orders/full', getShopeeOrdersWithItems);
 
@@ -39,8 +41,8 @@ router.get('/searchproduct', searchShopeeProductByName);
 
 // Shipping
 router.post("/shipping-parameter", getShippingParameter);
-router.post("/ship-order/pickup", setShopeePickup); 
-router.post("/ship-order/dropoff", setShopeeDropoff); 
+router.post("/ship-order/pickup", setShopeePickup);
+router.post("/ship-order/dropoff", setShopeeDropoff);
 router.post('/orders/print-resi', createShippingDocumentJob);
 
 module.exports = router;
