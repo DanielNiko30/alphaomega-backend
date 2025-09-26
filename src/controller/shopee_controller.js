@@ -1084,7 +1084,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
 const getShopeeShippedOrdersWithItems = async (req, res) => {
     try {
-        // 1️⃣ Ambil list order shipped
+        // 1️⃣ Ambil list order shipped dari Shopee
         const orderListResp = await axios.get(
             "https://tokalphaomegaploso.my.id/api/shopee/orders/shipped?page_size=20&order_status=SHIPPED"
         );
@@ -1115,16 +1115,16 @@ const getShopeeShippedOrdersWithItems = async (req, res) => {
                 // 3️⃣ Cek DB lokal
                 const stok = await db.query(
                     `
-                    SELECT 
-                        s.id_product_stok,
-                        s.id_product_shopee,
-                        p.nama_product,
-                        p.gambar_product
-                    FROM stok s
-                    JOIN product p ON p.id_product = s.id_product_stok
-                    WHERE s.id_product_shopee = :itemId
-                    LIMIT 1
-                    `,
+          SELECT 
+              s.id_product_stok,
+              s.id_product_shopee,
+              p.nama_product,
+              p.gambar_product
+          FROM stok s
+          JOIN product p ON p.id_product = s.id_product_stok
+          WHERE s.id_product_shopee = :itemId
+          LIMIT 1
+          `,
                     {
                         replacements: { itemId: String(item.item_id) },
                         type: QueryTypes.SELECT,
@@ -1179,14 +1179,34 @@ const getShopeeShippedOrdersWithItems = async (req, res) => {
                 }
             }
 
-            finalOrders.push({
-                order_sn: order.order_sn,
-                booking_sn: order.booking_sn || "",
-                shipping_method: order.package_list?.[0]?.shipping_carrier || "",
-                status: order.order_status || "SHIPPED",
-                items: [items[0]], // first item
-                full_items: items, // semua items
-            });
+            // 5️⃣ Cek status pickup (asumsi ada field di DB atau API)
+            const pickupStatusResp = await db.query(
+                `
+        SELECT picked_up
+        FROM pickup_orders
+        WHERE order_sn = :orderSn
+        LIMIT 1
+        `,
+                {
+                    replacements: { orderSn: order.order_sn },
+                    type: QueryTypes.SELECT,
+                }
+            );
+
+            const pickedUp = pickupStatusResp.length > 0 ? pickupStatusResp[0].picked_up : false;
+
+            // Hanya masukkan order yang sudah dijadwalkan pickup tapi belum diambil kurir
+            if (!pickedUp) {
+                finalOrders.push({
+                    order_sn: order.order_sn,
+                    booking_sn: order.booking_sn || "",
+                    shipping_method: order.package_list?.[0]?.shipping_carrier || "",
+                    status: order.order_status || "SHIPPED",
+                    picked_up: pickedUp, // true/false
+                    items: [items[0]], // first item
+                    full_items: items, // semua items
+                });
+            }
         }
 
         return res.json({
