@@ -692,6 +692,20 @@ const getShopeeItemInfo = async (req, res) => {
 
 const getShopeeOrders = async (req, res) => {
     try {
+        const {
+            time_range_field = "create_time",
+            page_size = 20,
+            cursor = "",
+            order_status = "READY_TO_SHIP"
+        } = req.query;
+
+        // Hitung timestamp hari ini (awal dan akhir)
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 hari sebelumnya
+
+        const time_from = Math.floor(oneWeekAgo.getTime() / 1000);
+        const time_to = Math.floor(now.getTime() / 1000);
+
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
@@ -700,41 +714,31 @@ const getShopeeOrders = async (req, res) => {
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const fetchByStatus = async (status) => {
-            const sign = generateSign(path, timestamp, access_token, shop_id);
-            const now = new Date();
-            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp,
+            access_token,
+            shop_id,
+            sign,
+            time_range_field: "create_time",
+            time_from,
+            time_to,
+            page_size,
+            cursor,
+            order_status
+        }).toString();
 
-            const params = new URLSearchParams({
-                partner_id: PARTNER_ID,
-                timestamp,
-                access_token,
-                shop_id,
-                sign,
-                time_range_field: "create_time",
-                time_from: Math.floor(oneWeekAgo.getTime() / 1000),
-                time_to: Math.floor(now.getTime() / 1000),
-                page_size: 50, // sesuaikan
-                cursor: "",
-                order_status: status
-            }).toString();
+        const url = `https://partner.shopeemobile.com${path}?${params}`;
 
-            const url = `https://partner.shopeemobile.com${path}?${params}`;
-            const response = await axios.get(url);
-            if (response.data.error) throw new Error(response.data.message);
-            return response.data.response.order_list || [];
-        };
+        const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
 
-        // Fetch READY_TO_SHIP dan SHIPPED
-        const [readyOrders, shippedOrders] = await Promise.all([
-            fetchByStatus("READY_TO_SHIP"),
-            fetchByStatus("SHIPPED")
-        ]);
+        if (response.data.error) {
+            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+        }
 
-        const allOrders = [...readyOrders, ...shippedOrders];
-
-        return res.json({ success: true, data: allOrders });
+        return res.json({ success: true, data: response.data.response });
 
     } catch (err) {
         console.error("❌ Shopee Get Orders Error:", err.response?.data || err.message);
@@ -923,80 +927,75 @@ const getShopeeOrdersWithItems = async (req, res) => {
             );
 
             const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
-            if (!orderDetail?.item_list || orderDetail.item_list.length === 0) continue;
+            if (!orderDetail?.item_list) continue;
 
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                try {
-                    // Cek produk di DB lokal berdasarkan id_product_shopee
-                    const stok = await db.query(
-                        `
-            SELECT 
-                s.id_product_stok,
-                s.id_product_shopee,
-                p.nama_product,
-                p.gambar_product
-            FROM stok s
-            JOIN product p ON p.id_product = s.id_product_stok
-            WHERE s.id_product_shopee = :itemId
-            LIMIT 1
-            `,
-                        {
-                            replacements: { itemId: String(item.item_id) },
-                            type: QueryTypes.SELECT,
-                        }
-                    );
+                // Cek produk di DB lokal berdasarkan id_product_shopee
+                const stok = await db.query(
+                    `
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_shopee,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
+                    {
+                        replacements: { itemId: String(item.item_id) },
+                        type: QueryTypes.SELECT,
+                    }
+                );
 
-                    if (stok.length > 0) {
-                        // Barang ada di DB lokal
-                        const gambarBase64 = stok[0].gambar_product
-                            ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
-                            : null;
+                if (stok.length > 0) {
+                    const gambarBase64 = stok[0].gambar_product
+                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                        : null;
+
+                    items.push({
+                        item_id: item.item_id,
+                        name: stok[0].nama_product,
+                        image_url: gambarBase64,
+                        variation_name: item.model_name,
+                        quantity: item.model_quantity_purchased,
+                        price: item.model_discounted_price,
+                        from_db: true,
+                    });
+                } else {
+                    // Fallback ke Shopee API jika tidak ada di DB lokal
+                    try {
+                        const productInfoResp = await axios.post(
+                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
+                            { satuan: item.model_name }
+                        );
+
+                        const productInfo = productInfoResp.data?.data;
 
                         items.push({
                             item_id: item.item_id,
-                            name: stok[0].nama_product,
-                            image_url: gambarBase64,
-                            variation_name: item.model_name || "",
-                            quantity: item.model_quantity_purchased || 0,
-                            price: item.model_discounted_price || 0,
-                            from_db: true,
+                            name: productInfo?.name || "Produk Tidak Diketahui",
+                            image_url: productInfo?.image || null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
                         });
-                    } else {
-                        // Fallback ke Shopee API jika tidak ada di DB lokal
-                        try {
-                            const productInfoResp = await axios.post(
-                                `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                                { satuan: item.model_name }
-                            );
-
-                            const productInfo = productInfoResp.data?.data;
-
-                            items.push({
-                                item_id: item.item_id,
-                                name: productInfo?.name || "Produk Tidak Diketahui",
-                                image_url: null, // jangan tampilkan gambar kalau bukan dari DB
-                                variation_name: item.model_name || "",
-                                quantity: item.model_quantity_purchased || 0,
-                                price: item.model_discounted_price || 0,
-                                from_db: false,
-                            });
-                        } catch (err) {
-                            console.error("❌ Fallback gagal untuk item:", item.item_id, err.message);
-                            items.push({
-                                item_id: item.item_id,
-                                name: "Produk Tidak Diketahui",
-                                image_url: null,
-                                variation_name: item.model_name || "",
-                                quantity: item.model_quantity_purchased || 0,
-                                price: item.model_discounted_price || 0,
-                                from_db: false,
-                            });
-                        }
+                    } catch (err) {
+                        console.error("❌ Fallback gagal:", err.message);
+                        items.push({
+                            item_id: item.item_id,
+                            name: "Produk Tidak Diketahui",
+                            image_url: null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
+                        });
                     }
-                } catch (err) {
-                    console.error("❌ Error query DB lokal untuk item:", item.item_id, err.message);
                 }
             }
 
@@ -1007,7 +1006,8 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 total_amount: order.total_amount,
                 shipping_method: order.package_list?.[0]?.shipping_carrier || "",
                 create_time: order.create_time,
-                items: items, // ambil semua item
+                items: [items[0]],
+                full_items: items,
             });
         }
 
