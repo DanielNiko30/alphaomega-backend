@@ -1082,6 +1082,128 @@ const getShopeeOrdersWithItems = async (req, res) => {
     }
 };
 
+const getShopeeShippedOrdersWithItems = async (req, res) => {
+    try {
+        // 1️⃣ Ambil list order shipped
+        const orderListResp = await axios.get(
+            "https://tokalphaomegaploso.my.id/api/shopee/orders/shipped?page_size=20&order_status=SHIPPED"
+        );
+
+        const orderList = orderListResp.data?.data?.order_list || [];
+        if (orderList.length === 0) {
+            return res.json({
+                success: true,
+                message: "Tidak ada order Shopee yang telah dikirim",
+                data: [],
+            });
+        }
+
+        const finalOrders = [];
+
+        for (const order of orderList) {
+            // 2️⃣ Ambil detail order
+            const orderDetailResp = await axios.get(
+                `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
+            );
+
+            const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
+            if (!orderDetail?.item_list) continue;
+
+            const items = [];
+
+            for (const item of orderDetail.item_list) {
+                // 3️⃣ Cek DB lokal
+                const stok = await db.query(
+                    `
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_shopee,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
+                    {
+                        replacements: { itemId: String(item.item_id) },
+                        type: QueryTypes.SELECT,
+                    }
+                );
+
+                if (stok.length > 0) {
+                    const gambarBase64 = stok[0].gambar_product
+                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                        : null;
+
+                    items.push({
+                        item_id: item.item_id,
+                        name: stok[0].nama_product,
+                        image_url: gambarBase64,
+                        variation_name: item.model_name,
+                        quantity: item.model_quantity_purchased,
+                        price: item.model_discounted_price,
+                        from_db: true,
+                    });
+                } else {
+                    // 4️⃣ Fallback ke Shopee API jika tidak ada di DB
+                    try {
+                        const productInfoResp = await axios.post(
+                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
+                            { satuan: item.model_name }
+                        );
+
+                        const productInfo = productInfoResp.data?.data;
+
+                        items.push({
+                            item_id: item.item_id,
+                            name: productInfo?.name || "Produk Tidak Diketahui",
+                            image_url: productInfo?.image || null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
+                        });
+                    } catch (err) {
+                        console.error("❌ Fallback gagal:", err.message);
+                        items.push({
+                            item_id: item.item_id,
+                            name: "Produk Tidak Diketahui",
+                            image_url: null,
+                            variation_name: item.model_name,
+                            quantity: item.model_quantity_purchased,
+                            price: item.model_discounted_price,
+                            from_db: false,
+                        });
+                    }
+                }
+            }
+
+            finalOrders.push({
+                order_sn: order.order_sn,
+                booking_sn: order.booking_sn || "",
+                shipping_method: order.package_list?.[0]?.shipping_carrier || "",
+                status: order.order_status || "SHIPPED",
+                items: [items[0]], // first item
+                full_items: items, // semua items
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Berhasil mengambil data order Shopee shipped",
+            data: finalOrders,
+        });
+    } catch (err) {
+        console.error("❌ Error getShopeeShippedOrdersWithItems:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil data order Shopee shipped",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
 const getShippingParameter = async (req, res) => {
     try {
         const { order_sn } = req.body;
@@ -1335,6 +1457,7 @@ module.exports = {
     getOrderDetail,
     searchShopeeProductByName,
     getShopeeOrdersWithItems,
+    getShopeeShippedOrdersWithItems,
     getShippingParameter,
     setShopeePickup,
     createShippingDocumentJob,
