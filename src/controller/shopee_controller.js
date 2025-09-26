@@ -1030,7 +1030,6 @@ const getShippingParameter = async (req, res) => {
     try {
         const { order_sn } = req.body;
 
-        // Validasi input
         if (!order_sn) {
             return res.status(400).json({
                 success: false,
@@ -1038,7 +1037,6 @@ const getShippingParameter = async (req, res) => {
             });
         }
 
-        // Ambil token dan data shop dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -1049,17 +1047,13 @@ const getShippingParameter = async (req, res) => {
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
-
         const path = "/api/v2/logistics/get_shipping_parameter";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // URL Shopee (GET request)
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&order_sn=${order_sn}`;
 
-        // Request ke Shopee harus GET
         const response = await axios.get(url);
 
-        // Jika Shopee return error
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
@@ -1068,7 +1062,6 @@ const getShippingParameter = async (req, res) => {
             });
         }
 
-        // Sukses
         return res.json({
             success: true,
             data: response.data.response,
@@ -1087,7 +1080,6 @@ const setShopeePickup = async (req, res) => {
     try {
         const { order_sn, package_number, address_id, pickup_time_id } = req.body;
 
-        // Validasi
         if (!order_sn || !address_id) {
             return res.status(400).json({
                 success: false,
@@ -1095,10 +1087,12 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        // Ambil token Shopee dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token not found. Please authorize first.",
+            });
         }
 
         const { shop_id, access_token } = shopeeData;
@@ -1109,22 +1103,28 @@ const setShopeePickup = async (req, res) => {
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // Data body ke Shopee
         const payload = {
             order_sn,
-            package_number: package_number || "",
             pickup: {
                 address_id,
             },
         };
 
-        // Jika ada pickup_time_id, sertakan
+        if (package_number) {
+            payload.package_number = package_number;
+        }
+
         if (pickup_time_id) {
             payload.pickup.pickup_time_id = pickup_time_id;
         }
 
-        // Request ke Shopee
-        const response = await axios.post(url, payload);
+        console.log("📦 Payload ship_order:", payload);
+
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        console.log("✅ Response Shopee ship_order:", response.data);
 
         if (response.data.error) {
             return res.status(400).json({
@@ -1137,13 +1137,75 @@ const setShopeePickup = async (req, res) => {
         return res.json({
             success: true,
             message: "Pickup order berhasil diatur",
-            data: response.data,
+            data: response.data.response,
         });
     } catch (err) {
         console.error("❌ Error setShopeePickup:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal mengatur pickup order",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
+const setShopeeDropoff = async (req, res) => {
+    try {
+        const { order_sn, package_number, branch_id } = req.body;
+
+        if (!order_sn) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' wajib diisi",
+            });
+        }
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token not found. Please authorize first.",
+            });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+
+        const path = "/api/v2/logistics/ship_order";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const payload = { order_sn };
+        if (package_number) payload.package_number = package_number;
+        if (branch_id) payload.dropoff = { branch_id };
+
+        console.log("📦 Payload ship_order (Drop-off):", payload);
+
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        console.log("✅ Response Shopee ship_order:", response.data);
+
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message || "Gagal mengatur dropoff order",
+                shopee_response: response.data,
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Dropoff order berhasil diatur",
+            data: response.data.response,
+        });
+    } catch (err) {
+        console.error("❌ Error setShopeeDropoff:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengatur dropoff order",
             error: err.response?.data || err.message,
         });
     }
@@ -1217,5 +1279,6 @@ module.exports = {
     getShopeeOrdersWithItems,
     getShippingParameter,
     setShopeePickup,
-    createShippingDocumentJob
+    createShippingDocumentJob,
+    setShopeeDropoff
 };
