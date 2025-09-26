@@ -1151,12 +1151,12 @@ const setShopeePickup = async (req, res) => {
 
 const setShopeeDropoff = async (req, res) => {
     try {
-        const { order_sn, package_number, branch_id } = req.body;
+        const { order_sn } = req.body;
 
         if (!order_sn) {
             return res.status(400).json({
                 success: false,
-                message: "Field 'order_sn' wajib diisi",
+                message: "Field 'order_sn' wajib diisi"
             });
         }
 
@@ -1164,7 +1164,7 @@ const setShopeeDropoff = async (req, res) => {
         if (!shopeeData?.access_token) {
             return res.status(400).json({
                 success: false,
-                message: "Shopee token not found. Please authorize first.",
+                message: "Shopee token not found. Please authorize first."
             });
         }
 
@@ -1176,37 +1176,38 @@ const setShopeeDropoff = async (req, res) => {
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        const payload = { order_sn };
-        if (package_number) payload.package_number = package_number;
-        if (branch_id) payload.dropoff = { branch_id };
+        // payload untuk dropoff SPX Hemat
+        const payload = {
+            order_sn,
+            dropoff: {
+                branch_id: null // SPX Hemat memang tidak pakai branch
+            }
+        };
 
-        console.log("📦 Payload ship_order (Drop-off):", payload);
+        console.log("📦 Final Payload Ship Order:", payload);
 
         const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
         });
-
-        console.log("✅ Response Shopee ship_order:", response.data);
 
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message || "Gagal mengatur dropoff order",
-                shopee_response: response.data,
+                message: response.data.message,
+                shopee_response: response.data
             });
         }
 
         return res.json({
             success: true,
-            message: "Dropoff order berhasil diatur",
-            data: response.data.response,
+            data: response.data.response
         });
     } catch (err) {
-        console.error("❌ Error setShopeeDropoff:", err.response?.data || err.message);
+        console.error("❌ Error Dropoff:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: "Gagal mengatur dropoff order",
-            error: err.response?.data || err.message,
+            message: err.response?.data?.message || err.message,
+            error: err.response?.data
         });
     }
 };
