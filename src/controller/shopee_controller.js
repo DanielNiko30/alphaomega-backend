@@ -923,75 +923,80 @@ const getShopeeOrdersWithItems = async (req, res) => {
             );
 
             const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
-            if (!orderDetail?.item_list) continue;
+            if (!orderDetail?.item_list || orderDetail.item_list.length === 0) continue;
 
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                // Cek produk di DB lokal berdasarkan id_product_shopee
-                const stok = await db.query(
-                    `
-                    SELECT 
-                        s.id_product_stok,
-                        s.id_product_shopee,
-                        p.nama_product,
-                        p.gambar_product
-                    FROM stok s
-                    JOIN product p ON p.id_product = s.id_product_stok
-                    WHERE s.id_product_shopee = :itemId
-                    LIMIT 1
-                    `,
-                    {
-                        replacements: { itemId: String(item.item_id) },
-                        type: QueryTypes.SELECT,
-                    }
-                );
+                try {
+                    // Cek produk di DB lokal berdasarkan id_product_shopee
+                    const stok = await db.query(
+                        `
+            SELECT 
+                s.id_product_stok,
+                s.id_product_shopee,
+                p.nama_product,
+                p.gambar_product
+            FROM stok s
+            JOIN product p ON p.id_product = s.id_product_stok
+            WHERE s.id_product_shopee = :itemId
+            LIMIT 1
+            `,
+                        {
+                            replacements: { itemId: String(item.item_id) },
+                            type: QueryTypes.SELECT,
+                        }
+                    );
 
-                if (stok.length > 0) {
-                    const gambarBase64 = stok[0].gambar_product
-                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
-                        : null;
-
-                    items.push({
-                        item_id: item.item_id,
-                        name: stok[0].nama_product,
-                        image_url: gambarBase64,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: true,
-                    });
-                } else {
-                    // Fallback ke Shopee API jika tidak ada di DB lokal
-                    try {
-                        const productInfoResp = await axios.post(
-                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                            { satuan: item.model_name }
-                        );
-
-                        const productInfo = productInfoResp.data?.data;
+                    if (stok.length > 0) {
+                        // Barang ada di DB lokal
+                        const gambarBase64 = stok[0].gambar_product
+                            ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                            : null;
 
                         items.push({
                             item_id: item.item_id,
-                            name: productInfo?.name || "Produk Tidak Diketahui",
-                            image_url: productInfo?.image || null,
-                            variation_name: item.model_name,
-                            quantity: item.model_quantity_purchased,
-                            price: item.model_discounted_price,
-                            from_db: false,
+                            name: stok[0].nama_product,
+                            image_url: gambarBase64,
+                            variation_name: item.model_name || "",
+                            quantity: item.model_quantity_purchased || 0,
+                            price: item.model_discounted_price || 0,
+                            from_db: true,
                         });
-                    } catch (err) {
-                        console.error("❌ Fallback gagal:", err.message);
-                        items.push({
-                            item_id: item.item_id,
-                            name: "Produk Tidak Diketahui",
-                            image_url: null,
-                            variation_name: item.model_name,
-                            quantity: item.model_quantity_purchased,
-                            price: item.model_discounted_price,
-                            from_db: false,
-                        });
+                    } else {
+                        // Fallback ke Shopee API jika tidak ada di DB lokal
+                        try {
+                            const productInfoResp = await axios.post(
+                                `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
+                                { satuan: item.model_name }
+                            );
+
+                            const productInfo = productInfoResp.data?.data;
+
+                            items.push({
+                                item_id: item.item_id,
+                                name: productInfo?.name || "Produk Tidak Diketahui",
+                                image_url: null, // jangan tampilkan gambar kalau bukan dari DB
+                                variation_name: item.model_name || "",
+                                quantity: item.model_quantity_purchased || 0,
+                                price: item.model_discounted_price || 0,
+                                from_db: false,
+                            });
+                        } catch (err) {
+                            console.error("❌ Fallback gagal untuk item:", item.item_id, err.message);
+                            items.push({
+                                item_id: item.item_id,
+                                name: "Produk Tidak Diketahui",
+                                image_url: null,
+                                variation_name: item.model_name || "",
+                                quantity: item.model_quantity_purchased || 0,
+                                price: item.model_discounted_price || 0,
+                                from_db: false,
+                            });
+                        }
                     }
+                } catch (err) {
+                    console.error("❌ Error query DB lokal untuk item:", item.item_id, err.message);
                 }
             }
 
@@ -1002,8 +1007,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 total_amount: order.total_amount,
                 shipping_method: order.package_list?.[0]?.shipping_carrier || "",
                 create_time: order.create_time,
-                items: [items[0]],
-                full_items: items,
+                items: items, // ambil semua item
             });
         }
 
