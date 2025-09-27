@@ -53,19 +53,9 @@ app.get('/api/shopee/generate-login-url', (req, res) => {
   }
 });
 
-// =================== LAZADA CALLBACK ===================
-app.post('/api/lazada/callback', (req, res) => {
-  console.log('📦 Lazada Push Received:', req.body);
-
-  if (req.body.type === 'VERIFY' && req.body.challenge) {
-    return res.status(200).json({ challenge: req.body.challenge });
-  }
-
-  res.status(200).send('OK');
-});
-
 // =================== ROUTES ===================
 app.use('/api/shopee', require('./routes/shopee_routes'));
+app.use('/api/lazada', require('./routes/lazada_routes'));
 app.use('/api/product', require('./routes/product_routes'));
 app.use('/api/user', require('./routes/user_routes'));
 app.use('/api/supplier', require('./routes/supplier_routes'));
