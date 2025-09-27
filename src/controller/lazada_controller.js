@@ -1,5 +1,21 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { Lazada } = require('../model/lazada_model');
+
+/**
+ * Helper: Generate Lazada Signature
+ * Lazada base string: /path + sortedKeyValue
+ */
+function generateSign(path, params, appSecret) {
+    const sortedKeys = Object.keys(params).sort();
+    let baseString = path;
+
+    for (const key of sortedKeys) {
+        baseString += key + params[key];
+    }
+
+    return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
+}
 
 /**
  * Generate Login URL Lazada
@@ -9,7 +25,7 @@ const generateLoginUrl = (req, res) => {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const REDIRECT_URI = encodeURIComponent('https://tokalphaomegaploso.my.id/api/lazada/callback');
 
-        const state = Math.random().toString(36).substring(2, 15); // random string untuk verifikasi
+        const state = Math.random().toString(36).substring(2, 15); // random string
 
         const loginUrl = `https://auth.lazada.com/oauth/authorize?response_type=code&force_auth=true&redirect_uri=${REDIRECT_URI}&client_id=${CLIENT_ID}&state=${state}`;
 
@@ -34,16 +50,24 @@ const lazadaCallback = async (req, res) => {
 
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+        const API_PATH = "/auth/token/create";
+        const TIMESTAMP = Date.now(); // Lazada pakai milidetik
 
-        // Endpoint untuk tukar code ke access token
-        const url = `https://auth.lazada.com/rest/auth/token/create?app_key=${CLIENT_ID}`;
+        // === 1. Parameter wajib ===
+        const params = {
+            app_key: CLIENT_ID,
+            code: code,
+            sign_method: "sha256",
+            timestamp: TIMESTAMP,
+        };
 
-        const body = new URLSearchParams({
-            app_secret: CLIENT_SECRET,
-            code: code
-        });
+        // === 2. Generate signature ===
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
 
-        const response = await axios.post(url, body, {
+        // === 3. Kirim request ===
+        const url = `https://api.lazada.com/rest${API_PATH}`;
+        const response = await axios.post(url, new URLSearchParams(params), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
@@ -55,8 +79,8 @@ const lazadaCallback = async (req, res) => {
             return res.status(400).json({ error: "Invalid token response from Lazada", data: tokenData });
         }
 
-        // Simpan hanya 1 data di tabel
-        await Lazada.destroy({ where: {} });
+        // === 4. Simpan ke DB ===
+        await Lazada.destroy({ where: {} }); // hapus token lama
         await Lazada.create({
             access_token: tokenData.access_token,
             refresh_token: tokenData.refresh_token,
@@ -83,19 +107,29 @@ const refreshToken = async (req, res) => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+        const API_PATH = "/auth/token/refresh";
+        const TIMESTAMP = Date.now();
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData) {
             return res.status(404).json({ error: "Lazada token not found in database" });
         }
 
-        const url = `https://auth.lazada.com/rest/auth/token/refresh?app_key=${CLIENT_ID}`;
-        const body = new URLSearchParams({
-            app_secret: CLIENT_SECRET,
-            refresh_token: lazadaData.refresh_token
-        });
+        // === 1. Parameter wajib ===
+        const params = {
+            app_key: CLIENT_ID,
+            refresh_token: lazadaData.refresh_token,
+            sign_method: "sha256",
+            timestamp: TIMESTAMP
+        };
 
-        const response = await axios.post(url, body, {
+        // === 2. Generate signature ===
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
+
+        // === 3. Request ke Lazada ===
+        const url = `https://api.lazada.com/rest${API_PATH}`;
+        const response = await axios.post(url, new URLSearchParams(params), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
