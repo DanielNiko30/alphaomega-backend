@@ -1323,6 +1323,7 @@ const setShopeePickup = async (req, res) => {
 
         console.log("✅ Response Shopee Ship Order (Pickup):", JSON.stringify(response.data, null, 2));
 
+        // Jika Shopee balikan error
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
@@ -1331,11 +1332,15 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        // === RETURN KE FRONTEND ===
+        // === CEK package_number ===
+        const result = response.data.response?.result_list?.[0] || {};
+        const pkgNumber = result.package_number || null;
+
         return res.json({
             success: true,
             message: "Pickup order berhasil diatur",
-            data: response.data.response, // <-- wajib untuk ambil package_number
+            package_number: pkgNumber,
+            data: response.data.response,
         });
     } catch (err) {
         console.error("❌ Error setShopeePickup:", err.response?.data || err.message);
@@ -1347,8 +1352,10 @@ const setShopeePickup = async (req, res) => {
     }
 };
 
+
 /**
- * === 2. SET DROPOFF (Merchant antar barang ke SPX/Dropoff Point) ===
+ * === 2. SET DROPOFF ===
+ * Digunakan jika seller mengantar barang langsung ke SPX / Dropoff point
  */
 const setShopeeDropoff = async (req, res) => {
     try {
@@ -1383,7 +1390,7 @@ const setShopeeDropoff = async (req, res) => {
         const payload = {
             order_sn,
             dropoff: {
-                branch_id: null, // SPX Hemat memang tidak butuh branch_id
+                branch_id: null, // SPX Hemat memang tidak pakai branch_id
             },
         };
 
@@ -1404,10 +1411,13 @@ const setShopeeDropoff = async (req, res) => {
             });
         }
 
-        // === RETURN KE FRONTEND ===
+        const result = response.data.response?.result_list?.[0] || {};
+        const pkgNumber = result.package_number || null;
+
         return res.json({
             success: true,
             message: "Dropoff order berhasil diatur",
+            package_number: pkgNumber,
             data: response.data.response,
         });
     } catch (err) {
