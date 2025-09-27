@@ -1278,6 +1278,7 @@ const setShopeePickup = async (req, res) => {
     try {
         const { order_sn, package_number, address_id, pickup_time_id } = req.body;
 
+        // === VALIDASI ===
         if (!order_sn || !address_id) {
             return res.status(400).json({
                 success: false,
@@ -1285,6 +1286,7 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
+        // === CEK TOKEN ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -1301,6 +1303,7 @@ const setShopeePickup = async (req, res) => {
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
+        // === FINAL PAYLOAD ===
         const payload = {
             order_sn,
             pickup: {
@@ -1308,21 +1311,17 @@ const setShopeePickup = async (req, res) => {
             },
         };
 
-        if (package_number) {
-            payload.package_number = package_number;
-        }
+        if (package_number) payload.package_number = package_number;
+        if (pickup_time_id) payload.pickup.pickup_time_id = pickup_time_id;
 
-        if (pickup_time_id) {
-            payload.pickup.pickup_time_id = pickup_time_id;
-        }
+        console.log("📦 Payload Ship Order (Pickup):", JSON.stringify(payload, null, 2));
 
-        console.log("📦 Payload ship_order:", payload);
-
+        // === CALL SHOPEE API ===
         const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
         });
 
-        console.log("✅ Response Shopee ship_order:", response.data);
+        console.log("✅ Response Shopee Ship Order (Pickup):", JSON.stringify(response.data, null, 2));
 
         if (response.data.error) {
             return res.status(400).json({
@@ -1332,10 +1331,11 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
+        // === RETURN KE FRONTEND ===
         return res.json({
             success: true,
             message: "Pickup order berhasil diatur",
-            data: response.data.response,
+            data: response.data.response, // <-- wajib untuk ambil package_number
         });
     } catch (err) {
         console.error("❌ Error setShopeePickup:", err.response?.data || err.message);
@@ -1347,22 +1347,27 @@ const setShopeePickup = async (req, res) => {
     }
 };
 
+/**
+ * === 2. SET DROPOFF (Merchant antar barang ke SPX/Dropoff Point) ===
+ */
 const setShopeeDropoff = async (req, res) => {
     try {
         const { order_sn } = req.body;
 
+        // === VALIDASI ===
         if (!order_sn) {
             return res.status(400).json({
                 success: false,
-                message: "Field 'order_sn' wajib diisi"
+                message: "Field 'order_sn' wajib diisi",
             });
         }
 
+        // === CEK TOKEN ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
                 success: false,
-                message: "Shopee token not found. Please authorize first."
+                message: "Shopee token not found. Please authorize first.",
             });
         }
 
@@ -1374,38 +1379,43 @@ const setShopeeDropoff = async (req, res) => {
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // payload untuk dropoff SPX Hemat
+        // === PAYLOAD UNTUK DROPOFF ===
         const payload = {
             order_sn,
             dropoff: {
-                branch_id: null // SPX Hemat memang tidak pakai branch
-            }
+                branch_id: null, // SPX Hemat memang tidak butuh branch_id
+            },
         };
 
-        console.log("📦 Final Payload Ship Order:", payload);
+        console.log("📦 Final Payload Ship Order (Dropoff):", JSON.stringify(payload, null, 2));
 
+        // === CALL SHOPEE API ===
         const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
         });
+
+        console.log("✅ Response Shopee Ship Order (Dropoff):", JSON.stringify(response.data, null, 2));
 
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message,
-                shopee_response: response.data
+                message: response.data.message || "Gagal mengatur dropoff order",
+                shopee_response: response.data,
             });
         }
 
+        // === RETURN KE FRONTEND ===
         return res.json({
             success: true,
-            data: response.data.response
+            message: "Dropoff order berhasil diatur",
+            data: response.data.response,
         });
     } catch (err) {
         console.error("❌ Error Dropoff:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: err.response?.data?.message || err.message,
-            error: err.response?.data
+            error: err.response?.data || err.message,
         });
     }
 };
