@@ -8,14 +8,15 @@ const generateLoginUrl = (req, res) => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const REDIRECT_URI = encodeURIComponent('https://tokalphaomegaploso.my.id/api/lazada/callback');
-        const state = 'xyz'; // opsional, untuk verifikasi
+
+        const state = Math.random().toString(36).substring(2, 15); // random string untuk verifikasi
 
         const loginUrl = `https://auth.lazada.com/oauth/authorize?response_type=code&force_auth=true&redirect_uri=${REDIRECT_URI}&client_id=${CLIENT_ID}&state=${state}`;
 
-        res.json({ login_url: loginUrl });
+        return res.json({ login_url: loginUrl });
     } catch (err) {
-        console.error("Generate Login URL Error:", err);
-        res.status(500).json({ error: 'Gagal generate login URL' });
+        console.error("Generate Login URL Error:", err.message);
+        return res.status(500).json({ error: 'Gagal generate login URL' });
     }
 };
 
@@ -28,17 +29,17 @@ const lazadaCallback = async (req, res) => {
         const { code, state } = req.query;
 
         if (!code) {
-            return res.status(400).json({ error: "Missing code" });
+            return res.status(400).json({ error: "Missing code from Lazada callback" });
         }
 
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
 
-        const url = 'https://auth.lazada.com/rest/auth/token/create';
+        // Endpoint untuk tukar code ke access token
+        const url = `https://auth.lazada.com/rest/auth/token/create?app_key=${CLIENT_ID}`;
 
         const body = new URLSearchParams({
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
+            app_secret: CLIENT_SECRET,
             code: code
         });
 
@@ -54,7 +55,7 @@ const lazadaCallback = async (req, res) => {
             return res.status(400).json({ error: "Invalid token response from Lazada", data: tokenData });
         }
 
-        // Simpan token ke DB
+        // Simpan hanya 1 data di tabel
         await Lazada.destroy({ where: {} });
         await Lazada.create({
             access_token: tokenData.access_token,
@@ -64,7 +65,7 @@ const lazadaCallback = async (req, res) => {
             last_updated: Math.floor(Date.now() / 1000)
         });
 
-        res.json({
+        return res.json({
             success: true,
             state,
             tokenData
@@ -88,10 +89,9 @@ const refreshToken = async (req, res) => {
             return res.status(404).json({ error: "Lazada token not found in database" });
         }
 
-        const url = 'https://auth.lazada.com/rest/auth/token/refresh';
+        const url = `https://auth.lazada.com/rest/auth/token/refresh?app_key=${CLIENT_ID}`;
         const body = new URLSearchParams({
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
+            app_secret: CLIENT_SECRET,
             refresh_token: lazadaData.refresh_token
         });
 
@@ -111,16 +111,16 @@ const refreshToken = async (req, res) => {
 
             console.log(`🔄 Lazada token refreshed for account: ${lazadaData.account}`);
         } else {
-            return res.status(500).json({ error: "Failed to refresh token" });
+            return res.status(500).json({ error: "Failed to refresh token", data: tokenData });
         }
 
-        res.json({
+        return res.json({
             success: true,
             tokenData
         });
     } catch (err) {
         console.error("Lazada Refresh Token Error:", err.response?.data || err.message);
-        res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
 
