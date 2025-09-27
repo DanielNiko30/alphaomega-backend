@@ -46,25 +46,23 @@ const lazadaCallback = async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
+        console.log("RAW RESPONSE FROM LAZADA:", response.data);
+
         const tokenData = response.data;
 
-        if (tokenData.access_token && tokenData.refresh_token) {
-            // Simpan ke database (hapus data lama dulu, karena hanya satu akun)
-            await Lazada.destroy({ where: {} });
-
-            await Lazada.create({
-                account: tokenData.account || 'default',
-                access_token: tokenData.access_token,
-                refresh_token: tokenData.refresh_token,
-                expires_in: tokenData.expires_in,
-                last_updated: Math.floor(Date.now() / 1000)
-            });
-
-            console.log(`✅ Lazada token saved for account: ${tokenData.account}`);
-        } else {
-            console.error("❌ Lazada did not return token:", tokenData);
-            return res.status(500).json({ error: "Invalid token response from Lazada" });
+        if (!tokenData.access_token) {
+            return res.status(400).json({ error: "Invalid token response from Lazada", data: tokenData });
         }
+
+        // Simpan token ke DB
+        await Lazada.destroy({ where: {} });
+        await Lazada.create({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            account: tokenData.account,
+            expires_in: tokenData.expires_in,
+            last_updated: Math.floor(Date.now() / 1000)
+        });
 
         res.json({
             success: true,
@@ -73,7 +71,7 @@ const lazadaCallback = async (req, res) => {
         });
     } catch (err) {
         console.error("Lazada Callback Error:", err.response?.data || err.message);
-        res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
 
