@@ -22,6 +22,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // =================== CRON JOB ===================
 require("./cron/refreshShopeeToken");
+require("./cron/refreshLazadaToken");
 
 // =================== ROOT ROUTE ===================
 app.get('/', (req, res) => {
