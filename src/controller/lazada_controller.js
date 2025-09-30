@@ -224,13 +224,12 @@ const createProductLazada = async (req, res) => {
         const apiPath = "/product/create";
         const timestamp = Date.now();
 
-        // === Params untuk sign ===
+        // === Params untuk sign (TANPA payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp,
-            payload,
         };
 
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
@@ -254,6 +253,7 @@ const createProductLazada = async (req, res) => {
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
+
 
         console.log("✅ Lazada Response:", response.data);
 
