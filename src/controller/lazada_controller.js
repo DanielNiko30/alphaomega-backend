@@ -211,28 +211,20 @@ const createProductLazada = async (req, res) => {
         // 5️⃣ Timestamp dalam detik (bukan milidetik!)
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // 6️⃣ Params untuk generate signature (ALPHABETICAL)
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
-            timestamp,
+            timestamp
         };
 
-        // 7️⃣ Generate signature
+        // alphabetically sorted keys handled inside generateSign
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
 
-        // 8️⃣ URL final
-        const queryString = new URLSearchParams({ ...signParams, sign }).toString();
-        const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
+        const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...signParams, sign })}`;
 
-        // 9️⃣ Body harus form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        console.log("📦 Lazada Request URL:", url);
-        console.log("📦 Lazada Request Body:", payload);
-
-        // 🔟 Request ke Lazada
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
