@@ -220,7 +220,12 @@ const createProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign }).toString()}`;
 
-        const response = await axios.post(url, payload, { headers: { "Content-Type": "application/json" } });
+        // === Kirim payload sebagai form-urlencoded ===
+        const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
 
         const itemId = response.data?.data?.item_id;
         if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
