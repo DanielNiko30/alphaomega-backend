@@ -1,14 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { generateLoginUrl, lazadaCallback, refreshToken } = require('../controller/lazada_controller');
+const { 
+    generateLoginUrl, 
+    lazadaCallback, 
+    refreshToken, 
+    createProductLazada, 
+    updateProductLazada 
+} = require('../controller/lazada_controller');
 
-// === 1. Generate login URL ===
 router.get('/generate-login-url', generateLoginUrl);
-
-// === 2. Callback setelah user authorize ===
 router.get('/callback', lazadaCallback);
-
-// === 3. Refresh token manual ===
 router.post('/refresh-token', refreshToken);
+router.post('/create-product/:id_product', createProductLazada);
+router.put('/update-product/:id_product', updateProductLazada);
 
 module.exports = router;
