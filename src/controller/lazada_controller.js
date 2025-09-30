@@ -158,8 +158,7 @@ const createProductLazada = async (req, res) => {
 
         // 1️⃣ Ambil token Lazada
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token)
-            return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
+        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
         const { access_token } = lazadaData;
 
         // 2️⃣ Ambil data produk + stok
@@ -210,30 +209,37 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // 4️⃣ Persiapkan query params untuk signing (ALPHABETICAL)
-        const apiPath = "/product/create";
-        const timestamp = Date.now();
-        const signParams = { access_token, app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", timestamp };
+        // 4️⃣ Generate timestamp integer
+        const timestamp = Math.floor(Date.now() / 1000);
 
-        // 5️⃣ Generate signature
-        const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
+        // 5️⃣ Query params untuk signing (ALPHABETICAL)
+        const signParams = {
+            access_token,
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp
+        };
 
-        // 6️⃣ Buat URL final
+        // 6️⃣ Generate signature
+        const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
+
+        // 7️⃣ Buat URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
-        const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
+        const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
 
-        // 7️⃣ Body HARUS form-urlencoded (payload)
+        // 8️⃣ Body HARUS form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        // 8️⃣ Request ke Lazada
-        const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        console.log("📦 Request Lazada:", { url, body });
 
-        // 9️⃣ Update stok dengan id_product_lazada
+        // 9️⃣ Request ke Lazada
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
+
+        // 10️⃣ Update stok dengan id_product_lazada
         const itemId = response.data?.data?.item_id;
-        if (itemId) await Stok.update(
-            { id_product_lazada: itemId },
-            { where: { id_stok: stokTerpilih.id_stok } }
-        );
+        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
 
         return res.status(201).json({
             success: true,
