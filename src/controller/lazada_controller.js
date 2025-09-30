@@ -126,9 +126,10 @@ async function uploadImageToLazada(base64Image) {
     const API_PATH = "/image/upload";
     const timestamp = Date.now().toString();
 
+    // Parameter query untuk sign (urut alfabet)
     const params = {
-        app_key: process.env.LAZADA_APP_KEY,
         access_token: lazadaData.access_token,
+        app_key: process.env.LAZADA_APP_KEY,
         sign_method: "sha256",
         timestamp
     };
@@ -136,20 +137,18 @@ async function uploadImageToLazada(base64Image) {
     const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
     params.sign = sign;
 
-    const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
-    const body = new URLSearchParams({ image: base64Image }).toString();
+    const queryString = new URLSearchParams(params).toString();
+    const url = `https://api.lazada.co.id/rest${API_PATH}?${queryString}`;
 
     try {
-        const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        const response = await axios.post(url, base64Image, {
+            headers: { "Content-Type": "application/octet-stream" } // image sebagai raw body
         });
 
         if (!response.data?.data?.image?.hash_code) {
-            // return semua detail supaya mudah debug
             throw {
                 message: "Gagal upload gambar ke Lazada",
                 requestUrl: url,
-                requestBody: body,
                 usedSign: sign,
                 responseData: response.data
             };
