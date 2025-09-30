@@ -8,12 +8,13 @@ const FormData = require("form-data");
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(apiPath, params, appSecret) {
-    // Semua value dijadikan string
-    const sortedKeys = Object.keys(params).sort();
-    const baseString = apiPath + sortedKeys.map(k => `${k}${params[k]}`).join('');
+function generateSign(path, params, appSecret) {
+    // 1. Urutkan params secara alphabet
+    const sorted = Object.keys(params).sort().map(key => key + params[key]).join('');
+    const baseString = path + sorted;
     return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
 }
+
 /**
  * Generate Login URL Lazada
  */
