@@ -222,7 +222,7 @@ const createProductLazada = async (req, res) => {
 `.trim();
 
         const apiPath = "/product/create";
-        const timestamp = Math.floor(Date.now() / 1000); // ✅ dalam detik
+        const timestamp = Date.now(); // 13 digit ms, Lazada expect ini
 
         // === Params untuk sign (tanpa payload) ===
         const signParams = {
@@ -247,6 +247,8 @@ const createProductLazada = async (req, res) => {
 
         // === Body tetap payload ===
         const body = new URLSearchParams({ payload }).toString();
+
+        console.log("📦 Lazada Create Product Request:", { url, body: payload });
 
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
