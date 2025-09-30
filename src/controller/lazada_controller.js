@@ -138,7 +138,7 @@ const createProductLazada = async (req, res) => {
 
         const access_token = lazadaData.access_token;
 
-        // 2️⃣ Ambil product lokal
+        // 2️⃣ Ambil product lokal + stok
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }]
@@ -150,7 +150,14 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: "Stok tidak ditemukan" });
 
-        // 3️⃣ Buat payload JSON
+        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar" });
+
+        // 3️⃣ Convert BLOB ke base64
+        const imageBase64 = Buffer.isBuffer(product.gambar_product)
+            ? product.gambar_product.toString('base64')
+            : Buffer.from(product.gambar_product).toString('base64');
+
+        // 4️⃣ Buat payload JSON
         const payload = {
             Request: {
                 Product: {
@@ -174,12 +181,13 @@ const createProductLazada = async (req, res) => {
                             }
                         ]
                     },
-                    Images: { Image: [product.gambar_product] }
+                    // Lazada menerima format data:image/jpeg;base64,...
+                    Images: { Image: [`data:image/jpeg;base64,${imageBase64}`] }
                 }
             }
         };
 
-        // 4️⃣ Query params untuk sign
+        // 5️⃣ Query params untuk sign
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const signParams = { app_key: process.env.LAZADA_APP_KEY, access_token, sign_method: "sha256", timestamp };
@@ -188,10 +196,10 @@ const createProductLazada = async (req, res) => {
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // 5️⃣ Body sebagai x-www-form-urlencoded
+        // 6️⃣ POST body sebagai x-www-form-urlencoded
         const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
 
-        // Debug: tampilkan semua info penting
+        // Debug info lengkap
         console.log("📦 Lazada Create Product Debug:");
         console.log("URL:", url);
         console.log("Body:", body);
@@ -199,26 +207,22 @@ const createProductLazada = async (req, res) => {
         console.log("Sign Params:", signParams);
         console.log("Generated Sign:", sign);
 
-        // 6️⃣ POST request
+        // 7️⃣ POST request
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
 
-        // 7️⃣ Update stok lokal
+        // 8️⃣ Update stok lokal
         const itemId = response.data?.data?.item_id;
-        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        if (itemId) {
+            await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        }
 
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
             lazada_response: response.data,
-            debug: {
-                url,
-                body,
-                payload,
-                signParams,
-                generatedSign: sign
-            },
+            debug: { url, body, payload, signParams, generatedSign: sign },
             updated_stock: {
                 id_stok: stokTerpilih.id_stok,
                 satuan: stokTerpilih.satuan,
