@@ -17,7 +17,6 @@ function generateSign(apiPath, params, appSecret) {
         .toUpperCase();
 }
 
-
 /**
  * Generate Login URL Lazada
  */
@@ -241,16 +240,8 @@ const createProductLazada = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
         // === Body harus form-urlencoded ===
-        const body = new URLSearchParams({ payload }).toString();
+        const body = `payload=${encodeURIComponent(payload)}`;
 
-        // === Debug log untuk cek masalah ===
-        console.log("🔑 BASE STRING SIGN:",
-            apiPath + Object.keys(signParams).sort().map(k => `${k}${signParams[k]}`).join("")
-        );
-        console.log("✅ SIGNATURE:", sign);
-        console.log("📦 Lazada Create Product Request:", { url, body: payload });
-
-        // === Request ke Lazada ===
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
