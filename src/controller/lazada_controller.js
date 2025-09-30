@@ -205,9 +205,9 @@ const createProductLazada = async (req, res) => {
 </Request>`.trim();
 
         // 4️⃣ Timestamp UTC (detik)
-        const timestamp = Math.floor(Date.now() / 1000);
+        const timestamp = Math.floor(new Date().getTime() / 1000);
 
-        // 5️⃣ Sign params
+        // 5️⃣ Sign params (alphabetical)
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -224,6 +224,9 @@ const createProductLazada = async (req, res) => {
 
         // 8️⃣ Body form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
+
+        // 🔹 Debug log (cek timestamp & sign)
+        console.log("📦 Lazada Request Debug:", { timestamp, sign, url, payloadPreview: payload.substring(0, 200) });
 
         // 9️⃣ POST request ke Lazada
         const response = await axios.post(url, body, {
@@ -253,6 +256,7 @@ const createProductLazada = async (req, res) => {
         });
 
     } catch (err) {
+        console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
             error: err.response?.data || err.message,
             message: "Gagal menambahkan produk ke Lazada."
