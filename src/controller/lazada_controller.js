@@ -196,7 +196,7 @@ const createProductLazada = async (req, res) => {
     <PrimaryCategory>${category_id}</PrimaryCategory>
     <Attributes>
       <name><![CDATA[${product.nama_product}]]></name>
-      <short_description><![CDATA[${product.deskripsi_product || "Deskripsi tidak tersedia"}]]></short_description>
+      <short_description><![CDATA[<p>${product.deskripsi_product || "Deskripsi tidak tersedia"}</p>]]></short_description>
       <brand>${brand}</brand>
     </Attributes>
     <Skus>
@@ -208,13 +208,14 @@ const createProductLazada = async (req, res) => {
         <package_width>10</package_width>
         <package_height>10</package_height>
         <package_weight>0.5</package_weight>
-        <Images>
-          <Image>${product.gambar_product}</Image>
-        </Images>
       </Sku>
     </Skus>
+    <Images>
+      <Image>${product.gambar_product}</Image>
+    </Images>
   </Product>
 </Request>`.trim();
+
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
