@@ -205,7 +205,8 @@ const createProductLazada = async (req, res) => {
 </Request>`.trim();
 
         // 4️⃣ Timestamp UTC (detik)
-        const timestamp = Math.floor(Date.now() / 1000);
+        // 4️⃣ Timestamp UTC (detik)
+        const timestamp = Math.floor(Date.now() / 1000); // <-- gunakan detik, bukan milidetik
 
         // 5️⃣ Sign params (alphabetical)
         const signParams = {
@@ -217,6 +218,7 @@ const createProductLazada = async (req, res) => {
 
         // 6️⃣ Generate signature (payload TIDAK masuk)
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
+
 
         // 7️⃣ URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
