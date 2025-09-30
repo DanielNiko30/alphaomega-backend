@@ -205,7 +205,9 @@ const createProductLazada = async (req, res) => {
 </Request>`.trim();
 
         // 4️⃣ Timestamp UTC (detik)
-        const timestamp = Math.floor(new Date().getTime() / 1000);
+        // Timestamp dalam MILIDETIK UTC
+        const timestamp = Date.now();
+
 
         // 5️⃣ Sign params (alphabetical)
         const signParams = {
