@@ -206,10 +206,7 @@ const createProductLazada = async (req, res) => {
 
         // 4️⃣ Timestamp UTC (detik)
         // Timestamp dalam MILIDETIK UTC
-        const timestamp = Date.now();
-
-
-        // 5️⃣ Sign params (alphabetical)
+        const timestamp = Date.now(); // MILIDETIK
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -217,23 +214,21 @@ const createProductLazada = async (req, res) => {
             timestamp
         };
 
-        // 6️⃣ Generate signature
+        // Generate signature -> HANYA pakai params di atas
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
 
-        // 7️⃣ URL final
+        // URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
 
-        // 8️⃣ Body form-urlencoded
+        // Body payload form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        // 🔹 Debug log (cek timestamp & sign)
-        console.log("📦 Lazada Request Debug:", { timestamp, sign, url, payloadPreview: payload.substring(0, 200) });
-
-        // 9️⃣ POST request ke Lazada
-        const response = await axios.post(url, body, {
+        // POST
+        await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
+
 
         // 🔟 Update stok lokal jika berhasil
         const itemId = response.data?.data?.item_id;
