@@ -193,52 +193,48 @@ const createProductLazada = async (req, res) => {
         const payload = `
 <Request>
   <Product>
-    <PrimaryCategory>18469</PrimaryCategory>
+    <PrimaryCategory>${category_id}</PrimaryCategory>
     <Attributes>
-      <name><![CDATA[Nama Produk Uji Coba]]></name>
-      <short_description><![CDATA[<p>Deskripsi produk uji coba</p>]]></short_description>
-      <brand>No Brand</brand>
+      <name><![CDATA[${product.nama_product}]]></name>
+      <short_description><![CDATA[${product.deskripsi_product || "Deskripsi tidak tersedia"}]]></short_description>
+      <brand>${brand}</brand>
+      <Berat_Bersih>${stokTerpilih.harga}</Berat_Bersih>
     </Attributes>
     <Skus>
       <Sku>
-        <SellerSku>SKU-12345</SellerSku>
-        <quantity>10</quantity>
-        <price>50000</price>
+        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
+        <quantity>${stokTerpilih.stok}</quantity>
+        <price>${stokTerpilih.harga}</price>
         <package_length>20</package_length>
         <package_width>15</package_width>
         <package_height>10</package_height>
         <package_weight>1.2</package_weight>
+        <Images>
+          <Image>${product.gambar_product}</Image>
+        </Images>
       </Sku>
     </Skus>
-    <Images>
-      <Image>https://example.com/image.jpg</Image>
-    </Images>
   </Product>
 </Request>
 `.trim();
 
-
         const apiPath = "/product/create";
         const timestamp = Date.now();
 
-        // === Params untuk sign ===
+        // === Params untuk sign (JANGAN masukkan payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp,
-            payload, // penting masuk ke signing
         };
 
         // === Generate tanda tangan ===
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // === URL dengan query string TANPA payload ===
+        // === URL dengan query string ===
         const queryString = new URLSearchParams({
-            access_token,
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp,
+            ...signParams,
             sign,
         }).toString();
 
@@ -249,7 +245,7 @@ const createProductLazada = async (req, res) => {
 
         console.log("📦 Lazada Create Product Request:", {
             url,
-            body: payload,
+            payload,
         });
 
         const response = await axios.post(url, body, {
