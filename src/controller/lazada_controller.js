@@ -9,15 +9,14 @@ const FormData = require("form-data");
  * Helper: Generate Lazada Signature
  */
 function generateSign(path, params, appSecret) {
-    // 1. Urutkan key params alphabet
     const sortedKeys = Object.keys(params).sort();
     let baseString = path;
     sortedKeys.forEach(key => {
         baseString += key + params[key];
     });
-    // 2. HMAC SHA256
     return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
 }
+
 
 
 /**
@@ -215,7 +214,7 @@ const createProductLazada = async (req, res) => {
         };
 
         const apiPath = "/product/create";
-        const timestamp = Date.now().toString();
+        const timestamp = Math.floor(Date.now() / 1000).toString();
         const signParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: lazadaData.access_token,
