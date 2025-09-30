@@ -205,10 +205,9 @@ const createProductLazada = async (req, res) => {
 </Request>`.trim();
 
         // 4️⃣ Timestamp UTC (detik)
-        // 4️⃣ Timestamp UTC (detik)
-        const timestamp = Math.floor(Date.now() / 1000); // <-- gunakan detik, bukan milidetik
+        const timestamp = Math.floor(Date.now() / 1000);
 
-        // 5️⃣ Sign params (alphabetical)
+        // 5️⃣ Sign params
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -216,9 +215,8 @@ const createProductLazada = async (req, res) => {
             timestamp
         };
 
-        // 6️⃣ Generate signature (payload TIDAK masuk)
+        // 6️⃣ Generate signature
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
-
 
         // 7️⃣ URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
@@ -228,13 +226,16 @@ const createProductLazada = async (req, res) => {
         const body = `payload=${encodeURIComponent(payload)}`;
 
         // 9️⃣ POST request ke Lazada
-        const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
 
-        // 1️⃣0️⃣ Update stok lokal jika berhasil
+        // 🔟 Update stok lokal jika berhasil
         const itemId = response.data?.data?.item_id;
         if (itemId)
             await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
 
+        // ✅ Return minimal info
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
