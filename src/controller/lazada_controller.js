@@ -193,29 +193,29 @@ const createProductLazada = async (req, res) => {
         const payload = `
 <Request>
   <Product>
-    <PrimaryCategory>${category_id}</PrimaryCategory>
+    <PrimaryCategory>18469</PrimaryCategory>
     <Attributes>
-      <name><![CDATA[${product.nama_product}]]></name>
-      <short_description><![CDATA[<p>${product.deskripsi_product || "Deskripsi tidak tersedia"}</p>]]></short_description>
-      <brand>${brand}</brand>
+      <name><![CDATA[Nama Produk Uji Coba]]></name>
+      <short_description><![CDATA[<p>Deskripsi produk uji coba</p>]]></short_description>
+      <brand>No Brand</brand>
     </Attributes>
     <Skus>
       <Sku>
-        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
-        <quantity>${stokTerpilih.stok}</quantity>
-        <price>${stokTerpilih.harga}</price>
-        <package_length>10</package_length>
-        <package_width>10</package_width>
+        <SellerSku>SKU-12345</SellerSku>
+        <quantity>10</quantity>
+        <price>50000</price>
+        <package_length>20</package_length>
+        <package_width>15</package_width>
         <package_height>10</package_height>
-        <package_weight>0.5</package_weight>
+        <package_weight>1.2</package_weight>
       </Sku>
     </Skus>
     <Images>
-      <Image>${product.gambar_product}</Image>
+      <Image>https://example.com/image.jpg</Image>
     </Images>
   </Product>
-</Request>`.trim();
-
+</Request>
+`.trim();
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
