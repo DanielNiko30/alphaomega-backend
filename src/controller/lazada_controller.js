@@ -259,6 +259,7 @@ const createProductLazada = async (req, res) => {
             message: "Gagal menambahkan produk ke Lazada."
         });
     }
+
 };
 
 /**
