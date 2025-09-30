@@ -314,10 +314,77 @@ const updateProductLazada = async (req, res) => {
     }
 };
 
+const getCategoryTree = async (req, res) => {
+    try {
+        const CLIENT_ID = process.env.LAZADA_APP_KEY;
+        const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+        const API_PATH = "/category/tree/get";
+        const TIMESTAMP = Date.now();
+
+        const lazadaData = await Lazada.findOne();
+        const params = {
+            app_key: CLIENT_ID,
+            sign_method: "sha256",
+            timestamp: TIMESTAMP,
+            access_token: lazadaData?.access_token || "",
+            language_code: "id_ID"
+        };
+
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
+
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+        const response = await axios.get(url);
+
+        return res.json(response.data);
+    } catch (err) {
+        console.error("❌ Lazada Get Category Tree Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
+};
+
+/**
+ * Get Brands (paged)
+ */
+const getBrands = async (req, res) => {
+    try {
+        const CLIENT_ID = process.env.LAZADA_APP_KEY;
+        const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+        const API_PATH = "/category/brands/query";
+        const TIMESTAMP = Date.now();
+
+        const { startRow = 0, pageSize = 50 } = req.query;
+
+        const lazadaData = await Lazada.findOne();
+        const params = {
+            app_key: CLIENT_ID,
+            sign_method: "sha256",
+            timestamp: TIMESTAMP,
+            access_token: lazadaData?.access_token || "",
+            startRow,
+            pageSize
+        };
+
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
+
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+        const response = await axios.get(url);
+
+        return res.json(response.data);
+    } catch (err) {
+        console.error("❌ Lazada Get Brands Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
+};
+
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
     refreshToken,
     createProductLazada,
-    updateProductLazada
+    updateProductLazada,
+    getCategoryTree,
+    getBrands
 };
