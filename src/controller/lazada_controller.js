@@ -176,7 +176,7 @@ const createProductLazada = async (req, res) => {
         if (!stokTerpilih)
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // 3️⃣ Buat payload XML
+        // 3️⃣ Siapkan payload XML
         const payload = `
 <Request>
   <Product>
@@ -204,10 +204,10 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // 4️⃣ Timestamp UTC (detik) — penting untuk Lazada
+        // 4️⃣ Timestamp UTC (detik)
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // 5️⃣ Prepare sign params (alphabetical order)
+        // 5️⃣ Sign params (alphabetical)
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -215,14 +215,14 @@ const createProductLazada = async (req, res) => {
             timestamp
         };
 
-        // 6️⃣ Generate signature
+        // 6️⃣ Generate signature (payload TIDAK masuk)
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
 
         // 7️⃣ URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
 
-        // 8️⃣ Body HARUS form-urlencoded
+        // 8️⃣ Body form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
         // 9️⃣ POST request ke Lazada
@@ -230,7 +230,8 @@ const createProductLazada = async (req, res) => {
 
         // 1️⃣0️⃣ Update stok lokal jika berhasil
         const itemId = response.data?.data?.item_id;
-        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        if (itemId)
+            await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
 
         return res.status(201).json({
             success: true,
