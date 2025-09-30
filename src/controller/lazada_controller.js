@@ -132,35 +132,32 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, brand_name, item_sku, selected_unit, weight, dimension, attributes } = req.body;
 
-        // Ambil token Lazada
+        // 1️⃣ Ambil token
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token)
-            return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
-        const { access_token } = lazadaData;
+        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
 
-        // Ambil produk lokal + stok
-        const product = await Product.findOne({
-            where: { id_product },
-            include: [{ model: Stok, as: "stok" }]
-        });
+        const access_token = lazadaData.access_token;
+
+        // 2️⃣ Ambil product lokal
+        const product = await Product.findOne({ where: { id_product }, include: [{ model: Stok, as: "stok" }] });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
-        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
 
         const stokTerpilih = selected_unit
             ? product.stok.find(s => s.satuan === selected_unit)
             : product.stok[0];
-        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // Buat JSON payload sesuai body terbaru Lazada
+        if (!stokTerpilih) return res.status(400).json({ error: "Stok tidak ditemukan" });
+
+        // 3️⃣ Payload JSON (body)
         const payload = {
             Request: {
                 Product: {
-                    PrimaryCategory: category_id.toString(),
+                    PrimaryCategory: category_id,
                     Attributes: {
                         name: product.nama_product || "Produk Tanpa Nama",
                         brand: brand_name || "No Brand",
-                        ...attributes,
-                        net_weight: weight || 1
+                        net_weight: weight || 1,
+                        ...attributes
                     },
                     Skus: {
                         Sku: [
@@ -175,59 +172,32 @@ const createProductLazada = async (req, res) => {
                             }
                         ]
                     },
-                    Images: {
-                        Image: [product.gambar_product]
-                    }
+                    Images: { Image: [product.gambar_product] }
                 }
             }
         };
 
-        // Timestamp milidetik UTC
-        const timestamp = Date.now();
+        // 4️⃣ Query params untuk sign (tanpa payload)
         const apiPath = "/product/create";
-
-        // Query params untuk signature (jangan sertakan payload)
-        const signParams = {
-            access_token,
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp
-        };
-
-        // Generate signature
+        const timestamp = Date.now();
+        const signParams = { app_key: process.env.LAZADA_APP_KEY, access_token, sign_method: "sha256", timestamp };
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // URL final
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign }).toString()}`;
+        const queryString = new URLSearchParams({ ...signParams, sign }).toString();
+        const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // POST request JSON
-        const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" }
-        });
+        // 5️⃣ POST JSON (Content-Type: application/json)
+        const response = await axios.post(url, payload, { headers: { "Content-Type": "application/json" } });
 
-        // Update stok lokal jika berhasil
+        // 6️⃣ Update stok lokal
         const itemId = response.data?.data?.item_id;
-        if (itemId) {
-            await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
-        }
+        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
 
-        return res.status(201).json({
-            success: true,
-            message: "Produk berhasil ditambahkan ke Lazada",
-            lazada_response: response.data,
-            updated_stock: {
-                id_stok: stokTerpilih.id_stok,
-                satuan: stokTerpilih.satuan,
-                id_product_lazada: itemId || null
-            }
-        });
+        return res.status(201).json({ success: true, message: "Produk berhasil ditambahkan ke Lazada", lazada_response: response.data });
 
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({
-            error: err.response?.data || err.message,
-            message: "Gagal menambahkan produk ke Lazada."
-        });
+        return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
 
