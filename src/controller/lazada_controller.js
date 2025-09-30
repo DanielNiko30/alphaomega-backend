@@ -8,14 +8,17 @@ const { Stok } = require('../model/stok_model');
  * Helper: Generate Lazada Signature
  */
 function generateSign(apiPath, params, appSecret) {
-    const sortedKeys = Object.keys(params).sort();
-    const baseString = apiPath + sortedKeys.map(k => `${k}${String(params[k])}`).join("");
-    return crypto
-        .createHmac("sha256", appSecret)
-        .update(baseString)
-        .digest("hex")
-        .toUpperCase();
+    // 1. Urutkan key alfabet
+    const keys = Object.keys(params).sort();
+    const baseString = apiPath + keys.map(k => k + params[k]).join("");
+
+    // 2. HMAC SHA256
+    const crypto = require("crypto");
+    const sign = crypto.createHmac("sha256", appSecret).update(baseString).digest("hex");
+
+    return sign.toLowerCase();
 }
+
 
 /**
  * Generate Login URL Lazada
