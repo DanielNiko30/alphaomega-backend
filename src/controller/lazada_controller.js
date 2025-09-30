@@ -187,32 +187,34 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
 
+        // --- XML Payload ---
         const payload = `
-        <Request>
-            <Product>
-                <PrimaryCategory>${category_id}</PrimaryCategory>
-                <Attributes>
-                    <name>${product.nama_product}</name>
-                    <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
-                    <brand>${brand}</brand>
-                </Attributes>
-                <Skus>
-                    <Sku>
-                        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
-                        <quantity>${stokTerpilih.stok}</quantity>
-                        <price>${stokTerpilih.harga}</price>
-                        <package_length>10</package_length>
-                        <package_width>10</package_width>
-                        <package_height>10</package_height>
-                        <package_weight>0.5</package_weight>
-                        <Images>
-                            <Image>${product.gambar_product}</Image>
-                        </Images>
-                    </Sku>
-                </Skus>
-            </Product>
-        </Request>`.trim();
+<Request>
+  <Product>
+    <PrimaryCategory>${category_id}</PrimaryCategory>
+    <Attributes>
+      <name>${product.nama_product}</name>
+      <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
+      <brand>${brand}</brand>
+    </Attributes>
+    <Skus>
+      <Sku>
+        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
+        <quantity>${stokTerpilih.stok}</quantity>
+        <price>${stokTerpilih.harga}</price>
+        <package_length>10</package_length>
+        <package_width>10</package_width>
+        <package_height>10</package_height>
+        <package_weight>0.5</package_weight>
+        <Images>
+          <Image>${product.gambar_product}</Image>
+        </Images>
+      </Sku>
+    </Skus>
+  </Product>
+</Request>`.trim();
 
+        // --- Sign hanya pakai query params (tanpa payload) ---
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const params = {
@@ -225,14 +227,15 @@ const createProductLazada = async (req, res) => {
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
         params.sign = sign;
 
+        // --- URL dengan query string ---
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
+        // --- Post dengan payload di body (encoded) ---
         const response = await axios.post(
             url,
-            new URLSearchParams({ payload }), // biar key=payload, value=XML raw
+            `payload=${encodeURIComponent(payload)}`,
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
-
 
         const itemId = response.data?.data?.item_id;
         if (itemId) {
@@ -255,6 +258,7 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
+
 /**
  * Update Product Lazada
  */
@@ -308,9 +312,12 @@ const updateProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
-        const updateResponse = await axios.post(url, `payload=${encodeURIComponent(payload)}`, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" }
-        });
+        const updateResponse = await axios.post(
+            url,
+            new URLSearchParams({ payload }),  // ⬅️ ini aja
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+
 
         return res.status(200).json({
             success: true,
