@@ -156,14 +156,11 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, brand_name, item_sku, selected_unit, dimension, weight } = req.body;
 
-        // 1️⃣ Ambil token Lazada
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) {
+        if (!lazadaData?.access_token)
             return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
-        }
         const { access_token } = lazadaData;
 
-        // 2️⃣ Ambil data produk + stok
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }]
@@ -176,7 +173,6 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // 3️⃣ Buat payload XML
         const namaProduk = product.nama_product || "Produk Tanpa Nama";
         const deskripsiProduk = product.deskripsi_product || "Deskripsi tidak tersedia";
         const brandFinal = brand_name || "No Brand";
@@ -211,35 +207,23 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // 4️⃣ Generate timestamp & sign
         const apiPath = "/product/create";
-        const timestamp = Math.floor(Date.now() / 1000); // detik UTC
+        const timestamp = Math.floor(Date.now() / 1000);
         const signParams = { access_token, app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", timestamp };
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // 5️⃣ URL akhir
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
-
-        // 6️⃣ Body form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        // 7️⃣ RETURN semua data untuk debug
+        // Kembalikan hanya info penting untuk debug
         return res.status(200).json({
             success: true,
-            message: "Data siap dikirim ke Lazada (debug mode)",
-            product: {
-                id_product: product.id_product,
-                nama_product: namaProduk,
-                deskripsi: deskripsiProduk,
-                gambar: product.gambar_product,
-                stok: stokTerpilih
-            },
-            payload,
+            message: "Data siap untuk request Lazada",
             timestamp,
             sign,
             url,
-            body
+            payload_preview: payload.substring(0, 300) // hanya 300 karakter pertama
         });
 
     } catch (err) {
