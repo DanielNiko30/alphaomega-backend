@@ -23,21 +23,6 @@ function generateSign(path, params, appSecret) {
 
 }
 
-function generateSignDebug(path, params, appSecret) {
-    const sortedKeys = Object.keys(params).sort();
-    let baseString = path;
-    for (const key of sortedKeys) {
-        baseString += key + params[key];
-    }
-    const sign = crypto
-        .createHmac("sha256", appSecret)
-        .update(baseString, "utf8")
-        .digest("hex"); // jangan .toUpperCase() kecuali Lazada minta uppercase
-
-    return { sign, baseString };
-}
-
-
 /**
  * Generate Login URL Lazada
  */
@@ -196,7 +181,6 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         }
 
-        // pilih stok
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
@@ -204,86 +188,64 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
 
-        // build XML payload dari JSON input
         const payload = `
-<Request>
-  <Product>
-    <PrimaryCategory>${category_id}</PrimaryCategory>
-    <Attributes>
-      <name>${product.nama_product}</name>
-      <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
-      <brand>${brand_name}</brand>
-    </Attributes>
-    <Skus>
-      <Sku>
-        <SellerSku>${item_sku || `SKU-${Date.now()}`}</SellerSku>
-        <quantity>${stokTerpilih.stok}</quantity>
-        <price>${stokTerpilih.harga}</price>
-        <package_length>${dimension.length}</package_length>
-        <package_width>${dimension.width}</package_width>
-        <package_height>${dimension.height}</package_height>
-        <package_weight>${weight}</package_weight>
-        <Images>
-          <Image>${product.gambar_product}</Image>
-        </Images>
-      </Sku>
-    </Skus>
-  </Product>
-</Request>`.trim();
+        <Request>
+            <Product>
+                <PrimaryCategory>${category_id}</PrimaryCategory>
+                <Attributes>
+                    <name>${product.nama_product}</name>
+                    <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
+                    <brand>${brand_name}</brand>
+                </Attributes>
+                <Skus>
+                    <Sku>
+                        <SellerSku>${item_sku || `SKU-${Date.now()}`}</SellerSku>
+                        <quantity>${stokTerpilih.stok}</quantity>
+                        <price>${stokTerpilih.harga}</price>
+                        <package_length>${dimension.length}</package_length>
+                        <package_width>${dimension.width}</package_width>
+                        <package_height>${dimension.height}</package_height>
+                        <package_weight>${weight}</package_weight>
+                        <Images>
+                            <Image>${product.gambar_product}</Image>
+                        </Images>
+                    </Sku>
+                </Skus>
+            </Product>
+        </Request>`.trim();
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
-
-        // params yang dipakai untuk generate sign (TANPA payload)
-        const paramsForSign = {
+        const params = {
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             access_token,
             timestamp,
         };
 
-        // generate sign + baseString (debuggable)
-        const { sign, baseString } = generateSignDebug(apiPath, paramsForSign, process.env.LAZADA_APP_SECRET);
+        // 🔎 Debug semua sebelum generate sign
+        console.log("=== DEBUG LAZADA CREATE PRODUCT ===");
+        console.log("API Path:", apiPath);
+        console.log("Params (before sign):", params);
+        console.log("Payload XML:", payload);
 
-        // final params yang dikirim di query (ikut sign)
-        const finalParams = { ...paramsForSign, sign };
+        const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
+        params.sign = sign;
 
-        // final URL (yang akan kita panggil)
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(finalParams).toString()}`;
+        console.log("Generated Sign:", sign);
+        console.log("Final Params:", params);
 
-        // body yang dikirim (form urlencoded). Gunakan .toString() agar jelas apa yang dikirim
-        const requestBody = new URLSearchParams({ payload }).toString();
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
+        console.log("Final Request URL:", url);
 
-        // kirim request
-        let response;
-        try {
-            response = await axios.post(url, requestBody, {
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                timeout: 30000
-            });
-        } catch (err) {
-            // ambil body response Lazada (jika ada)
-            const lazadaError = err.response?.data || null;
+        const response = await axios.post(
+            url,
+            new URLSearchParams({ payload }),
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
 
-            // kirim balik detail debug di response agar bisa dianalisa
-            return res.status(500).json({
-                success: false,
-                message: "Lazada Create Product Error (see debug)",
-                error: lazadaError || err.message,
-                debug: {
-                    apiPath,
-                    paramsForSign,           // params yang dipakai untuk sign (sebelum sign ditambahkan)
-                    baseString,              // string yang di-hash (important for debug)
-                    sign,                    // signature yang dihasilkan
-                    finalParams,             // params final yang dikirim di URL (app_key,timestamp,access_token,sign_method,sign)
-                    requestUrl: url,         // URL lengkap
-                    requestBody,             // body (payload) yang dikirim ke Lazada
-                    // jangan menampilkan APP_SECRET
-                }
-            });
-        }
+        console.log("Lazada Response Data:", response.data);
 
-        // jika sukses, simpan id product lazada di stok
         const itemId = response.data?.data?.item_id;
         if (itemId) {
             await Stok.update(
@@ -292,18 +254,16 @@ const createProductLazada = async (req, res) => {
             );
         }
 
-        // sukses -> tampilkan lazada_response juga
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
-            lazada_response: response.data
+            lazada_response: response.data,
         });
     } catch (err) {
-        // error unexpected
+        console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
-            success: false,
-            message: "Unexpected server error",
-            error: err.message
+            error: err.response?.data || err.message,
+            message: "Gagal menambahkan produk ke Lazada.",
         });
     }
 };
