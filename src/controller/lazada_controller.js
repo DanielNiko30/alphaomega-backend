@@ -155,6 +155,9 @@ async function uploadImageToLazada(base64Image) {
     return response.data.data.image;
 }
 
+/**
+ * Create Product Lazada
+ */
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
@@ -176,8 +179,8 @@ const createProductLazada = async (req, res) => {
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar" });
 
         const imageBase64 = Buffer.isBuffer(product.gambar_product)
-            ? product.gambar_product.toString('base64')
-            : Buffer.from(product.gambar_product).toString('base64');
+            ? product.gambar_product.toString("base64")
+            : Buffer.from(product.gambar_product).toString("base64");
 
         // Upload image ke Lazada
         const uploadedImage = await uploadImageToLazada(imageBase64);
@@ -221,10 +224,10 @@ const createProductLazada = async (req, res) => {
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign }).toString()}`;
-        const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
 
         try {
-            const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+            // Gunakan JSON body, bukan x-www-form-urlencoded
+            const response = await axios.post(url, payload, { headers: { "Content-Type": "application/json" } });
 
             const itemId = response.data?.data?.item_id;
             if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
@@ -241,7 +244,7 @@ const createProductLazada = async (req, res) => {
                 },
                 debug: {
                     requestUrl: url,
-                    requestBody: body,
+                    requestBody: payload,
                     usedSign: sign
                 }
             });
@@ -251,7 +254,7 @@ const createProductLazada = async (req, res) => {
                 error: err.response?.data || err.message,
                 debug: {
                     requestUrl: url,
-                    requestBody: body,
+                    requestBody: payload,
                     usedSign: sign
                 }
             });
