@@ -255,11 +255,10 @@ const createProductLazada = async (req, res) => {
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
-            error: err.response?.data || err.message,
+            error: err.response?.data || err.message || String(err),
             message: "Gagal menambahkan produk ke Lazada."
         });
     }
-
 };
 
 /**
