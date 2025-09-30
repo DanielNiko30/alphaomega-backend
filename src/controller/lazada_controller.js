@@ -218,6 +218,7 @@ const createProductLazada = async (req, res) => {
         const params = {
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
+            access_token,
             timestamp,
         };
 
