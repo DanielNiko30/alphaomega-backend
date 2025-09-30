@@ -161,7 +161,14 @@ const refreshToken = async (req, res) => {
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { category_id, brand = "No Brand", seller_sku, selected_unit } = req.body;
+        const {
+            category_id,
+            brand_name = "No Brand",
+            item_sku,
+            selected_unit,
+            weight = 0.5,
+            dimension = { length: 10, width: 10, height: 10 }
+        } = req.body;
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
@@ -179,6 +186,7 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         }
 
+        // ambil stok berdasarkan satuan
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
@@ -187,34 +195,34 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
 
-        // --- XML Payload ---
+        // ✅ XML payload Lazada
         const payload = `
-<Request>
-  <Product>
-    <PrimaryCategory>${category_id}</PrimaryCategory>
-    <Attributes>
-      <name>${product.nama_product}</name>
-      <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
-      <brand>${brand}</brand>
-    </Attributes>
-    <Skus>
-      <Sku>
-        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
-        <quantity>${stokTerpilih.stok}</quantity>
-        <price>${stokTerpilih.harga}</price>
-        <package_length>10</package_length>
-        <package_width>10</package_width>
-        <package_height>10</package_height>
-        <package_weight>0.5</package_weight>
-        <Images>
-          <Image>${product.gambar_product}</Image>
-        </Images>
-      </Sku>
-    </Skus>
-  </Product>
-</Request>`.trim();
+        <Request>
+            <Product>
+                <PrimaryCategory>${category_id}</PrimaryCategory>
+                <Attributes>
+                    <name>${product.nama_product}</name>
+                    <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
+                    <brand>${brand_name}</brand>
+                </Attributes>
+                <Skus>
+                    <Sku>
+                        <SellerSku>${item_sku || `SKU-${Date.now()}`}</SellerSku>
+                        <quantity>${stokTerpilih.stok}</quantity>
+                        <price>${stokTerpilih.harga}</price>
+                        <package_length>${dimension.length}</package_length>
+                        <package_width>${dimension.width}</package_width>
+                        <package_height>${dimension.height}</package_height>
+                        <package_weight>${weight}</package_weight>
+                        <Images>
+                            <Image>${product.gambar_product}</Image>
+                        </Images>
+                    </Sku>
+                </Skus>
+            </Product>
+        </Request>`.trim();
 
-        // --- Sign hanya pakai query params (tanpa payload) ---
+        // 🔑 Generate Signature
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const params = {
@@ -227,13 +235,12 @@ const createProductLazada = async (req, res) => {
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
         params.sign = sign;
 
-        // --- URL dengan query string ---
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
-        // --- Post dengan payload di body (encoded) ---
+        // 🚀 Request ke Lazada
         const response = await axios.post(
             url,
-            `payload=${encodeURIComponent(payload)}`,
+            new URLSearchParams({ payload }),
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
 
@@ -258,6 +265,7 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
+
 
 /**
  * Update Product Lazada
