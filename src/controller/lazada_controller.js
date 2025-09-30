@@ -222,9 +222,9 @@ const createProductLazada = async (req, res) => {
 `.trim();
 
         const apiPath = "/product/create";
-        const timestamp = Date.now();
+        const timestamp = Math.floor(Date.now() / 1000); // ✅ dalam detik
 
-        // === Params untuk sign (TANPA payload) ===
+        // === Params untuk sign (tanpa payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -245,15 +245,12 @@ const createProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // === Body form-urlencoded (payload) ===
+        // === Body tetap payload ===
         const body = new URLSearchParams({ payload }).toString();
-
-        console.log("📦 Lazada Create Product Request:", { url, body: payload });
 
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
-
 
         console.log("✅ Lazada Response:", response.data);
 
