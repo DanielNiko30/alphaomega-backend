@@ -19,9 +19,10 @@ function generateSign(path, params, appSecret) {
     return crypto
         .createHmac("sha256", appSecret)
         .update(baseString, "utf8")
-        .digest("hex"); // jangan .toUpperCase()
-
+        .digest("hex")
+        .toUpperCase();
 }
+
 
 /**
  * Generate Login URL Lazada
@@ -154,17 +155,13 @@ const refreshToken = async (req, res) => {
     }
 };
 
+/**
+ * Create Product Lazada
+ */
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const {
-            category_id,
-            brand_name = "No Brand",
-            item_sku,
-            selected_unit,
-            weight = 0.5,
-            dimension = { length: 10, width: 10, height: 10 },
-        } = req.body;
+        const { category_id, brand = "No Brand", seller_sku, selected_unit } = req.body;
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
@@ -177,6 +174,7 @@ const createProductLazada = async (req, res) => {
             include: [{ model: Stok, as: "stok" }],
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
+
         if (!product.gambar_product) {
             return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         }
@@ -184,6 +182,7 @@ const createProductLazada = async (req, res) => {
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
+
         if (!stokTerpilih) {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
@@ -195,17 +194,17 @@ const createProductLazada = async (req, res) => {
                 <Attributes>
                     <name>${product.nama_product}</name>
                     <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
-                    <brand>${brand_name}</brand>
+                    <brand>${brand}</brand>
                 </Attributes>
                 <Skus>
                     <Sku>
-                        <SellerSku>${item_sku || `SKU-${Date.now()}`}</SellerSku>
+                        <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
                         <quantity>${stokTerpilih.stok}</quantity>
                         <price>${stokTerpilih.harga}</price>
-                        <package_length>${dimension.length}</package_length>
-                        <package_width>${dimension.width}</package_width>
-                        <package_height>${dimension.height}</package_height>
-                        <package_weight>${weight}</package_weight>
+                        <package_length>10</package_length>
+                        <package_width>10</package_width>
+                        <package_height>10</package_height>
+                        <package_weight>0.5</package_weight>
                         <Images>
                             <Image>${product.gambar_product}</Image>
                         </Images>
@@ -223,28 +222,16 @@ const createProductLazada = async (req, res) => {
             timestamp,
         };
 
-        // 🔎 Debug semua sebelum generate sign
-        console.log("=== DEBUG LAZADA CREATE PRODUCT ===");
-        console.log("API Path:", apiPath);
-        console.log("Params (before sign):", params);
-        console.log("Payload XML:", payload);
-
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
         params.sign = sign;
 
-        console.log("Generated Sign:", sign);
-        console.log("Final Params:", params);
-
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
-        console.log("Final Request URL:", url);
 
         const response = await axios.post(
             url,
-            new URLSearchParams({ payload }),
+            `payload=${encodeURIComponent(payload)}`,
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
-
-        console.log("Lazada Response Data:", response.data);
 
         const itemId = response.data?.data?.item_id;
         if (itemId) {
@@ -267,7 +254,6 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
-
 /**
  * Update Product Lazada
  */
@@ -321,12 +307,9 @@ const updateProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
-        const updateResponse = await axios.post(
-            url,
-            new URLSearchParams({ payload }),  // ⬅️ ini aja
-            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-        );
-
+        const updateResponse = await axios.post(url, `payload=${encodeURIComponent(payload)}`, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
 
         return res.status(200).json({
             success: true,
