@@ -19,8 +19,8 @@ function generateSign(path, params, appSecret) {
     return crypto
         .createHmac("sha256", appSecret)
         .update(baseString, "utf8")
-        .digest("hex")
-        .toUpperCase();
+        .digest("hex"); // jangan .toUpperCase()
+
 }
 
 
@@ -229,9 +229,10 @@ const createProductLazada = async (req, res) => {
 
         const response = await axios.post(
             url,
-            `payload=${encodeURIComponent(payload)}`,
+            new URLSearchParams({ payload }), // biar key=payload, value=XML raw
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
+
 
         const itemId = response.data?.data?.item_id;
         if (itemId) {
