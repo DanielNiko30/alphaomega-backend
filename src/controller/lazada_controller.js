@@ -204,7 +204,6 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // 4️⃣ Timestamp UTC (detik)
         // Timestamp dalam MILIDETIK UTC
         const timestamp = Date.now(); // MILIDETIK
         const signParams = {
@@ -224,11 +223,10 @@ const createProductLazada = async (req, res) => {
         // Body payload form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        // POST
-        await axios.post(url, body, {
+        // 9️⃣ POST request ke Lazada
+        const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
-
 
         // 🔟 Update stok lokal jika berhasil
         const itemId = response.data?.data?.item_id;
@@ -255,7 +253,7 @@ const createProductLazada = async (req, res) => {
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
-            error: err.response?.data || err.message || String(err),
+            error: err.response?.data || err.message,
             message: "Gagal menambahkan produk ke Lazada."
         });
     }
