@@ -12,15 +12,17 @@ function generateSign(path, params, appSecret) {
     let baseString = path;
 
     for (const key of sortedKeys) {
+        // penting: value harus string persis (jangan encode dulu)
         baseString += key + params[key];
     }
 
     return crypto
         .createHmac("sha256", appSecret)
-        .update(baseString)
+        .update(baseString, "utf8")
         .digest("hex")
         .toUpperCase();
 }
+
 
 /**
  * Generate Login URL Lazada
@@ -216,7 +218,6 @@ const createProductLazada = async (req, res) => {
         const params = {
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
-            access_token,
             timestamp,
         };
 
