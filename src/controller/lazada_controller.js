@@ -15,7 +15,11 @@ function generateSign(path, params, appSecret) {
         baseString += key + params[key];
     }
 
-    return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
+    return crypto
+        .createHmac("sha256", appSecret)
+        .update(baseString)
+        .digest("hex")
+        .toUpperCase();
 }
 
 /**
@@ -155,7 +159,7 @@ const refreshToken = async (req, res) => {
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { category_id, brand, seller_sku, selected_unit } = req.body;
+        const { category_id, brand = "No Brand", seller_sku, selected_unit } = req.body;
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
@@ -168,12 +172,18 @@ const createProductLazada = async (req, res) => {
             include: [{ model: Stok, as: "stok" }],
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
-        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
+
+        if (!product.gambar_product) {
+            return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
+        }
 
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
-        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+
+        if (!stokTerpilih) {
+            return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+        }
 
         const payload = `
         <Request>
@@ -181,8 +191,8 @@ const createProductLazada = async (req, res) => {
                 <PrimaryCategory>${category_id}</PrimaryCategory>
                 <Attributes>
                     <name>${product.nama_product}</name>
-                    <description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</description>
-                    <brand>${brand || "No Brand"}</brand>
+                    <short_description>${product.deskripsi_product || "Deskripsi tidak tersedia"}</short_description>
+                    <brand>${brand}</brand>
                 </Attributes>
                 <Skus>
                     <Sku>
@@ -199,24 +209,27 @@ const createProductLazada = async (req, res) => {
                     </Sku>
                 </Skus>
             </Product>
-        </Request>`;
+        </Request>`.trim();
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const params = {
             app_key: process.env.LAZADA_APP_KEY,
-            timestamp,
-            access_token,
             sign_method: "sha256",
+            access_token,
+            timestamp,
         };
+
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
         params.sign = sign;
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
-        const response = await axios.post(url, `payload=${encodeURIComponent(payload)}`, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
+        const response = await axios.post(
+            url,
+            `payload=${encodeURIComponent(payload)}`,
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
 
         const itemId = response.data?.data?.item_id;
         if (itemId) {
@@ -230,11 +243,6 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
             lazada_response: response.data,
-            updated_stock: {
-                id_stok: stokTerpilih.id_stok,
-                satuan: stokTerpilih.satuan,
-                id_product_lazada: itemId,
-            },
         });
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
@@ -244,7 +252,6 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
-
 /**
  * Update Product Lazada
  */
