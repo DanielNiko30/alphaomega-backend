@@ -130,25 +130,15 @@ const refreshToken = async () => {
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { category_id, brand_name, item_sku, selected_unit, dimension, weight } = req.body;
+        const { category_id, brand_name, item_sku, selected_unit, weight, dimension, attributes } = req.body;
 
         // Ambil token Lazada
-        let lazadaData = await Lazada.findOne();
+        const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token)
             return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
+        const { access_token } = lazadaData;
 
-        // 💡 PERBAIKAN: Hitung 'now' dalam detik HANYA SEKALI
-        const now = Math.floor(Date.now() / 1000);
-
-        // Refresh token jika hampir habis (lebih aman)
-        if (lazadaData.expires_in + lazadaData.last_updated - now < 60) {
-            // refreshToken harus mengembalikan access_token terbaru
-            const refreshedToken = await refreshToken();
-            lazadaData.access_token = refreshedToken;
-        }
-        const access_token = lazadaData.access_token;
-
-        // Ambil data produk lokal + stok
+        // Ambil produk lokal + stok
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }]
@@ -161,56 +151,58 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // Payload XML Lazada (tidak termasuk di signature)
-        const payload = `
-<Request>
-  <Product>
-    <PrimaryCategory>${category_id}</PrimaryCategory>
-    <Attributes>
-      <name><![CDATA[${product.nama_product || "Produk Tanpa Nama"}]]></name>
-      <short_description><![CDATA[<p>${product.deskripsi_product || "Deskripsi tidak tersedia"}</p>]]></short_description>
-      <brand>${brand_name || "No Brand"}</brand>
-      <net_weight>${Number(weight) || 1}</net_weight>
-    </Attributes>
-    <Skus>
-      <Sku>
-        <SellerSku>${item_sku || `SKU-${product.id_product}`}</SellerSku>
-        <quantity>${stokTerpilih.stok}</quantity>
-        <price>${stokTerpilih.harga}</price>
-        <package_length>${dimension?.length || 10}</package_length>
-        <package_width>${dimension?.width || 10}</package_width>
-        <package_height>${dimension?.height || 10}</package_height>
-        <package_weight>${Number(weight) || 1}</package_weight>
-      </Sku>
-    </Skus>
-    <Images>
-      <Image>${product.gambar_product}</Image>
-    </Images>
-  </Product>
-</Request>`.trim();
+        // Buat JSON payload sesuai body terbaru Lazada
+        const payload = {
+            Request: {
+                Product: {
+                    PrimaryCategory: category_id.toString(),
+                    Attributes: {
+                        name: product.nama_product || "Produk Tanpa Nama",
+                        brand: brand_name || "No Brand",
+                        ...attributes,
+                        net_weight: weight || 1
+                    },
+                    Skus: {
+                        Sku: [
+                            {
+                                SellerSku: item_sku || `SKU-${product.id_product}`,
+                                quantity: stokTerpilih.stok,
+                                price: stokTerpilih.harga,
+                                package_length: dimension?.length || 10,
+                                package_width: dimension?.width || 10,
+                                package_height: dimension?.height || 10,
+                                package_weight: weight || 1
+                            }
+                        ]
+                    },
+                    Images: {
+                        Image: [product.gambar_product]
+                    }
+                }
+            }
+        };
 
-        // 💡 PERBAIKAN UTAMA: Timestamp harus dalam DETIK (epoch time)
-        // Kita gunakan 'now' yang sudah dihitung sebelumnya agar konsisten dengan logic refresh token.
+        // Timestamp milidetik UTC
         const timestamp = Date.now();
+        const apiPath = "/product/create";
 
-        // Parameter untuk signature (HANYA query params, urut alfabet)
+        // Query params untuk signature (jangan sertakan payload)
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
-            timestamp // Ini adalah nilai dalam DETIK
+            timestamp
         };
 
-        // Generate signature menggunakan helper
-        const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
+        // Generate signature
+        const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // URL final, signature di query string
-        const queryString = new URLSearchParams({ ...signParams, sign }).toString();
-        const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
+        // URL final
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign }).toString()}`;
 
-        // POST ke Lazada, body hanya payload
-        const response = await axios.post(url, `payload=${encodeURIComponent(payload)}`, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        // POST request JSON
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" }
         });
 
         // Update stok lokal jika berhasil
@@ -223,7 +215,11 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
             lazada_response: response.data,
-            updated_stock: { id_stok: stokTerpilih.id_stok, satuan: stokTerpilih.satuan, id_product_lazada: itemId || null }
+            updated_stock: {
+                id_stok: stokTerpilih.id_stok,
+                satuan: stokTerpilih.satuan,
+                id_product_lazada: itemId || null
+            }
         });
 
     } catch (err) {
