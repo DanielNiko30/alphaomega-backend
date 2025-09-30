@@ -178,7 +178,9 @@ const createProductLazada = async (req, res) => {
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
-        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+        if (!stokTerpilih) {
+            return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
+        }
 
         // === Data untuk payload ===
         const namaProduk = product.nama_product || "Produk Tanpa Nama";
@@ -217,9 +219,11 @@ const createProductLazada = async (req, res) => {
 </Request>
 `.trim();
 
+        // === API Path Lazada ===
         const apiPath = "/product/create";
-        const timestamp = Date.now(); // ms
+        const timestamp = Date.now(); // ms, sesuai docs Lazada
 
+        // === Params untuk signing (TANPA payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -227,8 +231,10 @@ const createProductLazada = async (req, res) => {
             timestamp,
         };
 
+        // === Generate tanda tangan ===
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
+        // === Query String final ===
         const queryString = new URLSearchParams({
             ...signParams,
             sign,
@@ -236,11 +242,17 @@ const createProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
+        // === Body harus form-urlencoded ===
         const body = new URLSearchParams({ payload }).toString();
 
-        console.log("🔑 BASE STRING SIGN:", apiPath + Object.keys(signParams).sort().map(k => `${k}${signParams[k]}`).join(""));
+        // === Debug log untuk cek masalah ===
+        console.log("🔑 BASE STRING SIGN:",
+            apiPath + Object.keys(signParams).sort().map(k => `${k}${signParams[k]}`).join("")
+        );
         console.log("✅ SIGNATURE:", sign);
+        console.log("📦 Lazada Create Product Request:", { url, body: payload });
 
+        // === Request ke Lazada ===
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -275,7 +287,6 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
-
 
 /**
  * Update Product Lazada
