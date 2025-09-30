@@ -7,22 +7,18 @@ const { Stok } = require('../model/stok_model');
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(path, params, appSecret) {
+function generateSign(apiPath, params, appSecret) {
+    // 1. Urutkan key alphabetically
     const sortedKeys = Object.keys(params).sort();
-    let baseString = path;
+    const baseString = apiPath + sortedKeys.map(k => `${k}${params[k]}`).join("");
 
-    for (const key of sortedKeys) {
-        // penting: value harus string persis (jangan encode dulu)
-        baseString += key + params[key];
-    }
-
+    // 2. Buat HMAC SHA256
     return crypto
         .createHmac("sha256", appSecret)
-        .update(baseString, "utf8")
+        .update(baseString)
         .digest("hex")
         .toUpperCase();
 }
-
 
 /**
  * Generate Login URL Lazada
@@ -222,9 +218,8 @@ const createProductLazada = async (req, res) => {
 `.trim();
 
         const apiPath = "/product/create";
-        const timestamp = Date.now(); // 13 digit ms, Lazada expect ini
+        const timestamp = Date.now(); // ms
 
-        // === Params untuk sign (tanpa payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -234,21 +229,17 @@ const createProductLazada = async (req, res) => {
 
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // === URL dengan query string TANPA payload ===
         const queryString = new URLSearchParams({
-            access_token,
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp,
+            ...signParams,
             sign,
         }).toString();
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // === Body tetap payload ===
         const body = new URLSearchParams({ payload }).toString();
 
-        console.log("📦 Lazada Create Product Request:", { url, body: payload });
+        console.log("🔑 BASE STRING SIGN:", apiPath + Object.keys(signParams).sort().map(k => `${k}${signParams[k]}`).join(""));
+        console.log("✅ SIGNATURE:", sign);
 
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
