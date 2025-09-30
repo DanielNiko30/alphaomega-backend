@@ -158,7 +158,8 @@ const createProductLazada = async (req, res) => {
 
         // 1️⃣ Ambil token Lazada
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
+        if (!lazadaData?.access_token)
+            return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
         const { access_token } = lazadaData;
 
         // 2️⃣ Ambil data produk + stok
@@ -169,7 +170,9 @@ const createProductLazada = async (req, res) => {
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
 
-        const stokTerpilih = selected_unit ? product.stok.find(s => s.satuan === selected_unit) : product.stok[0];
+        const stokTerpilih = selected_unit
+            ? product.stok.find(s => s.satuan === selected_unit)
+            : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
         // 3️⃣ Buat payload XML
@@ -178,7 +181,7 @@ const createProductLazada = async (req, res) => {
         const brandFinal = brand_name || "No Brand";
         const skuFinal = item_sku || `SKU-${product.id_product}`;
         const berat = Number(weight) || 1;
-        const { length, width, height } = dimension || { length: 10, width: 10, height: 10 };
+        const { length = 10, width = 10, height = 10 } = dimension || {};
 
         const payload = `
 <Request>
@@ -207,7 +210,7 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // 4️⃣ Prepare query params untuk signing (ALPHABETICAL)
+        // 4️⃣ Persiapkan query params untuk signing (ALPHABETICAL)
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const signParams = { access_token, app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", timestamp };
@@ -219,7 +222,7 @@ const createProductLazada = async (req, res) => {
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // 7️⃣ Body HARUS form-urlencoded
+        // 7️⃣ Body HARUS form-urlencoded (payload)
         const body = `payload=${encodeURIComponent(payload)}`;
 
         // 8️⃣ Request ke Lazada
@@ -227,7 +230,10 @@ const createProductLazada = async (req, res) => {
 
         // 9️⃣ Update stok dengan id_product_lazada
         const itemId = response.data?.data?.item_id;
-        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        if (itemId) await Stok.update(
+            { id_product_lazada: itemId },
+            { where: { id_stok: stokTerpilih.id_stok } }
+        );
 
         return res.status(201).json({
             success: true,
