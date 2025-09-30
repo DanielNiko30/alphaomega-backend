@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
+const FormData = require("form-data");
 
 /**
  * Helper: Generate Lazada Signature
@@ -126,39 +127,32 @@ async function uploadImageToLazada(base64Image) {
     const API_PATH = "/image/upload";
     const timestamp = Date.now().toString();
 
-    // Parameter query untuk sign (urut alfabet)
     const params = {
         access_token: lazadaData.access_token,
         app_key: process.env.LAZADA_APP_KEY,
         sign_method: "sha256",
         timestamp
     };
-
-    const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
-    params.sign = sign;
+    params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
 
     const queryString = new URLSearchParams(params).toString();
     const url = `https://api.lazada.co.id/rest${API_PATH}?${queryString}`;
 
-    try {
-        const response = await axios.post(url, base64Image, {
-            headers: { "Content-Type": "application/octet-stream" } // image sebagai raw body
-        });
+    const form = new FormData();
+    form.append("image", Buffer.from(base64Image, "base64"), { filename: "product.jpg" });
 
-        if (!response.data?.data?.image?.hash_code) {
-            throw {
-                message: "Gagal upload gambar ke Lazada",
-                requestUrl: url,
-                usedSign: sign,
-                responseData: response.data
-            };
-        }
+    const response = await axios.post(url, form, { headers: form.getHeaders() });
 
-        return response.data.data.image;
-    } catch (err) {
-        console.error("❌ Lazada Upload Image Error:", err);
-        throw err;
+    if (!response.data?.data?.image?.hash_code) {
+        throw {
+            message: "Gagal upload gambar ke Lazada",
+            requestUrl: url,
+            usedSign: params.sign,
+            responseData: response.data
+        };
     }
+
+    return response.data.data.image;
 }
 
 const createProductLazada = async (req, res) => {
