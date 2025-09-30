@@ -155,9 +155,6 @@ const refreshToken = async (req, res) => {
     }
 };
 
-/**
- * Create Product Lazada (accept JSON input)
- */
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
@@ -167,7 +164,7 @@ const createProductLazada = async (req, res) => {
             item_sku,
             selected_unit,
             weight = 0.5,
-            dimension = { length: 10, width: 10, height: 10 }
+            dimension = { length: 10, width: 10, height: 10 },
         } = req.body;
 
         const lazadaData = await Lazada.findOne();
@@ -181,21 +178,17 @@ const createProductLazada = async (req, res) => {
             include: [{ model: Stok, as: "stok" }],
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
-
         if (!product.gambar_product) {
             return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         }
 
-        // Ambil stok sesuai selected_unit
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
-
         if (!stokTerpilih) {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
 
-        // ✅ Build XML payload dari JSON input
         const payload = `
         <Request>
             <Product>
@@ -222,7 +215,6 @@ const createProductLazada = async (req, res) => {
             </Product>
         </Request>`.trim();
 
-        // 🔑 Generate Signature
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const params = {
@@ -232,17 +224,28 @@ const createProductLazada = async (req, res) => {
             timestamp,
         };
 
+        // 🔎 Debug semua sebelum generate sign
+        console.log("=== DEBUG LAZADA CREATE PRODUCT ===");
+        console.log("API Path:", apiPath);
+        console.log("Params (before sign):", params);
+        console.log("Payload XML:", payload);
+
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
         params.sign = sign;
 
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
+        console.log("Generated Sign:", sign);
+        console.log("Final Params:", params);
 
-        // 🚀 Request ke Lazada
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
+        console.log("Final Request URL:", url);
+
         const response = await axios.post(
             url,
-            new URLSearchParams({ payload }), // Lazada butuh payload=XML
+            new URLSearchParams({ payload }),
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
+
+        console.log("Lazada Response Data:", response.data);
 
         const itemId = response.data?.data?.item_id;
         if (itemId) {
