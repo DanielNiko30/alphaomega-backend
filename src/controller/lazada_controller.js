@@ -215,11 +215,13 @@ const createProductLazada = async (req, res) => {
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
+
         const params = {
+            access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
-            access_token,
             timestamp,
+            payload, // <-- WAJIB disertakan di sini juga!
         };
 
         const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET);
@@ -227,9 +229,10 @@ const createProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(params)}`;
 
+        // kirim tanpa encode ulang, karena sudah ada di params
         const response = await axios.post(
             url,
-            `payload=${encodeURIComponent(payload)}`,
+            null, // body kosong
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
 
