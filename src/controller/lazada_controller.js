@@ -8,17 +8,14 @@ const { Stok } = require('../model/stok_model');
  * Helper: Generate Lazada Signature
  */
 function generateSign(apiPath, params, appSecret) {
-    // 1. Urutkan key alfabet
-    const keys = Object.keys(params).sort();
-    const baseString = apiPath + keys.map(k => k + params[k]).join("");
-
-    // 2. HMAC SHA256
-    const crypto = require("crypto");
-    const sign = crypto.createHmac("sha256", appSecret).update(baseString).digest("hex");
-
-    return sign.toLowerCase();
+    const sortedKeys = Object.keys(params).sort();
+    const baseString = apiPath + sortedKeys.map(k => `${k}${String(params[k])}`).join("");
+    return crypto
+        .createHmac("sha256", appSecret)
+        .update(baseString)
+        .digest("hex")
+        .toUpperCase();
 }
-
 
 /**
  * Generate Login URL Lazada
@@ -135,23 +132,25 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, brand_name, item_sku, selected_unit, weight, dimension, attributes } = req.body;
 
-        // 1️⃣ Ambil token
+        // 1️⃣ Ambil token Lazada
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
 
         const access_token = lazadaData.access_token;
 
         // 2️⃣ Ambil product lokal
-        const product = await Product.findOne({ where: { id_product }, include: [{ model: Stok, as: "stok" }] });
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }]
+        });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
 
         const stokTerpilih = selected_unit
             ? product.stok.find(s => s.satuan === selected_unit)
             : product.stok[0];
-
         if (!stokTerpilih) return res.status(400).json({ error: "Stok tidak ditemukan" });
 
-        // 3️⃣ Payload JSON (body)
+        // 3️⃣ Buat payload JSON sesuai Lazada requirement
         const payload = {
             Request: {
                 Product: {
@@ -180,23 +179,40 @@ const createProductLazada = async (req, res) => {
             }
         };
 
-        // 4️⃣ Query params untuk sign (tanpa payload)
+        // 4️⃣ Query params untuk signature (JANGAN masukkan payload)
         const apiPath = "/product/create";
         const timestamp = Date.now();
         const signParams = { app_key: process.env.LAZADA_APP_KEY, access_token, sign_method: "sha256", timestamp };
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
+        // 5️⃣ URL dengan query string
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // 5️⃣ POST JSON (Content-Type: application/json)
-        const response = await axios.post(url, payload, { headers: { "Content-Type": "application/json" } });
+        // 6️⃣ POST payload sebagai x-www-form-urlencoded
+        const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
 
-        // 6️⃣ Update stok lokal
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
+
+        // 7️⃣ Update stok lokal
         const itemId = response.data?.data?.item_id;
-        if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        if (itemId) await Stok.update(
+            { id_product_lazada: itemId },
+            { where: { id_stok: stokTerpilih.id_stok } }
+        );
 
-        return res.status(201).json({ success: true, message: "Produk berhasil ditambahkan ke Lazada", lazada_response: response.data });
+        return res.status(201).json({
+            success: true,
+            message: "Produk berhasil ditambahkan ke Lazada",
+            lazada_response: response.data,
+            updated_stock: {
+                id_stok: stokTerpilih.id_stok,
+                satuan: stokTerpilih.satuan,
+                id_product_lazada: itemId || null
+            }
+        });
 
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
