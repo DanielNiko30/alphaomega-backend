@@ -191,7 +191,7 @@ const createProductLazada = async (req, res) => {
 
         // 💡 PERBAIKAN UTAMA: Timestamp harus dalam DETIK (epoch time)
         // Kita gunakan 'now' yang sudah dihitung sebelumnya agar konsisten dengan logic refresh token.
-        const timestamp = now;
+        const timestamp = Date.now();
 
         // Parameter untuk signature (HANYA query params, urut alfabet)
         const signParams = {
