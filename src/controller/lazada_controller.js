@@ -124,7 +124,7 @@ async function uploadImageToLazada(base64Image) {
     if (!lazadaData?.access_token) throw new Error("Token Lazada tidak ditemukan");
 
     const API_PATH = "/image/upload";
-    const timestamp = String(Date.now());
+    timestamp = Date.now(); // number
 
     const params = {
         app_key: process.env.LAZADA_APP_KEY,
@@ -194,7 +194,7 @@ const createProductLazada = async (req, res) => {
         };
 
         const apiPath = "/product/create";
-        const timestamp = String(Date.now());
+        timestamp = Date.now();
         const signParams = { app_key: process.env.LAZADA_APP_KEY, access_token: lazadaData.access_token, sign_method: "sha256", timestamp };
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
