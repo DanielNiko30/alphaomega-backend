@@ -204,34 +204,44 @@ const createProductLazada = async (req, res) => {
   </Product>
 </Request>`.trim();
 
-        // Timestamp dalam MILIDETIK UTC
-        const timestamp = Date.now(); // MILIDETIK
+        // 4️⃣ Timestamp MILIDETIK UTC
+        const timestamp = Date.now();
+
+        // 5️⃣ Sign params (HANYA params, tanpa payload)
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp
         };
-
-        // Generate signature -> HANYA pakai params di atas
         const sign = generateSign("/product/create", signParams, process.env.LAZADA_APP_SECRET);
 
-        // URL final
-        const queryString = new URLSearchParams({ ...signParams, sign }).toString();
+        // 6️⃣ URL final dengan urutan key sama seperti sign
+        const queryString = new URLSearchParams({
+            access_token: signParams.access_token,
+            app_key: signParams.app_key,
+            sign_method: signParams.sign_method,
+            timestamp: signParams.timestamp,
+            sign
+        }).toString();
         const url = `https://api.lazada.co.id/rest/product/create?${queryString}`;
 
-        // Body payload form-urlencoded
+        // 7️⃣ Body payload form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        // 9️⃣ POST request ke Lazada
+        // 8️⃣ POST request ke Lazada
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
 
-        // 🔟 Update stok lokal jika berhasil
+        // 9️⃣ Update stok lokal jika berhasil
         const itemId = response.data?.data?.item_id;
-        if (itemId)
-            await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
+        if (itemId) {
+            await Stok.update(
+                { id_product_lazada: itemId },
+                { where: { id_stok: stokTerpilih.id_stok } }
+            );
+        }
 
         // ✅ Return minimal info
         return res.status(201).json({
