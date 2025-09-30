@@ -180,29 +180,31 @@ const createProductLazada = async (req, res) => {
         const payload = `
 <Request>
   <Product>
-    <PrimaryCategory>${category_id}</PrimaryCategory>
+    <PrimaryCategory>18469</PrimaryCategory>
     <Attributes>
-      <name><![CDATA[${product.nama_product || "Produk Tanpa Nama"}]]></name>
-      <short_description><![CDATA[<p>${product.deskripsi_product || "Deskripsi tidak tersedia"}</p>]]></short_description>
-      <brand>${brand_name || "No Brand"}</brand>
-      <net_weight>${Number(weight) || 1}</net_weight>
+      <name><![CDATA[Produk Tanpa Nama]]></name>
+      <short_description><![CDATA[<p>Deskripsi tidak tersedia</p>]]></short_description>
+      <brand>No Brand</brand>
+      <net_weight>1200</net_weight>
+      <Berat_Bersih>1000</Berat_Bersih>
     </Attributes>
     <Skus>
       <Sku>
-        <SellerSku>${item_sku || `SKU-${product.id_product}`}</SellerSku>
-        <quantity>${stokTerpilih.stok}</quantity>
-        <price>${stokTerpilih.harga}</price>
-        <package_length>${dimension?.length || 10}</package_length>
-        <package_width>${dimension?.width || 10}</package_width>
-        <package_height>${dimension?.height || 10}</package_height>
-        <package_weight>${Number(weight) || 1}</package_weight>
+        <SellerSku>SKU-12345</SellerSku>
+        <quantity>stok_terpilih</quantity>
+        <price>harga_terpilih</price>
+        <package_length>20</package_length>
+        <package_width>15</package_width>
+        <package_height>10</package_height>
+        <package_weight>1200</package_weight>
       </Sku>
     </Skus>
     <Images>
-      <Image>${product.gambar_product}</Image>
+      <Image>link_gambar_product</Image>
     </Images>
   </Product>
-</Request>`.trim();
+</Request>
+`.trim();
 
         // 4️⃣ Timestamp MILIDETIK UTC
         const timestamp = Date.now();
