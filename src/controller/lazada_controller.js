@@ -196,45 +196,48 @@ const createProductLazada = async (req, res) => {
     <PrimaryCategory>${category_id}</PrimaryCategory>
     <Attributes>
       <name><![CDATA[${product.nama_product}]]></name>
-      <short_description><![CDATA[${product.deskripsi_product || "Deskripsi tidak tersedia"}]]></short_description>
+      <short_description><![CDATA[<p>${product.deskripsi_product || "Deskripsi tidak tersedia"}</p>]]></short_description>
       <brand>${brand}</brand>
-      <Berat_Bersih>${stokTerpilih.harga}</Berat_Bersih>
     </Attributes>
     <Skus>
       <Sku>
         <SellerSku>${seller_sku || `SKU-${Date.now()}`}</SellerSku>
         <quantity>${stokTerpilih.stok}</quantity>
         <price>${stokTerpilih.harga}</price>
-        <package_length>20</package_length>
-        <package_width>15</package_width>
+        <package_length>10</package_length>
+        <package_width>10</package_width>
         <package_height>10</package_height>
-        <package_weight>1.2</package_weight>
-        <Images>
-          <Image>${product.gambar_product}</Image>
-        </Images>
+        <package_weight>0.5</package_weight>
       </Sku>
     </Skus>
+    <Images>
+      <Image>${product.gambar_product}</Image>
+    </Images>
   </Product>
-</Request>
-`.trim();
+</Request>`.trim();
+
 
         const apiPath = "/product/create";
         const timestamp = Date.now();
 
-        // === Params untuk sign (JANGAN masukkan payload) ===
+        // === Params untuk sign ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp,
+            payload, // penting masuk ke signing
         };
 
         // === Generate tanda tangan ===
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // === URL dengan query string ===
+        // === URL dengan query string TANPA payload ===
         const queryString = new URLSearchParams({
-            ...signParams,
+            access_token,
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp,
             sign,
         }).toString();
 
@@ -245,7 +248,7 @@ const createProductLazada = async (req, res) => {
 
         console.log("📦 Lazada Create Product Request:", {
             url,
-            payload,
+            body: payload,
         });
 
         const response = await axios.post(url, body, {
