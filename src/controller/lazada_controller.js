@@ -156,7 +156,7 @@ const refreshToken = async (req, res) => {
 };
 
 /**
- * Create Product Lazada
+ * Create Product Lazada (accept JSON input)
  */
 const createProductLazada = async (req, res) => {
     try {
@@ -186,7 +186,7 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         }
 
-        // ambil stok berdasarkan satuan
+        // Ambil stok sesuai selected_unit
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
@@ -195,7 +195,7 @@ const createProductLazada = async (req, res) => {
             return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
         }
 
-        // ✅ XML payload Lazada
+        // ✅ Build XML payload dari JSON input
         const payload = `
         <Request>
             <Product>
@@ -240,7 +240,7 @@ const createProductLazada = async (req, res) => {
         // 🚀 Request ke Lazada
         const response = await axios.post(
             url,
-            new URLSearchParams({ payload }),
+            new URLSearchParams({ payload }), // Lazada butuh payload=XML
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
 
@@ -265,7 +265,6 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
-
 
 /**
  * Update Product Lazada
