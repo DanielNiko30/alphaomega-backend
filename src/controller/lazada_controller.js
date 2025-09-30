@@ -156,22 +156,23 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, brand_name, item_sku, selected_unit, dimension, weight } = req.body;
 
+        // 1️⃣ Ambil token Lazada
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) return res.status(400).json({ error: "Lazada token not found." });
+        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada tidak ditemukan" });
         const { access_token } = lazadaData;
 
+        // 2️⃣ Ambil data produk + stok
         const product = await Product.findOne({
             where: { id_product },
-            include: [{ model: Stok, as: "stok" }],
+            include: [{ model: Stok, as: "stok" }]
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
         if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
 
-        const stokTerpilih = selected_unit
-            ? product.stok.find((s) => s.satuan === selected_unit)
-            : product.stok[0];
+        const stokTerpilih = selected_unit ? product.stok.find(s => s.satuan === selected_unit) : product.stok[0];
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
+        // 3️⃣ Buat payload XML
         const namaProduk = product.nama_product || "Produk Tanpa Nama";
         const deskripsiProduk = product.deskripsi_product || "Deskripsi tidak tersedia";
         const brandFinal = brand_name || "No Brand";
@@ -187,7 +188,7 @@ const createProductLazada = async (req, res) => {
       <name><![CDATA[${namaProduk}]]></name>
       <short_description><![CDATA[<p>${deskripsiProduk}</p>]]></short_description>
       <brand>${brandFinal}</brand>
-      <net_weight unit="kg">${berat}</net_weight>
+      <net_weight>${berat}</net_weight>
     </Attributes>
     <Skus>
       <Sku>
@@ -197,27 +198,34 @@ const createProductLazada = async (req, res) => {
         <package_length>${length}</package_length>
         <package_width>${width}</package_width>
         <package_height>${height}</package_height>
-        <package_weight unit="kg">${berat}</package_weight>
+        <package_weight>${berat}</package_weight>
       </Sku>
     </Skus>
     <Images>
       <Image>${product.gambar_product}</Image>
     </Images>
   </Product>
-</Request>
-`.trim();
+</Request>`.trim();
 
+        // 4️⃣ Prepare query params untuk signing (ALPHABETICAL)
         const apiPath = "/product/create";
         const timestamp = Date.now();
-
         const signParams = { access_token, app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", timestamp };
+
+        // 5️⃣ Generate signature
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
+
+        // 6️⃣ Buat URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
+        // 7️⃣ Body HARUS form-urlencoded
         const body = `payload=${encodeURIComponent(payload)}`;
+
+        // 8️⃣ Request ke Lazada
         const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
 
+        // 9️⃣ Update stok dengan id_product_lazada
         const itemId = response.data?.data?.item_id;
         if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
 
@@ -225,15 +233,17 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
             lazada_response: response.data,
-            updated_stock: { id_stok: stokTerpilih.id_stok, satuan: stokTerpilih.satuan, id_product_lazada: itemId || null },
+            updated_stock: { id_stok: stokTerpilih.id_stok, satuan: stokTerpilih.satuan, id_product_lazada: itemId || null }
         });
 
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal menambahkan produk ke Lazada." });
+        return res.status(500).json({
+            error: err.response?.data || err.message,
+            message: "Gagal menambahkan produk ke Lazada."
+        });
     }
 };
-
 
 /**
  * Update Product Lazada
