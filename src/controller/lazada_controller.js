@@ -38,106 +38,119 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, payloadJson = "") {
+function generateSign(apiPath, params, appSecret, payload = "") {
     const keys = Object.keys(params).sort();
     let strToSign = apiPath;
     for (const key of keys) {
-        strToSign += key + params[key];
+        const val = params[key];
+        if (val !== undefined && val !== null && val !== "") {
+            strToSign += key + val;
+        }
     }
-    if (payloadJson) strToSign += payloadJson;
-    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+    if (payload) strToSign += payload;
+    return crypto.createHmac("sha256", appSecret)
+        .update(strToSign, "utf8")
+        .digest("hex")
+        .toUpperCase();
 }
 
-async function createDummyProduct(req, res) {
+// Route: create dummy product
+const createDummyProduct = async (req, res) => {
     try {
+        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
         const accessToken = account.access_token;
 
-        const API_PATH = "/product/create";
-        // --- TRY 1: timestamp dalam detik (recommended by some endpoints) ---
-        const tsSeconds = Math.floor(Date.now() / 1000).toString();
-        // --- TRY 2: timestamp dalam millisecond (some docs/examples pakai ini) ---
-        const tsMillis = Date.now().toString();
+        // Data dummy hardcode
+        const dummyData = {
+            category_id: 18469,
+            brand_name: "No Brand",
+            item_sku: "SKU-12345",
+            weight: 1.2,
+            dimension: { length: 20, width: 15, height: 10 },
+            image_url: "https://via.placeholder.com/800x800.png?text=Dummy+Image",
+            image_hash: "default_hash"
+        };
 
-        // Dummy payload (JSON like SDK)
-        const payloadObj = {
+        const API_PATH = "/product/create";
+        const timestamp = Date.now().toString(); // ✅ millisecond
+
+        const sysParams = {
+            app_key: process.env.LAZADA_APP_KEY,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp
+        };
+
+        // Build XML payload
+        const builder = new Builder({ cdata: true, headless: true });
+        let payloadXML = builder.buildObject({
             Request: {
                 Product: {
-                    PrimaryCategory: "18469",
+                    PrimaryCategory: dummyData.category_id,
                     Attributes: {
                         name: "Dummy Product Node",
-                        short_description: "Ini product dummy untuk test",
-                        brand: "No Brand",
-                        model: "SKU-12345",
+                        short_description: "<p>Ini product dummy untuk test</p>",
+                        brand: dummyData.brand_name,
+                        model: dummyData.item_sku,
                         warranty_type: "No Warranty",
                         product_warranty: "false",
-                        net_weight: 1.2
+                        net_weight: dummyData.weight
                     },
-                    Skus: { Sku: [{ SellerSku: "SKU-12345", quantity: 1, price: 1000, package_length: 20, package_width: 15, package_height: 10, package_weight: 1.2 }] },
-                    Images: { Image: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"] }
+                    Skus: {
+                        Sku: {
+                            SellerSku: dummyData.item_sku,
+                            quantity: 1,
+                            price: 1000,
+                            package_length: dummyData.dimension.length,
+                            package_width: dummyData.dimension.width,
+                            package_height: dummyData.dimension.height,
+                            package_weight: dummyData.weight
+                        }
+                    },
+                    Images: {
+                        Image: dummyData.image_url
+                    }
                 }
             }
-        };
-        const payloadJson = JSON.stringify(payloadObj);
+        });
+        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim();
 
-        // helper function untuk kirim dan debug
-        async function tryRequest(timestamp) {
-            const sysParams = {
-                app_key: process.env.LAZADA_APP_KEY,
-                access_token: accessToken,
-                sign_method: "sha256",
-                timestamp: String(timestamp)
-            };
+        // Generate signature
+        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
 
-            // sign menggunakan params TERURUT (generateSign mengurutkan lagi tapi kita tetap log)
-            const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadJson);
+        // Build URL dengan query params benar
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({
+            app_key: sysParams.app_key,
+            access_token: sysParams.access_token,
+            sign_method: sysParams.sign_method,
+            timestamp: sysParams.timestamp,
+            sign
+        }).toString()}`;
 
-            // build url (pastikan pakai timestamp yang sama)
-            const query = new URLSearchParams({ ...sysParams, sign }).toString();
-            const url = `https://api.lazada.co.id/rest${API_PATH}?${query}`;
-            console.log(">>> DEBUG tryRequest");
-            console.log(" timestamp used:", sysParams.timestamp);
-            console.log(" strToSign sample:", API_PATH + Object.keys(sysParams).sort().map(k => k + sysParams[k]).join("") + payloadJson.slice(0, 120) + "...");
-            console.log(" sign:", sign);
-            console.log(" url:", url);
-            // body
-            const body = `payload=${encodeURIComponent(payloadJson)}`;
-            console.log(" body preview:", body.slice(0, 200));
+        console.log("➡️ Sending request to Lazada...");
+        console.log("URL:", url);
+        console.log("Payload preview:", payloadXML.substring(0, 200), "...");
 
-            // do request
-            try {
-                const resp = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, timeout: 60000 });
-                return { ok: true, data: resp.data };
-            } catch (err) {
-                // return error object untuk analisa
-                return { ok: false, err: err.message, responseData: err.response?.data || null, code: err.code || null };
+        // POST request
+        const response = await axios.post(
+            url,
+            `payload=${encodeURIComponent(payloadXML)}`,
+            {
+                headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+                timeout: 60000
             }
-        }
+        );
 
-        // coba dulu dengan seconds
-        let result = await tryRequest(tsSeconds);
-        if (!result.ok) {
-            // log error singkat
-            console.log("Request with seconds timestamp failed:", result);
-            // kalau errmsg mengandung illegal timestamp, coba millisecond
-            if (String(result.responseData || result.err || "").toLowerCase().includes("illegal timestamp") || result.code === "ECONNRESET" || result.responseData?.code === "MissingParameter") {
-                console.log("Mencoba ulang dengan millisecond timestamp...");
-                result = await tryRequest(tsMillis);
-            }
-        }
+        return res.json({ success: true, lazada_response: response.data });
 
-        if (result.ok) {
-            return res.json({ success: true, lazada_response: result.data });
-        } else {
-            console.error("Final request failed:", result);
-            return res.status(500).json({ error: "Request to Lazada failed", detail: result });
-        }
     } catch (err) {
-        console.error("Controller error:", err);
-        return res.status(500).json({ error: err.message });
+        console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
+        return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
     }
-}
+};
+
 /**
  * Generate Login URL Lazada
  */
