@@ -213,69 +213,70 @@ async function uploadImageToLazada(base64Image, accessToken) {
  * Create Product Lazada (return step status walaupun error)
  */
 async function createProductLazada({ product, stokTerpilih, category_id, brand, seller_sku, accessToken }) {
-    const imageResult = await uploadImageToLazada(product.gambar_product, accessToken);
-    let payloadXML = null;
+    // Pakai gambar default, jangan upload
+    const imageUrl = "https://via.placeholder.com/800x800.png?text=Default+Image";
+    const imageHash = "default_hash"; // optional, kalau Lazada perlu
 
-    if (imageResult.success) {
-        const builder = new Builder({ cdata: true, headless: true });
-        const payloadObj = {
-            Request: {
-                Product: {
-                    PrimaryCategory: category_id,
-                    Attributes: {
-                        name: product.nama_product,
-                        short_description: `<p>${product.deskripsi || "Tidak ada deskripsi"}</p>`,
-                        brand,
-                        package_content: `${product.nama_product} - ${brand}`,
-                        model: seller_sku,
-                        warranty_type: "No Warranty",
-                        hazmat: "None",
-                        delivery_option_sop: "0",
-                        product_warranty: "false",
-                        net_weight: stokTerpilih.berat || 0.5
-                    },
-                    Skus: {
-                        Sku: {
-                            SellerSku: seller_sku,
-                            quantity: stokTerpilih.qty || 1,
-                            price: stokTerpilih.harga_jual || 1000,
-                            package_length: stokTerpilih.panjang || 10,
-                            package_width: stokTerpilih.lebar || 10,
-                            package_height: stokTerpilih.tinggi || 10,
-                            package_weight: stokTerpilih.berat || 0.5
-                        }
-                    },
-                    Images: { Image: { url: imageResult.image.url, hash_code: imageResult.image.hash_code } }
-                }
+    const builder = new Builder({ cdata: true, headless: true });
+    const payloadObj = {
+        Request: {
+            Product: {
+                PrimaryCategory: category_id,
+                Attributes: {
+                    name: product.nama_product,
+                    short_description: `<p>${product.deskripsi || "Tidak ada deskripsi"}</p>`,
+                    brand,
+                    package_content: `${product.nama_product} - ${brand}`,
+                    model: seller_sku,
+                    warranty_type: "No Warranty",
+                    hazmat: "None",
+                    delivery_option_sop: "0",
+                    product_warranty: "false",
+                    net_weight: stokTerpilih.berat || 0.5
+                },
+                Skus: {
+                    Sku: {
+                        SellerSku: seller_sku,
+                        quantity: stokTerpilih.qty || 1,
+                        price: stokTerpilih.harga_jual || 1000,
+                        package_length: stokTerpilih.panjang || 10,
+                        package_width: stokTerpilih.lebar || 10,
+                        package_height: stokTerpilih.tinggi || 10,
+                        package_weight: stokTerpilih.berat || 0.5
+                    }
+                },
+                Images: { Image: { url: imageUrl, hash_code: imageHash } }
             }
-        };
-        payloadXML = builder.buildObject(payloadObj);
-    }
+        }
+    };
+    const payloadXML = builder.buildObject(payloadObj);
 
     let productResult = null;
-    if (payloadXML) {
-        try {
-            const API_PATH = "/product/create";
-            const timestamp = Date.now().toString();
-            const sysParams = {
-                app_key: process.env.LAZADA_APP_KEY,
-                access_token: accessToken,
-                sign_method: "sha256",
-                timestamp
-            };
-            const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
-            const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-            const body = `payload=${encodeURIComponent(payloadXML)}`;
+    try {
+        const API_PATH = "/product/create";
+        const timestamp = Date.now().toString();
+        const sysParams = {
+            app_key: process.env.LAZADA_APP_KEY,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp
+        };
+        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const body = `payload=${encodeURIComponent(payloadXML)}`;
 
-            const res = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" } });
-            productResult = { success: true, data: res.data };
-        } catch (err) {
-            console.error("❌ Create Product Error:", err.response?.data || err.message);
-            productResult = { success: false, message: err.message, responseData: err.response?.data || null };
-        }
+        const res = await axios.post(url, body, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+            timeout: 30000
+        });
+
+        productResult = { success: true, data: res.data };
+    } catch (err) {
+        console.error("❌ Create Product Error:", err.code || err.message, err.response?.data || null);
+        productResult = { success: false, message: err.message || err.code, responseData: err.response?.data || null };
     }
 
-    return { imageResult, productResult };
+    return { productResult, imageUsed: imageUrl };
 }
 
 /**
