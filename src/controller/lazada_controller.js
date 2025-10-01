@@ -62,7 +62,6 @@ const createDummyProduct = async (req, res) => {
 
         const accessToken = account.access_token;
 
-        // Timestamp 13-digit milidetik
         const timestamp = Date.now().toString();
 
         // System params
@@ -74,7 +73,7 @@ const createDummyProduct = async (req, res) => {
         };
 
         // Dummy product payload
-        const payloadObj = {
+        const productPayload = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
@@ -101,37 +100,43 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // Format body sesuai Lazada: payload=JSON
-        const bodyStr = `payload=${encodeURIComponent(JSON.stringify(payloadObj))}`;
+        // Body string yang dipakai untuk signature Lazada
+        const bodyStr = 'payload=' + JSON.stringify(productPayload);
 
-        // Generate signature dari bodyStr yang akan dikirim
+        // Generate signature
         const sign = generateSign("/product/create", sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
         // URL query params
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // Kirim POST request ke Lazada
-        const response = await axios.post(url, bodyStr, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
+        // Lakukan request POST ke Lazada
+        const lazadaResponse = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+            timeout: 30000
         });
 
-        // Return info lengkap
         return res.json({
             success: true,
             request: {
                 url,
                 sysParams,
                 sign,
-                body: payloadObj
+                body: productPayload
             },
-            lazada_response: response.data
+            lazada_response: lazadaResponse.data
         });
 
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            error: err.response?.data || err.message
+            request: err.config ? {
+                url: err.config.url,
+                method: err.config.method,
+                data: err.config.data,
+                headers: err.config.headers
+            } : null,
+            lazada_response: err.response?.data || err.message
         });
     }
 };
