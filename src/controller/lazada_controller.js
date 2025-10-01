@@ -260,12 +260,22 @@ const getProducts = async (req, res) => {
         params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
 
         const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+
         const response = await axios.get(url);
 
-        return res.json(response.data);
+        return res.json({
+            success: true,
+            url,                  // URL lengkap yang dipakai
+            params,               // Optional: tunjukkan query params juga
+            lazada_response: response.data
+        });
     } catch (err) {
         console.error("❌ Lazada Get Products Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({
+            error: err.response?.data || err.message,
+            url: err.config?.url || null,   // URL request jika ada error
+            params: err.config?.params || null
+        });
     }
 };
 
