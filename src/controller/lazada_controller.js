@@ -37,7 +37,7 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, body = "") {
+function generateSign(apiPath, params, appSecret) {
     const keys = Object.keys(params).sort();
     let strToSign = apiPath;
     for (const key of keys) {
@@ -46,7 +46,6 @@ function generateSign(apiPath, params, appSecret, body = "") {
             strToSign += key + val;
         }
     }
-    if (body) strToSign += body;
     return crypto.createHmac("sha256", appSecret)
         .update(strToSign, "utf8")
         .digest("hex")
@@ -54,20 +53,6 @@ function generateSign(apiPath, params, appSecret, body = "") {
 }
 
 // Route: Create dummy product
-function generateSign(apiPath, params, appSecret, body = "") {
-    const keys = Object.keys(params).sort();
-    let strToSign = apiPath;
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
-    }
-    if (body) strToSign += body;
-    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
-}
-
-// 2. Route create dummy product
 const createDummyProduct = async (req, res) => {
     try {
         // Ambil account Lazada pertama dari DB
@@ -88,7 +73,7 @@ const createDummyProduct = async (req, res) => {
 
         // System params
         const API_PATH = "/product/create";
-        const timestamp = Date.now().toString(); // harus millisecond
+        const timestamp = Date.now().toString(); // millisecond
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -131,12 +116,12 @@ const createDummyProduct = async (req, res) => {
                 }
             }
         });
-        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim(); // hilangkan newline
+        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim();
 
-        // Generate signature
-        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+        // Generate signature (tidak include body)
+        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET);
 
-        // Build URL (query params harus urut alphabet)
+        // Build URL
         const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         console.log("➡️ Sending request to Lazada...");
