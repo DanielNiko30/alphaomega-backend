@@ -15,26 +15,121 @@ const { Builder } = require("xml2js");
  * @param {string} body - Payload XML (raw string)
  * @returns {string} sign uppercase hex
  */
+// function generateSign(apiPath, params, appSecret, body = "") {
+//     // 1. sort params by ASCII
+//     const keys = Object.keys(params).sort();
+//     let strToSign = apiPath;
+
+//     // 2. concat key + value
+//     for (const key of keys) {
+//         const val = params[key];
+//         if (val !== undefined && val !== null && val !== "") {
+//             strToSign += key + val;
+//         }
+//     }
+
+//     // 3. concat raw body if ada
+//     if (body) strToSign += body;
+
+//     // 4. HMAC-SHA256
+//     const hmac = crypto.createHmac("sha256", appSecret);
+//     hmac.update(strToSign, "utf8");
+//     return hmac.digest("hex").toUpperCase();
+// }
+
 function generateSign(apiPath, params, appSecret, body = "") {
-    // 1. sort params by ASCII
-    const keys = Object.keys(params).sort();
-    let strToSign = apiPath;
-
-    // 2. concat key + value
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
+  const keys = Object.keys(params).sort();
+  let strToSign = apiPath;
+  for (const key of keys) {
+    const val = params[key];
+    if (val !== undefined && val !== null && val !== "") {
+      strToSign += key + val;
     }
+  }
+  if (body) strToSign += body;
+  return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+}
 
-    // 3. concat raw body if ada
-    if (body) strToSign += body;
+/**
+ * Dummy create product controller
+ */
+async function createDummyProduct() {
+  try {
+    // 1. Hardcode data dummy
+    const dummyData = {
+      category_id: 18469,
+      brand_name: "No Brand",
+      item_sku: "SKU-12345",
+      selected_unit: "RTG",
+      weight: 1.2,
+      dimension: { length: 20, width: 15, height: 10 },
+      attributes: { Berat_Bersih: 1000 },
+      image_url: "https://via.placeholder.com/800x800.png?text=Dummy+Image",
+      image_hash: "default_hash"
+    };
 
-    // 4. HMAC-SHA256
-    const hmac = crypto.createHmac("sha256", appSecret);
-    hmac.update(strToSign, "utf8");
-    return hmac.digest("hex").toUpperCase();
+    // 2. System params
+    const API_PATH = "/product/create";
+    const timestamp = Date.now().toString();
+    const sysParams = {
+      app_key: process.env.LAZADA_APP_KEY,
+      access_token: process.env.LAZADA_ACCESS_TOKEN, // isi token di env
+      sign_method: "sha256",
+      timestamp
+    };
+
+    // 3. Build XML payload
+    const builder = new Builder({ cdata: true, headless: true });
+    const payloadObj = {
+      Request: {
+        Product: {
+          PrimaryCategory: dummyData.category_id,
+          Attributes: {
+            name: "Dummy Product",
+            short_description: "<p>Ini product dummy untuk test</p>",
+            brand: dummyData.brand_name,
+            model: dummyData.item_sku,
+            warranty_type: "No Warranty",
+            product_warranty: "false",
+            net_weight: dummyData.weight
+          },
+          Skus: {
+            Sku: {
+              SellerSku: dummyData.item_sku,
+              quantity: 1,
+              price: 1000,
+              package_length: dummyData.dimension.length,
+              package_width: dummyData.dimension.width,
+              package_height: dummyData.dimension.height,
+              package_weight: dummyData.weight
+            }
+          },
+          Images: {
+            Image: {
+              url: dummyData.image_url,
+              hash_code: dummyData.image_hash
+            }
+          }
+        }
+      }
+    };
+    const payloadXML = builder.buildObject(payloadObj);
+
+    // 4. Generate signature
+    const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+    const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+    const body = `payload=${encodeURIComponent(payloadXML)}`;
+
+    // 5. POST request
+    const res = await axios.post(url, body, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+      timeout: 30000
+    });
+
+    console.log("✅ Lazada Response:", res.data);
+  } catch (err) {
+    console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
+  }
 }
 /**
  * Generate Login URL Lazada
@@ -390,5 +485,6 @@ module.exports = {
     updateProductLazada,
     getCategoryTree,
     getBrands,
-    getProducts
+    getProducts,
+    createDummyProduct
 };
