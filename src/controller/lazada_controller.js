@@ -203,35 +203,27 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, brand = "No Brand", seller_sku, selected_unit } = req.body;
 
-        // === Ambil token Lazada ===
+        // Ambil token Lazada
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) {
-            return res.status(400).json({ error: "Lazada token not found. Please authorize first." });
-        }
+        if (!lazadaData?.access_token) return res.status(400).json({ error: "Lazada token not found. Please authorize first." });
         const { access_token } = lazadaData;
 
-        // === Ambil produk lokal ===
+        // Ambil produk lokal
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }]
         });
         if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
 
-        // === Cek stok & satuan ===
-        const stokTerpilih = selected_unit
-            ? product.stok.find((s) => s.satuan === selected_unit)
-            : product.stok[0];
-        if (!stokTerpilih) {
-            return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
-        }
+        // Cek stok & satuan
+        const stokTerpilih = selected_unit ? product.stok.find(s => s.satuan === selected_unit) : product.stok[0];
+        if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // === Upload gambar ke Lazada ===
-        if (!product.gambar_product) {
-            return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
-        }
+        // Upload gambar ke Lazada
+        if (!product.gambar_product) return res.status(400).json({ error: "Produk tidak memiliki gambar!" });
         const imageUrl = await uploadImageToLazada(product.gambar_product, access_token);
 
-        // === Buat payload XML ===
+        // Build XML payload
         const builder = new Builder({ cdata: true, headless: true });
         const payloadObj = {
             Request: {
@@ -252,75 +244,62 @@ const createProductLazada = async (req, res) => {
                     Skus: {
                         Sku: {
                             SellerSku: seller_sku,
-                            quantity: stokTerpilih.qty,
-                            price: stokTerpilih.harga_jual,
+                            quantity: stokTerpilih.qty || 1,
+                            price: stokTerpilih.harga_jual || 1000,
                             package_length: stokTerpilih.panjang || 10,
                             package_width: stokTerpilih.lebar || 10,
                             package_height: stokTerpilih.tinggi || 10,
                             package_weight: stokTerpilih.berat || 0.5
                         }
                     },
-                    Images: { Image: imageUrl }
+                    Images: { Image: { url: imageUrl.url, hash_code: imageUrl.hash_code } }
                 }
             }
         };
         const payload = builder.buildObject(payloadObj);
 
-        // === Signing ===
+        // Signing
         const apiPath = "/product/create";
         const timestamp = String(Date.now());
-        const signParams = {
-            access_token,
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp
-        };
+        const signParams = { access_token, app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", timestamp };
 
-        // generateSign sekarang return { sign, strToSign }
-        const { sign, strToSign } = generateSign(
-            apiPath,
-            signParams,
-            process.env.LAZADA_APP_SECRET,
-            payload
-        );
+        const { sign, strToSign } = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET, payload);
 
+        // Buat URL final
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
-        const body = new URLSearchParams({ payload }).toString();
+        const body = `payload=${encodeURIComponent(payload)}`; // encode setelah sign dibuat
 
-        // === Debug log lengkap ===
+        // Debug log
         console.log("📦 Lazada Debug Request ==================");
         console.log("API Path =>", apiPath);
-        console.log("Sign Params (before sort) =>", signParams);
+        console.log("Sign Params =>", signParams);
         console.log("String To Sign =>", strToSign);
         console.log("Generated Sign =>", sign);
         console.log("Final URL =>", url);
         console.log("Payload XML =>", payload);
-        console.log("Body (form-urlencoded) =>", body);
         console.log("========================================");
 
-        // === Request ke Lazada ===
+        // Request ke Lazada
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
         });
 
         console.log("✅ Lazada Response:", response.data);
 
-        // === Update stok dengan item_id dari Lazada ===
+        // Update stok dengan item_id dari Lazada
         const itemId = response.data?.data?.item_id;
         if (itemId) {
-            await Stok.update(
-                { id_product_lazada: itemId },
-                { where: { id_stok: stokTerpilih.id_stok } }
-            );
+            await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
         }
 
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
             lazada_response: response.data,
-            debug: { strToSign, signParams, sign, url, payload } // ikut return ke FE
+            debug: { strToSign, signParams, sign, url, payload }
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
