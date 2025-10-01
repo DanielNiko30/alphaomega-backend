@@ -4,6 +4,7 @@ const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
 const FormData = require("form-data");
+const sharp = require("sharp");
 const { Builder } = require("xml2js");
 
 /**
@@ -173,17 +174,19 @@ const getProducts = async (req, res) => {
 /**
  * Upload Image to Lazada
  */
-async function uploadImageToLazada(blobImage, accessToken) {
-    if (!blobImage) throw new Error("Tidak ada gambar untuk diupload");
-
-    // Resize & compress image (max width 800px, quality 70%)
-    const compressedBuffer = await sharp(blobImage)
-        .resize({ width: 800, withoutEnlargement: true })
-        .jpeg({ quality: 70 })
-        .toBuffer();
-
+async function uploadImageToLazada(base64Image, accessToken) {
     const API_PATH = "/image/upload";
     const timestamp = Date.now().toString();
+
+    // Convert base64 ke buffer
+    const imgBuffer = Buffer.from(base64Image, "base64");
+
+    // Resize / compress pakai sharp (max width 800px, kualitas 80%)
+    const optimizedBuffer = await sharp(imgBuffer)
+        .resize({ width: 800, withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+
     const params = {
         access_token: accessToken,
         app_key: process.env.LAZADA_APP_KEY,
@@ -196,10 +199,9 @@ async function uploadImageToLazada(blobImage, accessToken) {
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
     const form = new FormData();
-    form.append("image", compressedBuffer, { filename: "product.jpg" });
+    form.append("image", optimizedBuffer, { filename: "product.jpg" });
 
     const response = await axios.post(url, form, { headers: form.getHeaders() });
-
     if (!response.data?.data?.image?.url) {
         throw { message: "Gagal upload gambar ke Lazada", responseData: response.data };
     }
@@ -208,10 +210,10 @@ async function uploadImageToLazada(blobImage, accessToken) {
 }
 
 /**
- * Create product in Lazada
+ * Create Product Lazada
  */
-export async function createProductLazada({ product, stokTerpilih, category_id, brand, seller_sku, accessToken }) {
-    // Upload image first
+async function createProductLazada({ product, stokTerpilih, category_id, brand, seller_sku, accessToken }) {
+    // Upload gambar dulu
     const image = await uploadImageToLazada(product.gambar_product, accessToken);
 
     // Build XML payload
@@ -230,7 +232,7 @@ export async function createProductLazada({ product, stokTerpilih, category_id, 
                     hazmat: "None",
                     delivery_option_sop: "0",
                     product_warranty: "false",
-                    net_weight: stokTerpilih.berat || 0.5,
+                    net_weight: stokTerpilih.berat || 0.5
                 },
                 Skus: {
                     Sku: {
@@ -240,35 +242,35 @@ export async function createProductLazada({ product, stokTerpilih, category_id, 
                         package_length: stokTerpilih.panjang || 10,
                         package_width: stokTerpilih.lebar || 10,
                         package_height: stokTerpilih.tinggi || 10,
-                        package_weight: stokTerpilih.berat || 0.5,
-                    },
+                        package_weight: stokTerpilih.berat || 0.5
+                    }
                 },
-                Images: { Image: { url: image.url, hash_code: image.hash_code } },
-            },
-        },
+                Images: { Image: { url: image.url, hash_code: image.hash_code } }
+            }
+        }
     };
 
     const payloadXML = builder.buildObject(payloadObj);
 
-    // System parameters
+    // System params
     const API_PATH = "/product/create";
     const timestamp = Date.now().toString();
     const sysParams = {
         app_key: process.env.LAZADA_APP_KEY,
         access_token: accessToken,
         sign_method: "sha256",
-        timestamp,
+        timestamp
     };
 
-    // Generate sign with payload
+    // Generate sign
     const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
 
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
     const body = `payload=${encodeURIComponent(payloadXML)}`;
 
-    // Send request
+    // Request ke Lazada
     const res = await axios.post(url, body, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
     });
 
     return res.data;
