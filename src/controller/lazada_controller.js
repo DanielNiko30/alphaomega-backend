@@ -469,6 +469,40 @@ const getBrands = async (req, res) => {
     }
 };
 
+const testLazadaIP = async (req, res) => {
+    try {
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada not found" });
+
+        const access_token = lazadaData.access_token;
+        const API_PATH = "/system/getIPWhitelistStatus"; // endpoint Lazada untuk cek IP
+        const timestamp = String(Date.now());
+
+        const params = {
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp,
+            access_token
+        };
+
+        // Generate signature
+        params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+        const response = await axios.get(url);
+
+        return res.json({
+            success: true,
+            data: response.data
+        });
+    } catch (err) {
+        console.error("❌ Lazada IP Test Error:", err.response?.data || err.message);
+        return res.status(500).json({
+            error: err.response?.data || err.message
+        });
+    }
+};
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
@@ -478,5 +512,6 @@ module.exports = {
     getCategoryTree,
     getBrands,
     getProducts,
-    createDummyProduct
+    createDummyProduct,
+    testLazadaIP
 };
