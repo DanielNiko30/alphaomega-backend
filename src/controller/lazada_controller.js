@@ -37,6 +37,19 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
+function generateSign(apiPath, params, appSecret, body = "") {
+    const keys = Object.keys(params).sort();
+    let strToSign = apiPath;
+    for (const key of keys) {
+        const val = params[key];
+        if (val !== undefined && val !== null && val !== "") {
+            strToSign += key + val;
+        }
+    }
+    if (body) strToSign += body;
+    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+}
+
 const createDummyProduct = async (req, res) => {
     try {
         // 1. Ambil account Lazada pertama dari DB
