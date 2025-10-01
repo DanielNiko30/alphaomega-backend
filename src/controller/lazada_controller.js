@@ -4,23 +4,20 @@ const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
 const FormData = require("form-data");
-const qs = require('qs');
 
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(apiPath, params, appSecret) {
-    // Sort keys alphabetically
+function generateSign(path, params, appSecret) {
+    // 1. Urutkan key params alphabet
     const sortedKeys = Object.keys(params).sort();
-    let baseString = appSecret + apiPath;
+    let baseString = path;
     sortedKeys.forEach(key => {
         baseString += key + params[key];
     });
-    baseString += appSecret;
-    // SHA256 hex
-    return require('crypto').createHash('sha256').update(baseString).digest('hex').toUpperCase();
+    // 2. HMAC SHA256
+    return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
 }
-
 
 
 /**
