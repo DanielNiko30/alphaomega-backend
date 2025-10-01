@@ -50,9 +50,15 @@ function generateSign(apiPath, params, appSecret, body = "") {
   return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
 }
 
-async function createDummyProduct() {
+async function createDummyProduct(accountName = "default_account") {
   try {
-    // 1. Hardcode data dummy
+    // 1. Ambil access token dari DB
+    const account = await Lazada.findOne({ where: { account: accountName } });
+    if (!account) throw new Error(`Lazada account "${accountName}" tidak ditemukan di DB`);
+
+    const accessToken = account.access_token;
+
+    // 2. Hardcode data dummy
     const dummyData = {
       category_id: 18469,
       brand_name: "No Brand",
@@ -65,17 +71,17 @@ async function createDummyProduct() {
       image_hash: "default_hash"
     };
 
-    // 2. System params
+    // 3. System params
     const API_PATH = "/product/create";
     const timestamp = Date.now().toString();
     const sysParams = {
       app_key: process.env.LAZADA_APP_KEY,
-      access_token: process.env.LAZADA_ACCESS_TOKEN, // pastikan token valid
+      access_token: accessToken,
       sign_method: "sha256",
       timestamp
     };
 
-    // 3. Build XML payload
+    // 4. Build XML payload
     const builder = new Builder({ cdata: true, headless: true });
     const payloadObj = {
       Request: {
@@ -112,10 +118,8 @@ async function createDummyProduct() {
     };
     const payloadXML = builder.buildObject(payloadObj);
 
-    // 4. Generate signature
+    // 5. Generate signature
     const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
-
-    // 5. Build URL
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
     const body = `payload=${encodeURIComponent(payloadXML)}`;
 
@@ -124,7 +128,7 @@ async function createDummyProduct() {
     // 6. POST request
     const res = await axios.post(url, body, {
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
-      timeout: 60000 // beri timeout 60 detik
+      timeout: 60000
     });
 
     console.log("✅ Lazada Response:", res.data);
