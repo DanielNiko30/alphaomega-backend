@@ -9,7 +9,7 @@ const { Builder } = require("xml2js");
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(apiPath, params, body, appSecret) {
+function generateSign(apiPath, params, appSecret, payload = "") {
     const sortedKeys = Object.keys(params).sort();
     let strToSign = apiPath;
 
@@ -20,14 +20,15 @@ function generateSign(apiPath, params, body, appSecret) {
         }
     }
 
-    if (body) {
-        strToSign += body;
+    if (payload) {
+        strToSign += payload;
     }
 
     const hmac = crypto.createHmac("sha256", appSecret);
     hmac.update(strToSign, "utf8");
     return hmac.digest("hex").toUpperCase();
 }
+
 /**
  * Generate Login URL Lazada
  */
@@ -301,10 +302,9 @@ const createProductLazada = async (req, res) => {
         const sign = generateSign(
             apiPath,
             signParams,
-            payload,
-            process.env.LAZADA_APP_SECRET
+            process.env.LAZADA_APP_SECRET,
+            payload // ikut dihitung
         );
-
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
