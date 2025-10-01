@@ -143,6 +143,22 @@ const createDummyProduct = async (req, res) => {
 };
 
 /**
+ * Generate Login URL Lazada
+ */
+const generateLoginUrl = (req, res) => {
+    try {
+        const CLIENT_ID = process.env.LAZADA_APP_KEY;
+        const REDIRECT_URI = encodeURIComponent('https://tokalphaomegaploso.my.id/api/lazada/callback');
+        const state = Math.random().toString(36).substring(2, 15);
+        const loginUrl = `https://auth.lazada.com/oauth/authorize?response_type=code&force_auth=true&redirect_uri=${REDIRECT_URI}&client_id=${CLIENT_ID}&state=${state}`;
+        return res.json({ login_url: loginUrl });
+    } catch (err) {
+        console.error("Generate Login URL Error:", err.message);
+        return res.status(500).json({ error: 'Gagal generate login URL' });
+    }
+};
+
+/**
  * Callback setelah login Lazada
  */
 const lazadaCallback = async (req, res) => {
