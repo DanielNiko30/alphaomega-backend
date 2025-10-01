@@ -37,19 +37,6 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, body = "") {
-    const keys = Object.keys(params).sort();
-    let strToSign = apiPath;
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
-    }
-    if (body) strToSign += body;
-    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
-}
-
 const createDummyProduct = async (req, res) => {
     try {
         // 1. Ambil account Lazada pertama dari DB
@@ -122,6 +109,22 @@ const createDummyProduct = async (req, res) => {
     } catch (err) {
         console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
         return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
+    }
+};
+
+/**
+ * Generate Login URL Lazada
+ */
+const generateLoginUrl = (req, res) => {
+    try {
+        const CLIENT_ID = process.env.LAZADA_APP_KEY;
+        const REDIRECT_URI = encodeURIComponent('https://tokalphaomegaploso.my.id/api/lazada/callback');
+        const state = Math.random().toString(36).substring(2, 15);
+        const loginUrl = `https://auth.lazada.com/oauth/authorize?response_type=code&force_auth=true&redirect_uri=${REDIRECT_URI}&client_id=${CLIENT_ID}&state=${state}`;
+        return res.json({ login_url: loginUrl });
+    } catch (err) {
+        console.error("Generate Login URL Error:", err.message);
+        return res.status(500).json({ error: 'Gagal generate login URL' });
     }
 };
 
