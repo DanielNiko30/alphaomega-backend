@@ -8,13 +8,12 @@ const sharp = require("sharp");
 const { Builder } = require("xml2js");
 
 /**
- * Generate Lazada signature
- * @param {string} apiPath - API path, misal "/product/create"
- * @param {object} params - System parameters (app_key, timestamp, access_token, sign_method)
- * @param {string} appSecret - App Secret dari Lazada
- * @param {string} body - Payload XML (raw string)
- * @param {string} payloadJSON - JSON string payload
- * @returns {string} sign uppercase hex
+ * Generate Lazada API signature
+ * @param {string} apiPath - Contoh: "/product/create"
+ * @param {object} params - query params: app_key, access_token, sign_method, timestamp
+ * @param {string} appSecret - secret key
+ * @param {string} bodyStr - JSON string body
+ * @returns {string} signature uppercase
  */
 // function generateSign(apiPath, params, appSecret, body = "") {
 //     // 1. sort params by ASCII
@@ -38,7 +37,7 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, body = "") {
+function generateSign(apiPath, params, appSecret, bodyStr = "") {
     const keys = Object.keys(params).sort();
     let strToSign = apiPath;
     for (const key of keys) {
@@ -47,22 +46,21 @@ function generateSign(apiPath, params, appSecret, body = "") {
             strToSign += key + val;
         }
     }
-    if (body) strToSign += body;
-    return crypto.createHmac("sha256", appSecret)
-        .update(strToSign, "utf8")
-        .digest("hex")
-        .toUpperCase();
+    if (bodyStr) strToSign += bodyStr;
+    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
 }
-
 const createDummyProduct = async (req, res) => {
     try {
-        // Ambil account pertama dari DB
+        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
+
         const accessToken = account.access_token;
 
-        const API_PATH = "/product/create";
-        const timestamp = Math.floor(Date.now() / 1000).toString();
+        // Timestamp harus millisecond string
+        const timestamp = Date.now().toString();
+
+        // System params
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -70,12 +68,12 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // Payload JSON
+        // Dummy product JSON
         const payloadObj = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
-                    name: "Dummy Product JSON",
+                    name: "Dummy Product Node",
                     short_description: "Ini product dummy untuk test",
                     brand: "No Brand",
                     model: "SKU-12345",
@@ -101,14 +99,14 @@ const createDummyProduct = async (req, res) => {
         const bodyStr = JSON.stringify({ payload: payloadObj });
 
         // Generate signature
-        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
+        const sign = generateSign("/product/create", sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
-        // Build URL
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        // URL query
+        const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         console.log("➡️ Sending request to Lazada...");
         console.log("URL:", url);
-        console.log("Payload:", bodyStr);
+        console.log("Body:", bodyStr);
 
         const response = await axios.post(url, bodyStr, {
             headers: { "Content-Type": "application/json" },
@@ -116,9 +114,10 @@ const createDummyProduct = async (req, res) => {
         });
 
         return res.json({ success: true, lazada_response: response.data });
+
     } catch (err) {
-        console.error("❌ Lazada Error:", err.message, err.response?.data || null);
-        return res.status(500).json({ error: err.message, responseData: err.response?.data || null });
+        console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
+        return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
     }
 };
 
