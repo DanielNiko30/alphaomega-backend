@@ -118,40 +118,43 @@ const refreshToken = async () => {
 };
 
 const getProducts = async (req, res) => {
-  try {
-    const api = "/products/get";
-    const timestamp = Date.now();
+    try {
+        // Ambil token dari DB
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ error: "Token Lazada not found" });
+        }
 
-    // Parameter standar
-    const params = {
-      app_key: APP_KEY,
-      access_token: ACCESS_TOKEN,
-      sign_method: "sha256",
-      timestamp,
-      // optional filter
-      filter: req.query.filter || "all", // bisa diganti: live, inactive, dll
-      limit: req.query.limit || 10,
-    };
+        const access_token = lazadaData.access_token;
+        const API_PATH = "/products/get";
+        const timestamp = String(Date.now());
 
-    // Generate sign
-    const sign = generateSign(api, params, APP_SECRET);
+        // Ambil query dari user (optional)
+        const { filter = "all", limit = 10 } = req.query;
 
-    // Request ke Lazada
-    const response = await axios.get(LAZADA_API_URL + api, {
-      params: {
-        ...params,
-        sign,
-      },
-    });
+        const params = {
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp,
+            access_token,
+            filter,
+            limit
+        };
 
-    return res.json(response.data);
-  } catch (error) {
-    console.error("❌ Error getProducts Lazada:", error.response?.data || error.message);
-    return res.status(500).json({
-      message: "Gagal mengambil produk dari Lazada",
-      error: error.response?.data || error.message,
-    });
-  }
+        // Generate sign
+        params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+
+        // Buat URL final
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+
+        // Request ke Lazada
+        const response = await axios.get(url);
+
+        return res.json(response.data);
+    } catch (err) {
+        console.error("❌ Lazada Get Products Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
 };
 
 // === UPLOAD IMAGE ===
