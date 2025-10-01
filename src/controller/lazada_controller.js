@@ -259,9 +259,6 @@ const createProductLazada = async (req, res) => {
         console.log("📦 Lazada Debug => URL, Sign, Payload", { url, sign, payload });
 
         const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" } });
-
-        console.log("✅ Lazada Response:", response.data);
-
         // Update stok
         const itemId = response.data?.data?.item_id;
         if (itemId) {
