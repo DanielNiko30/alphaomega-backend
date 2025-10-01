@@ -117,6 +117,43 @@ const refreshToken = async () => {
     return tokenData.access_token;
 };
 
+const getProducts = async (req, res) => {
+  try {
+    const api = "/products/get";
+    const timestamp = Date.now();
+
+    // Parameter standar
+    const params = {
+      app_key: APP_KEY,
+      access_token: ACCESS_TOKEN,
+      sign_method: "sha256",
+      timestamp,
+      // optional filter
+      filter: req.query.filter || "all", // bisa diganti: live, inactive, dll
+      limit: req.query.limit || 10,
+    };
+
+    // Generate sign
+    const sign = generateSign(api, params, APP_SECRET);
+
+    // Request ke Lazada
+    const response = await axios.get(LAZADA_API_URL + api, {
+      params: {
+        ...params,
+        sign,
+      },
+    });
+
+    return res.json(response.data);
+  } catch (error) {
+    console.error("❌ Error getProducts Lazada:", error.response?.data || error.message);
+    return res.status(500).json({
+      message: "Gagal mengambil produk dari Lazada",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
 // === UPLOAD IMAGE ===
 async function uploadImageToLazada(base64Image) {
     const lazadaData = await Lazada.findOne();
@@ -376,5 +413,6 @@ module.exports = {
     createProductLazada,
     updateProductLazada,
     getCategoryTree,
-    getBrands
+    getBrands,
+    getProducts
 };

@@ -7,7 +7,8 @@ const {
     createProductLazada, 
     updateProductLazada,
     getCategoryTree,
-    getBrands
+    getBrands,
+    getProducts
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -17,5 +18,6 @@ router.post('/create-product/:id_product', createProductLazada);
 router.put('/update-product/:id_product', updateProductLazada);
 router.get("/categories", getCategoryTree);
 router.get("/brands", getBrands);
+router.get("/products", getProducts);
 
 module.exports = router;
