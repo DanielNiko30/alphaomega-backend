@@ -50,9 +50,6 @@ function generateSign(apiPath, params, appSecret, body = "") {
   return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
 }
 
-/**
- * Dummy create product controller
- */
 async function createDummyProduct() {
   try {
     // 1. Hardcode data dummy
@@ -73,7 +70,7 @@ async function createDummyProduct() {
     const timestamp = Date.now().toString();
     const sysParams = {
       app_key: process.env.LAZADA_APP_KEY,
-      access_token: process.env.LAZADA_ACCESS_TOKEN, // isi token di env
+      access_token: process.env.LAZADA_ACCESS_TOKEN, // pastikan token valid
       sign_method: "sha256",
       timestamp
     };
@@ -117,13 +114,17 @@ async function createDummyProduct() {
 
     // 4. Generate signature
     const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+
+    // 5. Build URL
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
     const body = `payload=${encodeURIComponent(payloadXML)}`;
 
-    // 5. POST request
+    console.log("➡️ Sending request to Lazada...");
+
+    // 6. POST request
     const res = await axios.post(url, body, {
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
-      timeout: 30000
+      timeout: 60000 // beri timeout 60 detik
     });
 
     console.log("✅ Lazada Response:", res.data);
@@ -131,6 +132,7 @@ async function createDummyProduct() {
     console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
   }
 }
+
 /**
  * Generate Login URL Lazada
  */
