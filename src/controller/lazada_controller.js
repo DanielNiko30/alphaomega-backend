@@ -38,7 +38,7 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, payload = "") {
+function generateSign(apiPath, params, appSecret, body = "") {
     const keys = Object.keys(params).sort();
     let strToSign = apiPath;
     for (const key of keys) {
@@ -47,35 +47,22 @@ function generateSign(apiPath, params, appSecret, payload = "") {
             strToSign += key + val;
         }
     }
-    if (payload) strToSign += payload;
+    if (body) strToSign += body;
     return crypto.createHmac("sha256", appSecret)
         .update(strToSign, "utf8")
         .digest("hex")
         .toUpperCase();
 }
 
-// Route: create dummy product
-const createDummyProduct = async (req, res) => {
+const createDummyProductJSON = async (req, res) => {
     try {
-        // Ambil account Lazada pertama dari DB
+        // Ambil account pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
         const accessToken = account.access_token;
 
-        // Data dummy hardcode
-        const dummyData = {
-            category_id: 18469,
-            brand_name: "No Brand",
-            item_sku: "SKU-12345",
-            weight: 1.2,
-            dimension: { length: 20, width: 15, height: 10 },
-            image_url: "https://via.placeholder.com/800x800.png?text=Dummy+Image",
-            image_hash: "default_hash"
-        };
-
         const API_PATH = "/product/create";
-        const timestamp = Date.now().toString(); // ✅ millisecond
-
+        const timestamp = Math.floor(Date.now() / 1000).toString();
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -83,71 +70,55 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // Build XML payload
-        const builder = new Builder({ cdata: true, headless: true });
-        let payloadXML = builder.buildObject({
-            Request: {
-                Product: {
-                    PrimaryCategory: dummyData.category_id,
-                    Attributes: {
-                        name: "Dummy Product Node",
-                        short_description: "<p>Ini product dummy untuk test</p>",
-                        brand: dummyData.brand_name,
-                        model: dummyData.item_sku,
-                        warranty_type: "No Warranty",
-                        product_warranty: "false",
-                        net_weight: dummyData.weight
-                    },
-                    Skus: {
-                        Sku: {
-                            SellerSku: dummyData.item_sku,
-                            quantity: 1,
-                            price: 1000,
-                            package_length: dummyData.dimension.length,
-                            package_width: dummyData.dimension.width,
-                            package_height: dummyData.dimension.height,
-                            package_weight: dummyData.weight
-                        }
-                    },
-                    Images: {
-                        Image: dummyData.image_url
+        // Payload JSON
+        const payloadObj = {
+            Product: {
+                PrimaryCategory: "18469",
+                Attributes: {
+                    name: "Dummy Product JSON",
+                    short_description: "Ini product dummy untuk test",
+                    brand: "No Brand",
+                    model: "SKU-12345",
+                    warranty_type: "No Warranty",
+                    product_warranty: "false",
+                    net_weight: 1.2
+                },
+                Skus: [
+                    {
+                        SellerSku: "SKU-12345",
+                        quantity: 1,
+                        price: 1000,
+                        package_length: 20,
+                        package_width: 15,
+                        package_height: 10,
+                        package_weight: 1.2
                     }
-                }
+                ],
+                Images: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"]
             }
-        });
-        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim();
+        };
+
+        const bodyStr = JSON.stringify({ payload: payloadObj });
 
         // Generate signature
-        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
-        // Build URL dengan query params benar
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({
-            app_key: sysParams.app_key,
-            access_token: sysParams.access_token,
-            sign_method: sysParams.sign_method,
-            timestamp: sysParams.timestamp,
-            sign
-        }).toString()}`;
+        // Build URL
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         console.log("➡️ Sending request to Lazada...");
         console.log("URL:", url);
-        console.log("Payload preview:", payloadXML.substring(0, 200), "...");
+        console.log("Payload:", bodyStr);
 
-        // POST request
-        const response = await axios.post(
-            url,
-            `payload=${encodeURIComponent(payloadXML)}`,
-            {
-                headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
-                timeout: 60000
-            }
-        );
+        const response = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/json" },
+            timeout: 60000
+        });
 
         return res.json({ success: true, lazada_response: response.data });
-
     } catch (err) {
-        console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
-        return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
+        console.error("❌ Lazada Error:", err.message, err.response?.data || null);
+        return res.status(500).json({ error: err.message, responseData: err.response?.data || null });
     }
 };
 
