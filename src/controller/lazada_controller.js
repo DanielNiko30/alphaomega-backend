@@ -38,7 +38,7 @@ const { Builder } = require("xml2js");
 // }
 
 function generateSign(apiPath, params, appSecret, bodyStr = "") {
-    const keys = Object.keys(params).sort();
+    const keys = Object.keys(params).sort(); // urut alfabet
     let strToSign = apiPath;
     for (const key of keys) {
         const val = params[key];
@@ -46,9 +46,14 @@ function generateSign(apiPath, params, appSecret, bodyStr = "") {
             strToSign += key + val;
         }
     }
-    if (bodyStr) strToSign += bodyStr;
-    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+    if (bodyStr) strToSign += bodyStr; // tambahkan JSON body
+    return crypto.createHmac("sha256", appSecret)
+        .update(strToSign, "utf8")
+        .digest("hex")
+        .toUpperCase();
 }
+
+// Route: Create dummy product
 const createDummyProduct = async (req, res) => {
     try {
         // Ambil account Lazada pertama dari DB
@@ -57,7 +62,7 @@ const createDummyProduct = async (req, res) => {
 
         const accessToken = account.access_token;
 
-        // Timestamp harus millisecond string
+        // Timestamp 13-digit milidetik
         const timestamp = Date.now().toString();
 
         // System params
@@ -68,13 +73,13 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // Dummy product JSON
+        // Dummy product payload JSON
         const payloadObj = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
                     name: "Dummy Product Node",
-                    short_description: "Ini product dummy untuk test",
+                    short_description: "<p>Ini product dummy untuk test</p>",
                     brand: "No Brand",
                     model: "SKU-12345",
                     warranty_type: "No Warranty",
@@ -96,18 +101,20 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
+        // JSON body sesuai Lazada: { payload: {...} }
         const bodyStr = JSON.stringify({ payload: payloadObj });
 
-        // Generate signature
+        // Generate signature sesuai standar Lazada
         const sign = generateSign("/product/create", sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
-        // URL query
+        // Build URL query params
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         console.log("➡️ Sending request to Lazada...");
         console.log("URL:", url);
         console.log("Body:", bodyStr);
 
+        // POST request
         const response = await axios.post(url, bodyStr, {
             headers: { "Content-Type": "application/json" },
             timeout: 60000
@@ -120,7 +127,6 @@ const createDummyProduct = async (req, res) => {
         return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
     }
 };
-
 /**
  * Generate Login URL Lazada
  */
