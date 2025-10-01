@@ -13,6 +13,7 @@ const { Builder } = require("xml2js");
  * @param {object} params - System parameters (app_key, timestamp, access_token, sign_method)
  * @param {string} appSecret - App Secret dari Lazada
  * @param {string} body - Payload XML (raw string)
+ * @param {string} payloadJSON - JSON string payload
  * @returns {string} sign uppercase hex
  */
 // function generateSign(apiPath, params, appSecret, body = "") {
@@ -37,23 +38,18 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-function generateSign(apiPath, params, appSecret, payload = "") {
-    const keys = Object.keys(params).sort();
+function generateSign(apiPath, params, appSecret, payloadJSON = "") {
     let strToSign = apiPath;
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
+    for (const key of Object.keys(params).sort()) {
+        strToSign += key + params[key];
     }
-    if (payload) strToSign += payload;
-    return crypto.createHmac("sha256", appSecret)
-        .update(strToSign, "utf8")
-        .digest("hex")
-        .toUpperCase();
+    if (payloadJSON) strToSign += payloadJSON;
+    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
 }
 
-// Route create dummy product
+/**
+ * Route: Create dummy product Lazada
+ */
 const createDummyProduct = async (req, res) => {
     try {
         // 1. Ambil account Lazada pertama dari DB
@@ -61,11 +57,11 @@ const createDummyProduct = async (req, res) => {
         if (!account) throw new Error("Tidak ada account Lazada di DB");
         const accessToken = account.access_token;
 
-        // 2. Dummy product data (JSON)
+        // 2. Data dummy (JSON sesuai SDK Lazada)
         const payloadObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: 18469,
+                    PrimaryCategory: "18469",
                     Attributes: {
                         name: "Dummy Product Node",
                         short_description: "Ini product dummy untuk test",
@@ -89,9 +85,7 @@ const createDummyProduct = async (req, res) => {
                         ]
                     },
                     Images: {
-                        Image: [
-                            "https://via.placeholder.com/800x800.png?text=Dummy+Image"
-                        ]
+                        Image: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"]
                     }
                 }
             }
@@ -101,10 +95,10 @@ const createDummyProduct = async (req, res) => {
 
         // 3. System params
         const API_PATH = "/product/create";
-        const timestamp = Date.now(); // SDK pakai millisecond
+        const timestamp = Date.now().toString();
         const sysParams = {
-            app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
+            app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp
         };
@@ -112,18 +106,23 @@ const createDummyProduct = async (req, res) => {
         // 4. Generate signature
         const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadJSON);
 
-        // 5. Build URL query string
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        // 5. Build URL
+        const sortedParams = Object.keys(sysParams).sort().reduce((obj, key) => {
+            obj[key] = sysParams[key];
+            return obj;
+        }, {});
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sortedParams, sign }).toString()}`;
 
         console.log("➡️ Sending request to Lazada...");
         console.log("URL:", url);
         console.log("Payload:", payloadJSON);
 
         // 6. POST request
-        const response = await axios.post(url, `payload=${encodeURIComponent(payloadJSON)}`, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
-            timeout: 60000
-        });
+        const response = await axios.post(
+            url,
+            `payload=${encodeURIComponent(payloadJSON)}`,
+            { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, timeout: 60000 }
+        );
 
         return res.json({ success: true, lazada_response: response.data });
 
