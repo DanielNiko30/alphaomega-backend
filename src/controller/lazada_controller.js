@@ -235,7 +235,7 @@ const createProductLazada = async (req, res) => {
         }
         const imageUrl = await uploadImageToLazada(product.gambar_product, access_token);
 
-        // === Buat payload XML ===
+        // === Payload XML (tidak ikut sign) ===
         const payload = `
 <Request>
   <Product>
@@ -270,9 +270,9 @@ const createProductLazada = async (req, res) => {
 </Request>`.trim();
 
         const apiPath = "/product/create";
-        const timestamp = String(Date.now()); // wajib string!
+        const timestamp = String(Date.now());
 
-        // === Sign (TANPA payload) ===
+        // === Params untuk sign (tanpa payload) ===
         const signParams = {
             access_token,
             app_key: process.env.LAZADA_APP_KEY,
@@ -281,11 +281,11 @@ const createProductLazada = async (req, res) => {
         };
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        // === URL final ===
+        // === URL dengan query params ===
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // === Body form-urlencoded (hanya payload) ===
+        // === Body hanya payload ===
         const body = new URLSearchParams({ payload }).toString();
 
         console.log("📦 Lazada Create Product Request:", { url, payload });
