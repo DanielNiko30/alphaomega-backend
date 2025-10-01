@@ -39,26 +39,26 @@ const { Builder } = require("xml2js");
 // }
 
 function generateSign(apiPath, params, appSecret, bodyStr = "") {
-    // Urutkan key alphabetically
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
-    baseStr += bodyStr; // body harus sama persis dengan yang dikirim
-    return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
+    baseStr += bodyStr; // body persis sama
+    return crypto.createHmac("sha256", appSecret)
+        .update(baseStr)
+        .digest("hex")
+        .toUpperCase();
 }
 
 const createDummyProduct = async (req, res) => {
     try {
-        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token;
         const apiPath = "/product/create";
 
-        // Timestamp 13-digit
         const timestamp = Date.now().toString();
 
         // System params
@@ -97,23 +97,22 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // Encode body untuk signature
-        const bodyStr = `payload=${encodeURIComponent(JSON.stringify(productObj))}`;
+        // Body string untuk sign → harus **persis sama**
+        const bodyStr = `payload=${JSON.stringify(productObj)}`;
 
         // Generate signature
         const sign = generateSign(apiPath, sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
-        // Build URL query params
+        // Build URL
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // Axios POST request
+        // POST request ke Lazada
         const response = await axios.post(url, bodyStr, {
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
             }
         });
 
-        // Return semua info untuk debugging
         return res.json({
             success: true,
             request: {
@@ -125,9 +124,12 @@ const createDummyProduct = async (req, res) => {
             },
             lazada_response: response.data
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({
+            error: err.response?.data || err.message
+        });
     }
 };
 
