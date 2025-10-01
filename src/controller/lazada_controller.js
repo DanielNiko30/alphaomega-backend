@@ -178,9 +178,6 @@ const lazadaCallback = async (req, res) => {
     }
 };
 
-module.exports = { createDummyProductRoute, generateLoginUrl, lazadaCallback };
-
-
 /**
  * Refresh Access Token Lazada
  */
