@@ -9,10 +9,12 @@ const { Builder } = require("xml2js");
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(apiPath, params, appSecret, payload = "") {
+function generateSign(apiPath, params, appSecret, body = "") {
+    // 1. Sort parameter keys (ASCII order)
     const sortedKeys = Object.keys(params).sort();
-    let strToSign = apiPath;
 
+    // 2. Concatenate
+    let strToSign = apiPath;
     for (const key of sortedKeys) {
         const val = params[key];
         if (val !== undefined && val !== null && val !== "") {
@@ -20,10 +22,12 @@ function generateSign(apiPath, params, appSecret, payload = "") {
         }
     }
 
-    if (payload) {
-        strToSign += payload;
+    // 3. Append body (raw JSON string)
+    if (body) {
+        strToSign += body;
     }
 
+    // 4. Sign with HMAC-SHA256
     const hmac = crypto.createHmac("sha256", appSecret);
     hmac.update(strToSign, "utf8");
     return hmac.digest("hex").toUpperCase();
