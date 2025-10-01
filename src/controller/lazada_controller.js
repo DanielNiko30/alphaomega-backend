@@ -256,7 +256,7 @@ const createProductLazada = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign })}`;
         const body = `payload=${encodeURIComponent(payload)}`;
 
-        //console.log("📦 Lazada Debug => URL, Sign, Payload", { url, sign, payload });
+        console.log("📦 Lazada Debug => URL, Sign, Payload", { url, sign, payload });
 
         const response = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" } });
         // Update stok
@@ -268,7 +268,12 @@ const createProductLazada = async (req, res) => {
         return res.status(201).json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada",
-            lazada_response: response.data
+            lazada_response: response.data,
+            debug: {
+                url,
+                sign,
+                payload
+            }
         });
 
     } catch (err) {
