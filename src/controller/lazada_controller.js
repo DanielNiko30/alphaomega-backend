@@ -216,7 +216,8 @@ const createProductLazada = async (req, res) => {
 
         const apiPath = "/product/create";
         // Timestamp Lazada harus dalam detik GMT
-        const timestamp = Math.floor(Date.now() / 1000 - new Date().getTimezoneOffset() * 60).toString();
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+
         const signParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: lazadaData.access_token,
