@@ -9,8 +9,7 @@ const {
     getCategoryTree,
     getBrands,
     getProducts,
-    createDummyProduct,
-    testLazadaIP
+    createDummyProduct
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -22,6 +21,5 @@ router.put('/update-product/:id_product', updateProductLazada);
 router.get("/categories", getCategoryTree);
 router.get("/brands", getBrands);
 router.get("/products", getProducts);
-router.get("/testip", testLazadaIP);
 
 module.exports = router;

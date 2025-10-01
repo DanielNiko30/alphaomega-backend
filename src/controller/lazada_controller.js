@@ -110,16 +110,23 @@ const createDummyProduct = async (req, res) => {
         // Build URL query params
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // Return URL & body saja tanpa request ke Lazada
+        // 🚀 POST request langsung ke Lazada
+        const response = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/json" },
+            timeout: 60000
+        });
+
         return res.json({
             success: true,
-            url,
-            body: JSON.parse(bodyStr)
+            lazada_response: response.data
         });
 
     } catch (err) {
-        console.error("❌ Error:", err.message || err.code);
-        return res.status(500).json({ error: err.message || err.code });
+        console.error("❌ Lazada Error:", err.response?.data || err.message);
+        return res.status(500).json({
+            error: err.message || err.code,
+            responseData: err.response?.data || null
+        });
     }
 };
 
@@ -513,5 +520,4 @@ module.exports = {
     getBrands,
     getProducts,
     createDummyProduct,
-    testLazadaIP
 };
