@@ -57,10 +57,10 @@ const createDummyProduct = async (req, res) => {
     try {
         // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
-        if (!account) throw new Error('Tidak ada account Lazada di DB');
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
         const accessToken = account.access_token;
 
-        // Data dummy
+        // Data dummy hardcode
         const dummyData = {
             category_id: 18469,
             brand_name: "No Brand",
@@ -118,25 +118,29 @@ const createDummyProduct = async (req, res) => {
         });
         payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim();
 
-        // Generate signature (tidak include body)
+        // Generate signature (body tidak ikut)
         const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET);
 
-        // Build URL
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        // Build URL (query params urut alfabet)
+        const queryParams = new URLSearchParams({ ...sysParams, sign }).toString();
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${queryParams}`;
 
         console.log("➡️ Sending request to Lazada...");
 
         // POST request
-        const response = await axios.post(url, `payload=${encodeURIComponent(payloadXML)}`, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
-            timeout: 60000
-        });
+        const response = await axios.post(
+            url,
+            `payload=${encodeURIComponent(payloadXML)}`,
+            { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, timeout: 60000 }
+        );
 
         return res.json({ success: true, lazada_response: response.data });
-
     } catch (err) {
         console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
-        return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
+        return res.status(500).json({
+            error: err.message || err.code,
+            responseData: err.response?.data || null
+        });
     }
 };
 
