@@ -174,36 +174,6 @@ const getProducts = async (req, res) => {
 /**
  * Upload Image to Lazada
  */
-const axios = require('axios');
-const crypto = require('crypto');
-const { Lazada } = require('../model/lazada_model');
-const { Product } = require('../model/product_model');
-const { Stok } = require('../model/stok_model');
-const FormData = require("form-data");
-const sharp = require("sharp");
-const { Builder } = require("xml2js");
-
-/**
- * Generate Lazada signature
- */
-function generateSign(apiPath, params, appSecret, body = "") {
-    const keys = Object.keys(params).sort();
-    let strToSign = apiPath;
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
-    }
-    if (body) strToSign += body;
-    const hmac = crypto.createHmac("sha256", appSecret);
-    hmac.update(strToSign, "utf8");
-    return hmac.digest("hex").toUpperCase();
-}
-
-/**
- * Upload Image to Lazada
- */
 async function uploadImageToLazada(base64Image, accessToken) {
     try {
         const API_PATH = "/image/upload";
