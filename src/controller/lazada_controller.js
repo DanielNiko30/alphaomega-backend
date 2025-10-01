@@ -4,20 +4,23 @@ const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
 const FormData = require("form-data");
+const qs = require('qs');
 
 /**
  * Helper: Generate Lazada Signature
  */
-function generateSign(path, params, appSecret) {
-    // 1. Urutkan key params alphabet
+function generateSign(apiPath, params, appSecret) {
+    // Sort keys alphabetically
     const sortedKeys = Object.keys(params).sort();
-    let baseString = path;
+    let baseString = appSecret + apiPath;
     sortedKeys.forEach(key => {
         baseString += key + params[key];
     });
-    // 2. HMAC SHA256
-    return crypto.createHmac('sha256', appSecret).update(baseString).digest('hex').toUpperCase();
+    baseString += appSecret;
+    // SHA256 hex
+    return require('crypto').createHash('sha256').update(baseString).digest('hex').toUpperCase();
 }
+
 
 
 /**
@@ -232,9 +235,10 @@ const createProductLazada = async (req, res) => {
 
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...params, sign }).toString()}`;
 
-        // 2️⃣ Kirim body sebagai form-urlencoded
-        const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
-
+        const body = qs.stringify({ payload: JSON.stringify(payload) });
+        await axios.post(url, body, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
 
         const itemId = response.data?.data?.item_id;
         if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
