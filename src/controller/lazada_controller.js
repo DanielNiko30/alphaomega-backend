@@ -14,7 +14,7 @@ const { Builder } = require("xml2js");
  * @param {string} body - Payload XML (raw string)
  * @returns {string} sign uppercase hex
  */
-function generateLazadaSign(apiPath, params, appSecret, body = "") {
+function generateSign(apiPath, params, appSecret, body = "") {
     // 1. sort params by ASCII
     const keys = Object.keys(params).sort();
     let strToSign = apiPath;
@@ -183,7 +183,7 @@ async function uploadImageToLazada(base64Image, accessToken) {
         timestamp,
     };
 
-    const sign = generateLazadaSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+    const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
 
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
@@ -253,7 +253,7 @@ async function createProductLazada({ product, stokTerpilih, category_id, brand, 
     };
 
     // Generate sign
-    const sign = generateLazadaSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+    const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
 
     const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
     const body = `payload=${encodeURIComponent(payloadXML)}`;
