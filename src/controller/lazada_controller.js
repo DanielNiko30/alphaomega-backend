@@ -229,41 +229,40 @@ const createProductLazada = async (req, res) => {
 
         // === Buat payload XML ===
         const payload = `
-      <Request>
-        <Product>
-          <PrimaryCategory>${category_id}</PrimaryCategory>
-          <Attributes>
-            <name><![CDATA[${product.nama_product}]]></name>
-            <short_description><![CDATA[<p>${product.deskripsi || "Tidak ada deskripsi"}</p>]]></short_description>
-            <brand>${brand}</brand>
-            <package_content><![CDATA[${product.nama_product} - ${brand}]]></package_content>
-            <model>${seller_sku}</model>
-            <warranty_type>No Warranty</warranty_type>
-            <hazmat>None</hazmat>
-            <delivery_option_sop>0</delivery_option_sop>
-            <product_warranty>false</product_warranty>
-            <net_weight>${stokTerpilih.berat || 0.5}</net_weight>
-          </Attributes>
-          <Skus>
-            <Sku>
-              <SellerSku>${seller_sku}</SellerSku>
-              <quantity>${stokTerpilih.qty}</quantity>
-              <price>${stokTerpilih.harga_jual}</price>
-              <package_length>${stokTerpilih.panjang || 10}</package_length>
-              <package_width>${stokTerpilih.lebar || 10}</package_width>
-              <package_height>${stokTerpilih.tinggi || 10}</package_height>
-              <package_weight>${stokTerpilih.berat || 0.5}</package_weight>
-            </Sku>
-          </Skus>
-          <Images>
-            <Image>${imageUrl}</Image>
-          </Images>
-        </Product>
-      </Request>
-    `.trim();
+<Request>
+  <Product>
+    <PrimaryCategory>${category_id}</PrimaryCategory>
+    <Attributes>
+      <name><![CDATA[${product.nama_product}]]></name>
+      <short_description><![CDATA[<p>${product.deskripsi || "Tidak ada deskripsi"}</p>]]></short_description>
+      <brand>${brand}</brand>
+      <package_content><![CDATA[${product.nama_product} - ${brand}]]></package_content>
+      <model>${seller_sku}</model>
+      <warranty_type>No Warranty</warranty_type>
+      <hazmat>None</hazmat>
+      <delivery_option_sop>0</delivery_option_sop>
+      <product_warranty>false</product_warranty>
+      <net_weight>${stokTerpilih.berat || 0.5}</net_weight>
+    </Attributes>
+    <Skus>
+      <Sku>
+        <SellerSku>${seller_sku}</SellerSku>
+        <quantity>${stokTerpilih.qty}</quantity>
+        <price>${stokTerpilih.harga_jual}</price>
+        <package_length>${stokTerpilih.panjang || 10}</package_length>
+        <package_width>${stokTerpilih.lebar || 10}</package_width>
+        <package_height>${stokTerpilih.tinggi || 10}</package_height>
+        <package_weight>${stokTerpilih.berat || 0.5}</package_weight>
+      </Sku>
+    </Skus>
+    <Images>
+      <Image>${imageUrl}</Image>
+    </Images>
+  </Product>
+</Request>`.trim();
 
         const apiPath = "/product/create";
-        const timestamp = Date.now();
+        const timestamp = String(Date.now()); // wajib string!
 
         // === Sign (TANPA payload) ===
         const signParams = {
@@ -275,16 +274,10 @@ const createProductLazada = async (req, res) => {
         const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
         // === URL final ===
-        const queryString = new URLSearchParams({
-            access_token,
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp,
-            sign,
-        }).toString();
+        const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
-        // === Body form-urlencoded ===
+        // === Body form-urlencoded (hanya payload) ===
         const body = new URLSearchParams({ payload }).toString();
 
         console.log("📦 Lazada Create Product Request:", { url, payload });
@@ -295,6 +288,7 @@ const createProductLazada = async (req, res) => {
 
         console.log("✅ Lazada Response:", response.data);
 
+        // === Update stok dengan item_id dari Lazada ===
         const itemId = response.data?.data?.item_id;
         if (itemId) {
             await Stok.update(
