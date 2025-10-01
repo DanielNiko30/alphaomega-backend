@@ -175,105 +175,110 @@ const getProducts = async (req, res) => {
  * Upload Image to Lazada
  */
 async function uploadImageToLazada(base64Image, accessToken) {
-    const API_PATH = "/image/upload";
-    const timestamp = Date.now().toString();
+    try {
+        const API_PATH = "/image/upload";
+        const timestamp = Date.now().toString();
 
-    // Convert base64 ke buffer
-    const imgBuffer = Buffer.from(base64Image, "base64");
+        // Convert base64 ke buffer & compress pakai sharp
+        const imgBuffer = Buffer.from(base64Image, "base64");
+        const optimizedBuffer = await sharp(imgBuffer)
+            .resize({ width: 800, withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
 
-    // Resize / compress pakai sharp (max width 800px, kualitas 80%)
-    const optimizedBuffer = await sharp(imgBuffer)
-        .resize({ width: 800, withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+        const params = {
+            access_token: accessToken,
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp,
+        };
 
-    const params = {
-        access_token: accessToken,
-        app_key: process.env.LAZADA_APP_KEY,
-        sign_method: "sha256",
-        timestamp,
-    };
+        const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
-    const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+        const form = new FormData();
+        form.append("image", optimizedBuffer, { filename: "product.jpg" });
 
-    const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
+        const response = await axios.post(url, form, { headers: form.getHeaders() });
+        if (!response.data?.data?.image?.url) {
+            return { success: false, message: "Gagal upload gambar ke Lazada", responseData: response.data };
+        }
 
-    const form = new FormData();
-    form.append("image", optimizedBuffer, { filename: "product.jpg" });
-
-    const response = await axios.post(url, form, { headers: form.getHeaders() });
-    if (!response.data?.data?.image?.url) {
-        throw { message: "Gagal upload gambar ke Lazada", responseData: response.data };
+        return { success: true, image: response.data.data.image };
+    } catch (err) {
+        console.error("❌ Upload Image Error:", err.response?.data || err.message);
+        return { success: false, message: err.message, responseData: err.response?.data || null };
     }
-
-    return response.data.data.image;
 }
 
 /**
- * Create Product Lazada
+ * Create Product Lazada (return step status walaupun error)
  */
 async function createProductLazada({ product, stokTerpilih, category_id, brand, seller_sku, accessToken }) {
-    // Upload gambar dulu
-    const image = await uploadImageToLazada(product.gambar_product, accessToken);
+    // Step 1: Upload Image
+    const imageResult = await uploadImageToLazada(product.gambar_product, accessToken);
 
-    // Build XML payload
-    const builder = new Builder({ cdata: true, headless: true });
-    const payloadObj = {
-        Request: {
-            Product: {
-                PrimaryCategory: category_id,
-                Attributes: {
-                    name: product.nama_product,
-                    short_description: `<p>${product.deskripsi || "Tidak ada deskripsi"}</p>`,
-                    brand,
-                    package_content: `${product.nama_product} - ${brand}`,
-                    model: seller_sku,
-                    warranty_type: "No Warranty",
-                    hazmat: "None",
-                    delivery_option_sop: "0",
-                    product_warranty: "false",
-                    net_weight: stokTerpilih.berat || 0.5
-                },
-                Skus: {
-                    Sku: {
-                        SellerSku: seller_sku,
-                        quantity: stokTerpilih.qty || 1,
-                        price: stokTerpilih.harga_jual || 1000,
-                        package_length: stokTerpilih.panjang || 10,
-                        package_width: stokTerpilih.lebar || 10,
-                        package_height: stokTerpilih.tinggi || 10,
-                        package_weight: stokTerpilih.berat || 0.5
-                    }
-                },
-                Images: { Image: { url: image.url, hash_code: image.hash_code } }
+    // Step 2: Build XML payload (gunakan image jika berhasil)
+    let payloadXML = null;
+    if (imageResult.success) {
+        const builder = new Builder({ cdata: true, headless: true });
+        const payloadObj = {
+            Request: {
+                Product: {
+                    PrimaryCategory: category_id,
+                    Attributes: {
+                        name: product.nama_product,
+                        short_description: `<p>${product.deskripsi || "Tidak ada deskripsi"}</p>`,
+                        brand,
+                        package_content: `${product.nama_product} - ${brand}`,
+                        model: seller_sku,
+                        warranty_type: "No Warranty",
+                        hazmat: "None",
+                        delivery_option_sop: "0",
+                        product_warranty: "false",
+                        net_weight: stokTerpilih.berat || 0.5
+                    },
+                    Skus: {
+                        Sku: {
+                            SellerSku: seller_sku,
+                            quantity: stokTerpilih.qty || 1,
+                            price: stokTerpilih.harga_jual || 1000,
+                            package_length: stokTerpilih.panjang || 10,
+                            package_width: stokTerpilih.lebar || 10,
+                            package_height: stokTerpilih.tinggi || 10,
+                            package_weight: stokTerpilih.berat || 0.5
+                        }
+                    },
+                    Images: { Image: { url: imageResult.image.url, hash_code: imageResult.image.hash_code } }
+                }
             }
+        };
+        payloadXML = builder.buildObject(payloadObj);
+    }
+
+    // Step 3: Send product create request (catch error)
+    let productResult = null;
+    if (payloadXML) {
+        try {
+            const API_PATH = "/product/create";
+            const timestamp = Date.now().toString();
+            const sysParams = {
+                app_key: process.env.LAZADA_APP_KEY,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp
+            };
+            const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+            const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+            const body = `payload=${encodeURIComponent(payloadXML)}`;
+
+            const res = await axios.post(url, body, { headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" } });
+            productResult = { success: true, data: res.data };
+        } catch (err) {
+            console.error("❌ Create Product Error:", err.response?.data || err.message);
+            productResult = { success: false, message: err.message, responseData: err.response?.data || null };
         }
-    };
-
-    const payloadXML = builder.buildObject(payloadObj);
-
-    // System params
-    const API_PATH = "/product/create";
-    const timestamp = Date.now().toString();
-    const sysParams = {
-        app_key: process.env.LAZADA_APP_KEY,
-        access_token: accessToken,
-        sign_method: "sha256",
-        timestamp
-    };
-
-    // Generate sign
-    const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
-
-    const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-    const body = `payload=${encodeURIComponent(payloadXML)}`;
-
-    // Request ke Lazada
-    const res = await axios.post(url, body, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
-    });
-
-    return res.data;
+    }
 }
 
 /**
