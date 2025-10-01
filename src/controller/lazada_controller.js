@@ -56,12 +56,16 @@ function generateSign(apiPath, params, appSecret, bodyStr = "") {
 // Route: Generate dummy product request
 const createDummyProduct = async (req, res) => {
     try {
+        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token;
+
+        // Timestamp 13-digit milidetik
         const timestamp = Date.now().toString();
 
+        // System params
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -69,6 +73,7 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
+        // Dummy product payload
         const payloadObj = {
             Product: {
                 PrimaryCategory: "18469",
@@ -96,40 +101,37 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        const bodyStr = JSON.stringify({ payload: payloadObj });
+        // Format body sesuai Lazada: payload=JSON
+        const bodyStr = `payload=${encodeURIComponent(JSON.stringify(payloadObj))}`;
 
+        // Generate signature dari bodyStr yang akan dikirim
         const sign = generateSign("/product/create", sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
+        // URL query params
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // POST request ke Lazada
-        let lazadaResponse = null;
-        try {
-            const response = await axios.post(url, bodyStr, {
-                headers: { "Content-Type": "application/json" },
-                timeout: 60000
-            });
-            lazadaResponse = response.data;
-        } catch (err) {
-            lazadaResponse = err.response?.data || { error: err.message };
-        }
+        // Kirim POST request ke Lazada
+        const response = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
+        });
 
-        // Return semua data untuk debugging
+        // Return info lengkap
         return res.json({
             success: true,
             request: {
                 url,
                 sysParams,
                 sign,
-                body: JSON.parse(bodyStr)
+                body: payloadObj
             },
-            lazada_response: lazadaResponse
+            lazada_response: response.data
         });
 
     } catch (err) {
-        console.error("❌ Error:", err.message || err.code);
+        console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         return res.status(500).json({
-            error: err.message || err.code
+            success: false,
+            error: err.response?.data || err.message
         });
     }
 };
