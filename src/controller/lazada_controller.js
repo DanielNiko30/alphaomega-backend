@@ -54,7 +54,7 @@ function generateSign(apiPath, params, appSecret, body = "") {
         .toUpperCase();
 }
 
-const createDummyProductJSON = async (req, res) => {
+const createDummyProduct = async (req, res) => {
     try {
         // Ambil account pertama dari DB
         const account = await Lazada.findOne();
