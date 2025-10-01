@@ -39,22 +39,16 @@ const { Builder } = require("xml2js");
 // }
 
 function generateSign(apiPath, params, appSecret, bodyStr = "") {
-    const keys = Object.keys(params).sort(); // urut alfabet
-    let strToSign = apiPath;
-    for (const key of keys) {
-        const val = params[key];
-        if (val !== undefined && val !== null && val !== "") {
-            strToSign += key + val;
-        }
+    // Urutkan key alphabetically
+    const sortedKeys = Object.keys(params).sort();
+    let baseStr = apiPath;
+    for (const key of sortedKeys) {
+        baseStr += key + params[key];
     }
-    if (bodyStr) strToSign += bodyStr; // tambahkan JSON body
-    return crypto.createHmac("sha256", appSecret)
-        .update(strToSign, "utf8")
-        .digest("hex")
-        .toUpperCase();
+    baseStr += bodyStr; // tambahkan body persis sama
+    return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
 }
 
-// Route: Generate dummy product request
 const createDummyProduct = async (req, res) => {
     try {
         // Ambil account Lazada pertama dari DB
@@ -62,7 +56,9 @@ const createDummyProduct = async (req, res) => {
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token;
-        const API_PATH = "/product/create";
+        const apiPath = "/product/create";
+
+        // Timestamp 13-digit
         const timestamp = Date.now().toString();
 
         // System params
@@ -70,11 +66,11 @@ const createDummyProduct = async (req, res) => {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
             sign_method: "sha256",
-            timestamp,
+            timestamp
         };
 
-        // Dummy product payload
-        const productPayload = {
+        // Dummy product
+        const productObj = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
@@ -84,7 +80,7 @@ const createDummyProduct = async (req, res) => {
                     model: "SKU-12345",
                     warranty_type: "No Warranty",
                     product_warranty: "false",
-                    net_weight: 1.2,
+                    net_weight: 1.2
                 },
                 Skus: [
                     {
@@ -94,37 +90,40 @@ const createDummyProduct = async (req, res) => {
                         package_length: 20,
                         package_width: 15,
                         package_height: 10,
-                        package_weight: 1.2,
-                    },
+                        package_weight: 1.2
+                    }
                 ],
-                Images: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"],
-            },
+                Images: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"]
+            }
         };
 
-        // Encode body sesuai Lazada
-        const bodyStr = qs.stringify({ payload: JSON.stringify(productPayload) });
+        // Body string untuk sign (belum di encode)
+        const bodyStr = `payload=${JSON.stringify(productObj)}`;
 
-        // Generate signature pakai **bodyStr** yang sudah di-encode
-        const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
+        // Generate signature
+        const sign = generateSign(apiPath, sysParams, process.env.LAZADA_APP_SECRET, bodyStr);
 
         // Build URL query params
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // POST ke Lazada
+        // Axios POST request
         const response = await axios.post(url, bodyStr, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
+            }
         });
 
+        // Return semua info untuk debugging
         return res.json({
             success: true,
             request: {
-                apiPath: API_PATH,
+                apiPath,
                 sysParams,
-                bodyStr,
-                url,
                 sign,
+                url,
+                bodyStr
             },
-            lazada_response: response.data,
+            lazada_response: response.data
         });
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
