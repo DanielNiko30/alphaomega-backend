@@ -47,22 +47,35 @@ function generateSign(apiPath, params, appSecret, body = "") {
         }
     }
     if (body) strToSign += body;
-    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+    return crypto.createHmac("sha256", appSecret)
+        .update(strToSign, "utf8")
+        .digest("hex")
+        .toUpperCase();
 }
 
+// Route: Create dummy product
 const createDummyProduct = async (req, res) => {
     try {
-        // 1. Ambil account Lazada pertama dari DB
-        const account = await Lazada.findOne(); // tanpa where = ambil record pertama
-        if (!account) throw new Error('Account Lazada tidak ditemukan');
+        // 1. Ambil access token dari DB
+        const accountName = "default_account"; // ganti sesuai nama account di DB
+        const account = await Lazada.findOne({ where: { account: accountName } });
+        if (!account) throw new Error(`Account Lazada "${accountName}" tidak ditemukan`);
         const accessToken = account.access_token;
-        const accountName = account.account; // bisa pakai untuk log/debug
 
-        console.log("➡️ Menggunakan account:", accountName);
+        // 2. Data dummy hardcode
+        const dummyData = {
+            category_id: 18469,
+            brand_name: "No Brand",
+            item_sku: "SKU-12345",
+            weight: 1.2,
+            dimension: { length: 20, width: 15, height: 10 },
+            image_url: "https://via.placeholder.com/800x800.png?text=Dummy+Image",
+            image_hash: "default_hash"
+        };
 
-        // 2. System params
+        // 3. System params
         const API_PATH = "/product/create";
-        const timestamp = Date.now().toString();
+        const timestamp = Math.floor(Date.now() / 1000).toString(); // timestamp dalam detik
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -70,55 +83,60 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // 3. XML payload hardcode
+        // 4. Build XML payload (headless, trim whitespace)
         const builder = new Builder({ cdata: true, headless: true });
         const payloadObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: 18469,
+                    PrimaryCategory: dummyData.category_id,
                     Attributes: {
                         name: "Dummy Product",
                         short_description: "<p>Ini product dummy untuk test</p>",
-                        brand: "No Brand",
-                        model: "SKU-12345",
+                        brand: dummyData.brand_name,
+                        model: dummyData.item_sku,
                         warranty_type: "No Warranty",
                         product_warranty: "false",
-                        net_weight: 1.2
+                        net_weight: dummyData.weight
                     },
                     Skus: {
                         Sku: {
-                            SellerSku: "SKU-12345",
+                            SellerSku: dummyData.item_sku,
                             quantity: 1,
                             price: 1000,
-                            package_length: 20,
-                            package_width: 15,
-                            package_height: 10,
-                            package_weight: 1.2
+                            package_length: dummyData.dimension.length,
+                            package_width: dummyData.dimension.width,
+                            package_height: dummyData.dimension.height,
+                            package_weight: dummyData.weight
                         }
                     },
                     Images: {
                         Image: {
-                            url: "https://via.placeholder.com/800x800.png?text=Dummy+Image",
-                            hash_code: "default_hash"
+                            url: dummyData.image_url,
+                            hash_code: dummyData.image_hash
                         }
                     }
                 }
             }
         };
-        const payloadXML = builder.buildObject(payloadObj);
+        let payloadXML = builder.buildObject(payloadObj);
+        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim(); // hilangkan newline
 
-        // 4. Generate signature
+        // 5. Generate signature
         const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
+
+        // 6. Build URL
         const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const body = `payload=${encodeURIComponent(payloadXML)}`;
 
-        // 5. POST request
+        console.log("➡️ Sending request to Lazada...");
+
+        // 7. POST request
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
             timeout: 60000
         });
 
-        return res.json({ success: true, account: accountName, lazada_response: response.data });
+        return res.json({ success: true, lazada_response: response.data });
     } catch (err) {
         console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
         return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
