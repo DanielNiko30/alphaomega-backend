@@ -39,19 +39,18 @@ const { Builder } = require("xml2js");
 // }
 
 function generateSign(apiPath, params, appSecret, bodyStr = "") {
-    // Urutkan key alphabetically
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
-    baseStr += bodyStr; // tambahkan body persis sama
+    baseStr += bodyStr; // body belum di-encode
     return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
 }
 
 const createDummyProduct = async (req, res) => {
     try {
-        // Ambil account Lazada pertama dari DB
+        // Ambil account Lazada pertama
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -69,7 +68,7 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // Dummy product
+        // Dummy product payload
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
@@ -97,7 +96,7 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // Body string untuk sign (belum di encode)
+        // Body string untuk signature (belum di-encode)
         const bodyStr = `payload=${JSON.stringify(productObj)}`;
 
         // Generate signature
@@ -106,14 +105,15 @@ const createDummyProduct = async (req, res) => {
         // Build URL query params
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // Axios POST request
+        // POST request ke Lazada
         const response = await axios.post(url, bodyStr, {
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
-            }
+            },
+            timeout: 15000
         });
 
-        // Return semua info untuk debugging
+        // Return semua info + response Lazada
         return res.json({
             success: true,
             request: {
@@ -125,11 +125,20 @@ const createDummyProduct = async (req, res) => {
             },
             lazada_response: response.data
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({
+            error: err.response?.data || err.message,
+            request: err.config ? {
+                url: err.config.url,
+                headers: err.config.headers,
+                body: err.config.data
+            } : undefined
+        });
     }
 };
+
 /**
  * Generate Login URL Lazada
  */
