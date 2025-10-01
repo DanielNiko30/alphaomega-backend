@@ -54,14 +54,28 @@ function generateSign(apiPath, params, appSecret, body = "") {
 }
 
 // Route: Create dummy product
+function generateSign(apiPath, params, appSecret, body = "") {
+    const keys = Object.keys(params).sort();
+    let strToSign = apiPath;
+    for (const key of keys) {
+        const val = params[key];
+        if (val !== undefined && val !== null && val !== "") {
+            strToSign += key + val;
+        }
+    }
+    if (body) strToSign += body;
+    return crypto.createHmac("sha256", appSecret).update(strToSign, "utf8").digest("hex").toUpperCase();
+}
+
+// 2. Route create dummy product
 const createDummyProduct = async (req, res) => {
     try {
-        // 1. Ambil account Lazada pertama dari DB
+        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error('Tidak ada account Lazada di DB');
         const accessToken = account.access_token;
 
-        // 2. Data dummy hardcode
+        // Data dummy
         const dummyData = {
             category_id: 18469,
             brand_name: "No Brand",
@@ -72,9 +86,9 @@ const createDummyProduct = async (req, res) => {
             image_hash: "default_hash"
         };
 
-        // 3. System params
+        // System params
         const API_PATH = "/product/create";
-        const timestamp = Date.now().toString();
+        const timestamp = Date.now().toString(); // harus millisecond
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
@@ -82,9 +96,9 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // 4. Build XML payload
+        // Build XML payload
         const builder = new Builder({ cdata: true, headless: true });
-        const payloadObj = {
+        let payloadXML = builder.buildObject({
             Request: {
                 Product: {
                     PrimaryCategory: dummyData.category_id,
@@ -116,26 +130,25 @@ const createDummyProduct = async (req, res) => {
                     }
                 }
             }
-        };
-        let payloadXML = builder.buildObject(payloadObj);
-        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim();
+        });
+        payloadXML = payloadXML.replace(/\r?\n|\r/g, "").trim(); // hilangkan newline
 
-        // 5. Generate signature
+        // Generate signature
         const sign = generateSign(API_PATH, sysParams, process.env.LAZADA_APP_SECRET, payloadXML);
 
-        // 6. Build URL
+        // Build URL (query params harus urut alphabet)
         const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-        const body = `payload=${encodeURIComponent(payloadXML)}`;
 
         console.log("➡️ Sending request to Lazada...");
 
-        // 7. POST request
-        const response = await axios.post(url, body, {
+        // POST request
+        const response = await axios.post(url, `payload=${encodeURIComponent(payloadXML)}`, {
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
             timeout: 60000
         });
 
         return res.json({ success: true, lazada_response: response.data });
+
     } catch (err) {
         console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
         return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
