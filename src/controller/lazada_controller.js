@@ -292,13 +292,21 @@ const createProductLazada = async (req, res) => {
         const queryString = new URLSearchParams({ ...signParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiPath}?${queryString}`;
 
+        // === Body harus RAW XML ===
+        const body = `payload=${payload}`;
+
+        // === Debug log (sementara) ===
+        console.log("📦 Lazada Create Product Request:", {
+            url,
+            signParams,
+            payload
+        });
+
         // === Request ke Lazada ===
-        const body = new URLSearchParams({ payload }).toString();
-
-        console.log("📦 Lazada Create Product Request:", { url, payload });
-
         const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
+            },
         });
 
         console.log("✅ Lazada Response:", response.data);
