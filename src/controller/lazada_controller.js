@@ -53,7 +53,7 @@ function generateSign(apiPath, params, appSecret, bodyStr = "") {
         .toUpperCase();
 }
 
-// Route: Create dummy product
+// Route: Generate dummy product request
 const createDummyProduct = async (req, res) => {
     try {
         // Ambil account Lazada pertama dari DB
@@ -110,23 +110,19 @@ const createDummyProduct = async (req, res) => {
         // Build URL query params
         const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        console.log("➡️ Sending request to Lazada...");
-        console.log("URL:", url);
-        console.log("Body:", bodyStr);
-
-        // POST request
-        const response = await axios.post(url, bodyStr, {
-            headers: { "Content-Type": "application/json" },
-            timeout: 60000
+        // Return URL & body saja tanpa request ke Lazada
+        return res.json({
+            success: true,
+            url,
+            body: JSON.parse(bodyStr)
         });
 
-        return res.json({ success: true, lazada_response: response.data });
-
     } catch (err) {
-        console.error("❌ Lazada Error:", err.code || err.message, err.response?.data || null);
-        return res.status(500).json({ error: err.message || err.code, responseData: err.response?.data || null });
+        console.error("❌ Error:", err.message || err.code);
+        return res.status(500).json({ error: err.message || err.code });
     }
 };
+
 /**
  * Generate Login URL Lazada
  */
