@@ -74,7 +74,7 @@ const createDummyProduct = async (req, res) => {
 
         // 3. System params
         const API_PATH = "/product/create";
-        const timestamp = Math.floor(Date.now() / 1000).toString();
+        const timestamp = Date.now().toString();
         const sysParams = {
             app_key: process.env.LAZADA_APP_KEY,
             access_token: accessToken,
