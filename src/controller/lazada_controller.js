@@ -217,22 +217,24 @@ const createProductLazada = async (req, res) => {
         const apiPath = "/product/create";
         // Timestamp Lazada harus dalam detik GMT
         const timestamp = Date.now().toString();
-        const signParams = {
-            app_key: process.env.LAZADA_APP_KEY,
+        const params = {
             access_token: lazadaData.access_token,
+            app_key: process.env.LAZADA_APP_KEY,
             sign_method: "sha256",
             timestamp
         };
-        const sign = generateSign(apiPath, signParams, process.env.LAZADA_APP_SECRET);
 
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...signParams, sign }).toString()}`;
+        // 1️⃣ Urutkan params alphabetically
+        const orderedKeys = Object.keys(params).sort();
+        const baseString = "/product/create" + paramsToString(orderedKeys, params); // paramsToString = key+value concat
 
-        // === Kirim payload sebagai form-urlencoded ===
+        const sign = sha256Hmac(baseString, LAZADA_APP_SECRET);
+
+        const url = `https://api.lazada.co.id/rest/product/create?${new URLSearchParams({ ...params, sign }).toString()}`;
+
+        // 2️⃣ Kirim body sebagai form-urlencoded
         const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
 
-        const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" }
-        });
 
         const itemId = response.data?.data?.item_id;
         if (itemId) await Stok.update({ id_product_lazada: itemId }, { where: { id_stok: stokTerpilih.id_stok } });
