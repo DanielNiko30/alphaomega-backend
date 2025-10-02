@@ -75,7 +75,6 @@ const createDummyProduct = async (req, res) => {
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
-        // ⚠️ PENTING: TRIM pada App Secret dan App Key
         const accessToken = account.access_token.trim();
         const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
         const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
@@ -91,13 +90,14 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // 2. Dummy product Object
+        // 2. Dummy product Object (PERHATIKAN short_description SUDAH DIBERSIHKAN)
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
                     name: "Dummy Product Node",
-                    short_description: "<p>Ini product dummy untuk test</p>",
+                    // ❌ HAPUS TAG HTML KARENA MEMICU ERROR PARSING BODY
+                    short_description: "Ini product dummy untuk test",
                     brand: "No Brand",
                     model: "SKU-12345",
                     warranty_type: "No Warranty",
@@ -105,47 +105,38 @@ const createDummyProduct = async (req, res) => {
                     net_weight: 1.2
                 },
                 Skus: [
-                    {
-                        SellerSku: "SKU-12345",
-                        quantity: 1,
-                        price: 1000,
-                        package_length: 20,
-                        package_width: 15,
-                        package_height: 10,
-                        package_weight: 1.2
-                    }
+                    { SellerSku: "SKU-12345", quantity: 1, price: 1000, package_length: 20, package_width: 15, package_height: 10, package_weight: 1.2 }
                 ],
                 Images: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"]
             }
         };
 
-        // 3. String JSON mentah (NILAI MENTAH)
+        // 3. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING (TIDAK BERUBAH - Sudah Benar)
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING
         const allParamsForSign = {
             ...sysParams,
             payload: jsonBody // JSON MENTAH untuk signing
         };
 
-        // 5. Buat SIGNATURE (TIDAK BERUBAH - Sudah Benar)
+        // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (PERUBAHAN KRITIS DI SINI)
-        // Gunakan qs.stringify untuk memastikan payload di-encode dengan benar
+        // 6. Siapkan Body untuk REQUEST HTTP (Gunakan qs.stringify untuk format terbaik)
         const bodyDataForRequest = {
-            payload: jsonBody // qs.stringify akan meng-URL-encode nilai ini
+            payload: jsonBody
         };
         const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
-        // 7. Build URL (Hanya sysParams yang masuk ke URL, karena 'payload' masuk ke body)
+        // 7. Build URL (Hanya sysParams yang masuk ke URL + sign)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim body yang dibuat oleh qs.stringify
+            bodyStrForRequest, // Kirim body yang sudah diformat qs
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
@@ -159,7 +150,7 @@ const createDummyProduct = async (req, res) => {
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
             request: {
                 apiPath,
-                sysParams: allParamsForSign, // Tunjukkan semua params yang di-sign
+                sysParams: allParamsForSign,
                 sign,
                 url,
                 bodyStrForRequest
