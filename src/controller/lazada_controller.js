@@ -211,6 +211,75 @@ const createDummyProduct = async (req, res) => {
     }
 };
 
+const getCategoryAttributes = async (req, res) => {
+    try {
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
+
+        const accessToken = account.access_token.trim();
+        const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
+        const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
+
+        const apiPath = "/category/attributes/get";
+        const timestamp = Date.now().toString();
+        
+        // Kita menggunakan Category ID yang sama (Krimer) untuk mendapatkan daftar atributnya.
+        const primaryCategoryId = "18469"; 
+
+        // 1. System params
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken, // Meskipun opsional di docs, kita tetap kirim token untuk otorisasi
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0"
+        };
+        
+        // 2. Business params (wajib)
+        const businessParams = {
+            primary_category_id: primaryCategoryId,
+            language_code: "id_ID" 
+        };
+        
+        // 3. Gabungkan SEMUA Parameter (System + Business) untuk SIGNING
+        const allParamsForSignAndUrl = {
+            ...sysParams,
+            ...businessParams
+        };
+
+        // 4. Buat SIGNATURE
+        const sign = generateSign(apiPath, allParamsForSignAndUrl, appSecret);
+
+        // 5. Build URL query string dengan semua parameter dan signature
+        const urlSearchParams = new URLSearchParams({ ...allParamsForSignAndUrl, sign });
+        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
+
+        // 6. GET request ke Lazada
+        const response = await axios.get(url);
+
+        res.json({
+            success: true,
+            message: `Berhasil mendapatkan atribut untuk Category ID ${primaryCategoryId}.`,
+            request: {
+                apiPath,
+                url,
+                params: allParamsForSignAndUrl
+            },
+            lazada_response: response.data
+        });
+
+    } catch (err) {
+        const errorData = err.response?.data || { message: err.message };
+        console.error("❌ Lazada Get Attributes Error:", errorData);
+
+        res.status(err.response?.status || 500).json({
+            error: errorData,
+            statusCode: err.response?.status || 500,
+            message: "Permintaan ke Lazada gagal. Cek log error untuk detailnya."
+        });
+    }
+};
+
 /**
  * Generate Login URL Lazada
  */
@@ -611,4 +680,5 @@ module.exports = {
     getBrands,
     getProducts,
     createDummyProduct,
+    getCategoryAttributes
 };

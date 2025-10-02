@@ -9,7 +9,8 @@ const {
     getCategoryTree,
     getBrands,
     getProducts,
-    createDummyProduct
+    createDummyProduct,
+    getCategoryAttributes
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -19,6 +20,7 @@ router.post('/create-product/:id_product', createProductLazada);
 router.post('/create-product', createDummyProduct);
 router.put('/update-product/:id_product', updateProductLazada);
 router.get("/categories", getCategoryTree);
+router.get("/category/attributte", getCategoryAttributes);
 router.get("/brands", getBrands);
 router.get("/products", getProducts);
 
