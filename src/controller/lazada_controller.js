@@ -44,7 +44,7 @@ function generateSign(apiPath, params, appSecret, bodyStr = "") {
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
-    baseStr += bodyStr; // tambahkan body
+    baseStr += bodyStr;
     return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
 }
 
@@ -53,7 +53,11 @@ function generateSign(apiPath, params, appSecret, bodyStr = "") {
  */
 const createDummyProduct = async (req, res) => {
     try {
-        const accessToken = process.env.LAZADA_ACCESS_TOKEN;
+        // Ambil account Lazada pertama dari DB
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
+
+        const accessToken = account.access_token;
         const apiKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
         const apiPath = "/product/create";
