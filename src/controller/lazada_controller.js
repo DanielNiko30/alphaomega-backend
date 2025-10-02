@@ -72,12 +72,14 @@ const createDummyProduct = async (req, res) => {
 
         // --- Variabel untuk Atribut Wajib (CPV) ---
         // ID CPV dari GetCategoryAttributes (New Text Document (3).txt)
-        const requiredBagSizeCpvId = "41571"; // Medium (ID p-120010433)
-        const genderCpvId = "120002131";      // Female (ID gender)
-        const materialBagCpvId = "120004547"; // Canvas/Kapas (ID material_bag)
+        const requiredBagSizeCpvId = "41571";      // Medium (ID p-120010433)
+        const genderCpvId = "120002131";           // Female (ID gender)
+        const materialBagCpvId = "120004547";      // Canvas/Kapas (ID material_bag)
+        const fashionSizeCpvId = "120007248";      // Universal/International (ID fashion_size)
+
 
         // LOGGING: Cek variabel
-        console.log(`DEBUG: Kategori Tote Bag Wanita (ID 17935) menggunakan CPV: Size=${requiredBagSizeCpvId}, Gender=${genderCpvId}, Material=${materialBagCpvId}`);
+        console.log(`DEBUG: Kategori Tote Bag Wanita (ID 17935) menggunakan CPV: Size=${requiredBagSizeCpvId}, Gender=${genderCpvId}, Material=${materialBagCpvId}, FashionSize=${fashionSizeCpvId}`);
 
         // --- 2. Parameter Sistem ---
         const sysParams = {
@@ -107,12 +109,13 @@ const createDummyProduct = async (req, res) => {
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
 
-                        // Bag Size (p-120010433) - Diubah menjadi array string
-                        "p-120010433": [requiredBagSizeCpvId],
+                        // Sale Properties (diisi sebagai array string dengan ID CPV):
+                        "p-120010433": [requiredBagSizeCpvId], // Bag Size
+                        "material_bag": [materialBagCpvId],     // Material Bag
+                        "gender": [genderCpvId],               // Gender
 
-                        // *** PERBAIKAN: material_bag dan gender diubah ke ID CPV dan Array String ***
-                        "material_bag": [materialBagCpvId],
-                        "gender": [genderCpvId],
+                        // *** PERBAIKAN BARU: Menambahkan Fashion Size yang Wajib ***
+                        "fashion_size": [fashionSizeCpvId],
                     },
 
                     Skus: {
