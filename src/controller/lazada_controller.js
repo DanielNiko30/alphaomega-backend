@@ -90,12 +90,10 @@ const createDummyProduct = async (req, res) => {
             v: "1.0" // Parameter Wajib
         };
 
-        // 2. Dummy product Object (PERBAIKAN STRUKTUR KRITIS)
+        // 2. Dummy product Object (STRUKTUR JSON KRITIS)
         const productObj = {
-            // *** PENAMBAHAN WAJIB: PEMBUNGKUS "Request" ***
             Request: {
                 Product: {
-                    // Data minimalis yang sudah teruji
                     PrimaryCategory: "18469",
                     Attributes: {
                         name: "TEST SIMPLE PRODUCT " + Date.now().toString().slice(-6),
@@ -123,18 +121,12 @@ const createDummyProduct = async (req, res) => {
         // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (STRING MENTAH)
+        // 6. Siapkan Body untuk REQUEST HTTP (KEMBALI KE URLSearchParams)
         const bodyDataForRequest = {
             payload: jsonBody
         };
-
-        // *** PERBAIKAN AKHIR: Gunakan qs.stringify dengan opsi 'indices: false' dan 'arrayFormat: repeat' (praktik terbaik Lazada) ***
-        // Gunakan tanda plus (+) untuk spasi (bukan %20)
-        const bodyStrForRequest = qs.stringify(bodyDataForRequest, {
-            indices: false,
-            arrayFormat: 'repeat',
-            // MENGGANTI %20 dengan + (Axios/qs default menggunakan %20)
-        }).replace(/%20/g, '+');
+        // Menggunakan native API URLSearchParams
+        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
 
 
         // 7. Build URL (Tidak Berubah)
@@ -144,15 +136,15 @@ const createDummyProduct = async (req, res) => {
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest,
+            bodyStrForRequest, // Kirim STRING dari URLSearchParams
             {
                 headers: {
+                    // Pertahankan header charset yang ketat
                     "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
                 }
             }
         );
 
-        // Response...
         res.json({
             success: true,
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
