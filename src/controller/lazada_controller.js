@@ -90,14 +90,14 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript)
+        // 2. Payload (Objek JavaScript) - Menggunakan kategori dan nama yang disederhanakan
         const productObj = {
             Request: {
                 Product: {
-                    // *** PERUBAHAN 1: Ganti ke ID Kategori Umum (Contoh: 100000) ***
+                    // Menggunakan kategori umum 100000 untuk menghindari validasi kategori spesifik
                     PrimaryCategory: "100000",
                     Attributes: {
-                        // *** PERUBAHAN 2: Hapus Spasi dari Nama Produk ***
+                        // Menggunakan strip (-) untuk menghindari masalah encoding spasi
                         name: "TEST-SIMPLE-PRODUCT-" + Date.now().toString().slice(-6),
                         brand: "No Brand"
                     },
@@ -111,7 +111,7 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // 3. String JSON mentah
+        // 3. String JSON mentah (untuk signing)
         const jsonBody = JSON.stringify(productObj);
 
         // 4. Gabungkan SEMUA Parameter untuk SIGNING
@@ -120,19 +120,21 @@ const createDummyProduct = async (req, res) => {
             payload: jsonBody
         };
 
-        // 5. Buat SIGNATURE (Tetap Sama)
+        // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body (Gunakan URLSearchParams, Tetap Sama)
-        const bodyDataForRequest = { payload: jsonBody };
-        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
+
+        // 6. Siapkan Body (PERBAIKAN KRITIS: MANUAL URL ENCODING)
+        // Kita bypass URLSearchParams untuk menghindari masalah parsing E1001.
+        const encodedJsonBody = encodeURIComponent(jsonBody);
+        const bodyStrForRequest = 'payload=' + encodedJsonBody;
 
 
-        // 7. Build URL (Tetap Sama)
+        // 7. Build URL (URL parameter tetap menggunakan URLSearchParams)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada (Header Dasar, Tetap Sama)
+        // 8. POST request ke Lazada (Header Dasar, Tanpa Charset)
         const response = await axios.post(
             url,
             bodyStrForRequest,
