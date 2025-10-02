@@ -81,7 +81,7 @@ const createDummyProduct = async (req, res) => {
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
 
-        // 1. System params (Termasuk v: "1.0")
+        // 1. System params
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -90,16 +90,18 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript) - Menggunakan kategori dan nama yang disederhanakan
+        // 2. Payload (Objek JavaScript) - Tambahkan atribut wajib
         const productObj = {
             Request: {
                 Product: {
-                    // Menggunakan kategori umum 100000 untuk menghindari validasi kategori spesifik
+                    // Menggunakan kategori umum 100000
                     PrimaryCategory: "100000",
                     Attributes: {
-                        // Menggunakan strip (-) untuk menghindari masalah encoding spasi
                         name: "TEST-SIMPLE-PRODUCT-" + Date.now().toString().slice(-6),
-                        brand: "No Brand"
+                        brand: "No Brand",
+                        // *** PERBAIKAN KRITIS: Tambahkan Deskripsi Wajib ***
+                        description: "This is a simple test product description for API testing. This description should be detailed and long enough to pass validation.",
+                        short_description: "Test product for API."
                     },
                     Skus: [{
                         SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
@@ -124,20 +126,20 @@ const createDummyProduct = async (req, res) => {
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // 6. Siapkan Body (PERBAIKAN KRITIS: MANUAL URL ENCODING)
-        // Kita bypass URLSearchParams untuk menghindari masalah parsing E1001.
+        // 6. Siapkan Body (Pertahankan MANUAL URL ENCODING dari langkah sebelumnya)
+        // Ini adalah cara paling handal untuk memastikan tanda kutip di-escape dengan benar.
         const encodedJsonBody = encodeURIComponent(jsonBody);
         const bodyStrForRequest = 'payload=' + encodedJsonBody;
 
 
-        // 7. Build URL (URL parameter tetap menggunakan URLSearchParams)
+        // 7. Build URL (URL parameter)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada (Header Dasar, Tanpa Charset)
+        // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest,
+            bodyStrForRequest, // BODY harus selalu dikirim untuk POST product create
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
