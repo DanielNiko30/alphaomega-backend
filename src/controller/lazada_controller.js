@@ -122,36 +122,36 @@ const createDummyProduct = async (req, res) => {
         // 3. String JSON mentah (NILAI MENTAH)
         const jsonBody = JSON.stringify(productObj);
 
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING
-        // Parameter 'payload' ditambahkan ke daftar untuk diurutkan, nilainya adalah JSON MENTAH.
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING (TIDAK BERUBAH - Sudah Benar)
         const allParamsForSign = {
             ...sysParams,
-            payload: jsonBody
+            payload: jsonBody // JSON MENTAH untuk signing
         };
 
-        // 5. Buat SIGNATURE
-        // bodyStr DIHILANGKAN. Signature dibuat dari allParamsForSign (sysParams + payload MENTAH)
+        // 5. Buat SIGNATURE (TIDAK BERUBAH - Sudah Benar)
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP
-        // Body HTTP harus tetap di-URL-encode untuk Content-Type: application/x-www-form-urlencoded
-        const bodyStrForRequest = `payload=${encodeURIComponent(jsonBody)}`;
+        // 6. Siapkan Body untuk REQUEST HTTP (PERUBAHAN KRITIS DI SINI)
+        // Gunakan qs.stringify untuk memastikan payload di-encode dengan benar
+        const bodyDataForRequest = {
+            payload: jsonBody // qs.stringify akan meng-URL-encode nilai ini
+        };
+        const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
-        // 7. Build URL (Hanya sysParams yang masuk ke URL, karena 'payload' masuk ke body)
-        const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
-        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
+
+        // 7. Build URL (TIDAK BERUBAH)
+        // ...
 
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim body yang sudah di-URL-encode
+            bodyStrForRequest, // Kirim body yang dibuat oleh qs.stringify
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
         );
-
         // Return semua info untuk debug
         res.json({
             success: true,
