@@ -110,6 +110,27 @@ const createDummyProduct = async (req, res) => {
         };
 
         // 3. String JSON mentah
+        const productObj = {
+            Request: {
+                Product: {
+                    // *** PERUBAHAN 1: Ganti ke ID Kategori Umum (Contoh: 100000) ***
+                    PrimaryCategory: "100000",
+                    Attributes: {
+                        // *** PERUBAHAN 2: Hapus Spasi dari Nama Produk ***
+                        name: "TEST-SIMPLE-PRODUCT-" + Date.now().toString().slice(-6),
+                        brand: "No Brand"
+                    },
+                    Skus: [{
+                        SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
+                        quantity: 1,
+                        price: 1000,
+                        package_weight: 0.1
+                    }]
+                }
+            }
+        };
+
+        // 3. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
         // 4. Gabungkan SEMUA Parameter untuk SIGNING
@@ -118,28 +139,24 @@ const createDummyProduct = async (req, res) => {
             payload: jsonBody
         };
 
-        // 5. Buat SIGNATURE
-        // (Asumsi generateSign() sudah benar)
+        // 5. Buat SIGNATURE (Tetap Sama)
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (Menggunakan URLSearchParams)
-        const bodyDataForRequest = {
-            payload: jsonBody
-        };
+        // 6. Siapkan Body (Gunakan URLSearchParams, Tetap Sama)
+        const bodyDataForRequest = { payload: jsonBody };
         const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
 
 
-        // 7. Build URL
+        // 7. Build URL (Tetap Sama)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada
+        // 8. POST request ke Lazada (Header Dasar, Tetap Sama)
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim STRING dari URLSearchParams
+            bodyStrForRequest,
             {
                 headers: {
-                    // *** PERBAIKAN AKHIR: Hapus Charset yang konflik. Gunakan header dasar. ***
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
