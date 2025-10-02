@@ -49,6 +49,7 @@ function generateSign(apiPath, allParams, appSecret) {
 const createDummyProduct = async (req, res) => {
     try {
         // Menggunakan logic original Anda:
+        // Catatan: Anda mungkin perlu memastikan model 'Lazada' dan 'Product' tersedia/diimport
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -69,6 +70,19 @@ const createDummyProduct = async (req, res) => {
             const dd = String(date.getDate()).padStart(2, '0');
             return `${yyyy}-${mm}-${dd}`;
         };
+
+        // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
+        // Lazada memerlukan JSON string berisi unit dan value untuk atribut seperti Berat Bersih (p-120008822)
+        // Jika "g" gagal, Anda mungkin perlu mencoba "kg" atau ID unit yang sebenarnya.
+        const netWeightValue = JSON.stringify([
+            {
+                unit: "g", // Mengasumsikan unit yang benar adalah gram (Bisa jadi "kg" atau ID unit)
+                value: "500"
+            }
+        ]);
+
+        // LOGGING BARU: Periksa string JSON yang dihasilkan untuk netWeightValue
+        console.log("DEBUG: Net Weight JSON String (p-120008822):", netWeightValue);
 
         // 1. System params
         const sysParams = {
@@ -99,9 +113,8 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Mengubah Array of Number menjadi String tunggal. ***
-                        // Ini adalah format yang paling umum untuk atribut nilai numerik (mis. Net Weight).
-                        "p-120008822": "500", // Ganti dari [500] menjadi "500" (String)
+                        // *** FORMAT BARU: JSON String untuk atribut unit. ***
+                        "p-120008822": netWeightValue,
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
@@ -131,6 +144,10 @@ const createDummyProduct = async (req, res) => {
 
         // 3. String JSON mentah (untuk signing)
         const jsonBody = JSON.stringify(productObj);
+
+        // LOGGING BARU: Periksa payload JSON final sebelum di-sign
+        console.log("DEBUG: Final JSON Payload:", jsonBody);
+
 
         // 4. Gabungkan SEMUA Parameter untuk SIGNING
         const allParamsForSign = {
