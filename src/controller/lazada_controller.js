@@ -10,11 +10,11 @@ const { Builder } = require("xml2js");
 
 /**
  * Generate Lazada API signature
- * @param {string} apiPath - Contoh: "/product/create"
- * @param {object} params - query params: app_key, access_token, sign_method, timestamp
- * @param {string} appSecret - secret key
- * @param {string} bodyStr - JSON string body
- * @returns {string} signature uppercase
+ * @param {string} apiPath - misal "/product/create"
+ * @param {object} params - sysParams (app_key, access_token, sign_method, timestamp)
+ * @param {string} appSecret - Lazada App Secret
+ * @param {string} bodyStr - string body persis (URL encoded)
+ * @returns {string} signature SHA256
  */
 // function generateSign(apiPath, params, appSecret, body = "") {
 //     // 1. sort params by ASCII
@@ -38,31 +38,26 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-const generateSign = (apiPath, params, appSecret, bodyStr = "") => {
+function generateSign(apiPath, params, appSecret, bodyStr = "") {
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
-    baseStr += bodyStr; // body harus persis sama
-    return crypto.createHmac("sha256", appSecret)
-        .update(baseStr)
-        .digest("hex")
-        .toUpperCase();
-};
+    baseStr += bodyStr; // tambahkan body
+    return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
+}
 
+/**
+ * Controller create dummy product
+ */
 const createDummyProduct = async (req, res) => {
     try {
-        // Ambil account Lazada dari DB
-        const account = await Lazada.findOne();
-        if (!account) throw new Error("Tidak ada account Lazada di DB");
-
-        const accessToken = account.access_token;
+        const accessToken = process.env.LAZADA_ACCESS_TOKEN;
         const apiKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
         const apiPath = "/product/create";
 
-        // Timestamp 13-digit
         const timestamp = Date.now().toString();
 
         // System params
@@ -101,8 +96,8 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // Body string yang persis sama untuk sign dan POST
-        const bodyStr = `payload=${JSON.stringify(productObj)}`;
+        // Body string untuk sign → HARUS URL encoded
+        const bodyStr = `payload=${encodeURIComponent(JSON.stringify(productObj))}`;
 
         // Generate signature
         const sign = generateSign(apiPath, sysParams, appSecret, bodyStr);
@@ -110,26 +105,20 @@ const createDummyProduct = async (req, res) => {
         // Build URL
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // POST request ke Lazada
+        // POST request
         const response = await axios.post(url, bodyStr, {
             headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }
         });
 
-        // Return semua info untuk debug
-        res.json({
+        return res.json({
             success: true,
-            request: {
-                apiPath,
-                sysParams,
-                sign,
-                url,
-                bodyStr
-            },
+            request: { apiPath, sysParams, sign, url, bodyStr },
             lazada_response: response.data
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        res.status(500).json({ error: err.response?.data || err.message });
+        return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
 
