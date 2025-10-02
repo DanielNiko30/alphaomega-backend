@@ -100,7 +100,8 @@ const createDummyProduct = async (req, res) => {
 
                     Images: {
                         Image: [
-                            "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
+                            // Mengganti URL gambar Lazada dengan placeholder yang netral.
+                            "https://placehold.co/400x400/1e88e5/ffffff?text=TOTE+BAG+TEST"
                         ]
                     },
 
@@ -121,12 +122,13 @@ const createDummyProduct = async (req, res) => {
                     Skus: {
                         Sku: [{
                             SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
-                            quantity: "3",
-                            price: "1000",
-                            package_height: "3",
-                            package_length: "35",
-                            package_width: "30",
-                            package_weight: "0.2", // Berat paket 0.2 kg
+                            // Mengubah nilai numerik menjadi tipe Number (tanpa kutip)
+                            quantity: 3,        // Changed from "3" to 3 (Number)
+                            price: 1000,        // Changed from "1000" to 1000 (Number)
+                            package_height: 3,
+                            package_length: 35,
+                            package_width: 30,
+                            package_weight: 0.2, // Changed from "0.2" to 0.2 (Number/Float)
                             package_content: "1x Tote Bag Wanita",
                         }]
                     }
@@ -135,6 +137,7 @@ const createDummyProduct = async (req, res) => {
         };
 
         // --- 4. String JSON mentah (untuk signing dan payload request) ---
+        // Penting: JSON.stringify akan memastikan number tetap sebagai number di string jika formatnya benar.
         const jsonBody = JSON.stringify(productObj);
         console.log("DEBUG: Final JSON Payload (V1/Form Data Style):", jsonBody);
 
@@ -198,6 +201,7 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
+
 
 const getCategoryAttributes = async (req, res) => {
     try {
