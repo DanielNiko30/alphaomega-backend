@@ -30,7 +30,7 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-const Lazada = {
+Lazada = {
     findOne: async () => ({
         access_token: "50000900c41t2cDoxRUghaK0cixEzRH8Bjw5OR1hGexm4dt0BOB6c18b2cf5c9hU",
         // Tambahkan properti lain jika diperlukan
