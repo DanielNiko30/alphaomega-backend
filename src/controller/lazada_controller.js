@@ -72,10 +72,13 @@ const createDummyProduct = async (req, res) => {
         };
 
         // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
-        // PERBAIKAN FINAL: Kita asumsikan Lazada mengharapkan nilai berat aktual (0.5) 
-        // sebagai STRING biasa, yang harus sesuai dengan package_weight.
-        // Kita tinggalkan ID CPV 166008 karena itu adalah ID untuk 1.3kg.
-        const netWeightValue = "0.5"; // Nilai aktual 0.5kg (dalam string)
+        // Kita kembali ke format ID CPV tunggal, tetapi dengan instruksi jelas.
+        // Karena semua format sebelumnya (ID 1.3kg, ID array, string 0.5) gagal,
+        // masalahnya PASTI adalah ID yang salah/tidak valid.
+        // Anda HARUS mengganti nilai PLACEHOLDER_ID_0_5KG dengan ID CPV yang BENAR
+        // untuk 0.5kg/500g yang didapatkan dari API Get Category Attributes Lazada.
+        const cpvIdForNetWeight = "TEMUKAN_ID_0_5KG_ANDA_DI_SINI";
+        const netWeightValue = cpvIdForNetWeight;
 
         // LOGGING BARU: Periksa string yang dihasilkan untuk netWeightValue
         console.log("DEBUG: Net Weight Raw String (p-120008822):", netWeightValue);
@@ -109,7 +112,7 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** FORMAT BARU: String MENTAH nilai berat (0.5). ***
+                        // *** FORMAT BARU: String MENTAH placeholder ID CPV. ***
                         "p-120008822": netWeightValue,
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
