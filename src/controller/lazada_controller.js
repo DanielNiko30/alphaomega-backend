@@ -91,45 +91,40 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript) - Menggunakan struktur yang lebih spesifik
+        // 2. Payload (Objek JavaScript) - Menggunakan struktur untuk Krimer (18469)
         const productObj = {
             Request: {
                 Product: {
-                    // *** PERBAIKAN 1: Menggunakan ID Kategori Spesifik dari contoh ***
+                    // Menggunakan ID Kategori Krimer (18469) dari log terakhir
                     PrimaryCategory: "18469",
 
-                    // *** PERBAIKAN 2: Tambahkan Images (Wajib untuk banyak kategori) ***
+                    // Tambahkan Images (Wajib)
                     Images: {
                         Image: [
-                            // Gunakan placeholder image URL yang valid
                             "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
                         ]
                     },
 
                     Attributes: {
-                        name: "TEST-SPECIFIC-PRODUCT-" + uniqueSuffix,
+                        name: "TEST-KRIMER-BUBUK-" + uniqueSuffix, // Ubah nama produk
                         brand: "No Brand",
-                        description: "This is a simple test product description. Long enough to pass validation.",
-                        short_description: "Test product for API.",
-                        // Tambahkan minimal atribut tambahan jika kategori 10002019 membutuhkannya
-                        model: "API-Model-Test",
-                        warranty_type: "No Warranty",
-                        warranty: "N/A",
-                        Hazmat: "None",
+                        description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
+                        short_description: "Krimer Bubuk API Test.",
+                        // *** PERBAIKAN KRITIS: Hapus semua atribut yang TIDAK relevan dengan makanan (garansi, model, hazmat) ***
+                        // Atribut wajib lain (seperti expiry_date, flavor) akan ditambahkan di langkah berikutnya jika ada E051.
                     },
 
-                    // *** PERBAIKAN 3: Gunakan struktur SKUS yang eksplisit dari contoh ***
+                    // Gunakan struktur SKUS yang eksplisit
                     Skus: {
                         Sku: [{
-                            SellerSku: "TEST-SKU-" + uniqueSuffix,
-                            // Tambahkan saleProp minimal untuk meniru struktur contoh
-                            quantity: "3", // Pastikan kuantitas adalah string jika itu yang diharapkan
+                            SellerSku: "SKU-KRIMER-" + uniqueSuffix, // Ubah SKU name
+                            quantity: "3",
                             price: "1000",
                             package_height: "10",
                             package_length: "10",
                             package_width: "10",
                             package_weight: "0.5",
-                            package_content: "Test Content",
+                            package_content: "Bungkus Krimer",
                         }]
                     }
                 }
