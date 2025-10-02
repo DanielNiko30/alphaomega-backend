@@ -96,7 +96,7 @@ const createDummyProduct = async (req, res) => {
             Request: {
                 Product: {
                     // *** PERBAIKAN 1: Menggunakan ID Kategori Spesifik dari contoh ***
-                    PrimaryCategory: "10002019",
+                    PrimaryCategory: "18469",
 
                     // *** PERBAIKAN 2: Tambahkan Images (Wajib untuk banyak kategori) ***
                     Images: {
