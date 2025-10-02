@@ -33,33 +33,30 @@ const { Builder } = require("xml2js");
 /**
  * Fungsi untuk menghasilkan tanda tangan (signature) API Lazada.
  * Menggunakan HMAC SHA256 dengan App Secret sebagai kunci.
- * @param {string} apiPath - Path API (e.g., "/product/create")
- * @param {Object<string, string>} sysParams - Parameter sistem
+* @param {string} apiPath - Path API (e.g., "/product/create")
+ * @param {Object<string, string>} allParams - Semua parameter (sysParams + payload dengan nilai MENTAH JSON)
  * @param {string} appSecret - App Secret Lazada (kunci untuk HMAC)
- * @param {string} bodyStr - Body request POST, KINI DIASUMSIKAN SUDAH DI-URL-ENCODE OLEH PEMANGGIL.
  * @returns {string} Signature dalam format Hex Uppercase
  */
-function generateSign(apiPath, sysParams, appSecret, bodyStr = "") {
-    // 1. Urutkan semua parameter sistem
-    const sortedKeys = Object.keys(sysParams).sort();
+function generateSign(apiPath, allParams, appSecret) {
+    // 1. Urutkan SEMUA parameter (System + Payload) secara ASCII.
+    const sortedKeys = Object.keys(allParams).sort();
 
     // 2. Inisiasi base string dengan API Path
     let baseStr = apiPath;
 
     // 3. Gabungkan parameter yang diurutkan (Key + Value)
     for (const key of sortedKeys) {
-        const value = sysParams[key];
+        // Nilai yang digunakan adalah JSON mentah (sesuai allParams)
+        const value = allParams[key];
         baseStr += key + value;
     }
-
-    // 4. Tambahkan bodyStr (yang kini sudah di-URL-encode) di akhir
-    baseStr += bodyStr;
 
     // --- DEBUGGING: Cetak base string untuk verifikasi manual ---
     // console.log("BASE STRING FOR SIGNATURE:", baseStr); 
     // -----------------------------------------------------------
 
-    // 5. Lakukan HMAC SHA256
+    // 4. Lakukan HMAC SHA256
     return crypto.createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
@@ -86,7 +83,7 @@ const createDummyProduct = async (req, res) => {
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
 
-        // System params
+        // 1. System params
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -94,7 +91,7 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // Dummy product Object (Gunakan objek yang sama dari request Anda)
+        // 2. Dummy product Object
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
@@ -122,27 +119,32 @@ const createDummyProduct = async (req, res) => {
             }
         };
 
-        // 1. String JSON mentah
+        // 3. String JSON mentah (NILAI MENTAH)
         const jsonBody = JSON.stringify(productObj);
 
-        // 2. Body string yang di-URL-encode (WAJIB untuk request HTTP application/x-www-form-urlencoded)
-        const encodedJsonBody = encodeURIComponent(jsonBody);
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING
+        // Parameter 'payload' ditambahkan ke daftar untuk diurutkan, nilainya adalah JSON MENTAH.
+        const allParamsForSign = {
+            ...sysParams,
+            payload: jsonBody
+        };
 
-        // 3. Body string untuk SIGNATURE dan REQUEST
-        // ASUMSI BARU: Lazada mengharapkan bodyStr yang sudah di-URL-encode untuk proses signing.
-        const bodyStr = `payload=${encodedJsonBody}`; // Digunakan untuk SIGNATURE & REQUEST
+        // 5. Buat SIGNATURE
+        // bodyStr DIHILANGKAN. Signature dibuat dari allParamsForSign (sysParams + payload MENTAH)
+        const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 4. Buat SIGNATURE
-        const sign = generateSign(apiPath, sysParams, appSecret, bodyStr);
+        // 6. Siapkan Body untuk REQUEST HTTP
+        // Body HTTP harus tetap di-URL-encode untuk Content-Type: application/x-www-form-urlencoded
+        const bodyStrForRequest = `payload=${encodeURIComponent(jsonBody)}`;
 
-        // 5. Build URL
+        // 7. Build URL (Hanya sysParams yang masuk ke URL, karena 'payload' masuk ke body)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // POST request ke Lazada
+        // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStr, // Kirim body yang sudah di-URL-encode
+            bodyStrForRequest, // Kirim body yang sudah di-URL-encode
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
@@ -153,13 +155,13 @@ const createDummyProduct = async (req, res) => {
         // Return semua info untuk debug
         res.json({
             success: true,
-            message: "Produk berhasil dibuat! (Signature berhasil)",
+            message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
             request: {
                 apiPath,
-                sysParams,
+                sysParams: allParamsForSign, // Tunjukkan semua params yang di-sign
                 sign,
                 url,
-                bodyStrForSignAndRequest: bodyStr // Sekarang hanya ada satu body string
+                bodyStrForRequest
             },
             lazada_response: response.data
         });
