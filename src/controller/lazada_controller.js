@@ -38,7 +38,7 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-export const generateSign = (apiPath, params, appSecret, bodyStr = "") => {
+const generateSign = (apiPath, params, appSecret, bodyStr = "") => {
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
