@@ -109,6 +109,7 @@ const createDummyProduct = async (req, res) => {
                         brand: "No Brand",
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
+                        // net_weight dihapus sesuai permintaan.
 
                         // Sale Properties (diisi sebagai array string dengan ID CPV):
                         "p-120010433": [requiredBagSizeCpvId], // Bag Size
