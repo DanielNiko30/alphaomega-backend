@@ -123,7 +123,7 @@ const createDummyProduct = async (req, res) => {
 
                         // *** PERBAIKAN KRITIS: Menggunakan nama lokal ("Berat Bersih") dalam format ARRAY of numeric string (tanpa unit "g"). ***
                         // Ini adalah upaya terakhir untuk mengatasi CHK_CATPROP_CPV_REQUIRED: "Berat Bersih" can't be empty
-                        "Berat Bersih": ["500"],
+                        "Berat Bersih": "500",
 
                         // Menghapus p-120008822 yang terbukti tidak diakui format stringnya.
 
