@@ -106,8 +106,9 @@ const createDummyProduct = async (req, res) => {
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
 
-                        // *** ATRIBUT WAJIB BARU: Bag Size (ID CPV p-120010433) ***
-                        "p-120010433": requiredBagSizeCpvId, // Menggunakan ID CPV 41571 (Medium)
+                        // *** PERBAIKAN KRITIS: Bag Size (p-120010433) diubah menjadi array string. ***
+                        // Meskipun hanya satu nilai, sales properties seringkali memerlukan format array.
+                        "p-120010433": [requiredBagSizeCpvId], // Menggunakan Array: ["41571"]
 
                         "material_bag": "Canvas", // Atribut umum untuk tas
                         "gender": "Female",       // Atribut umum untuk tas
@@ -186,6 +187,7 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
+
 
 const getCategoryAttributes = async (req, res) => {
     try {
