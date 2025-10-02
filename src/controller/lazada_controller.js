@@ -138,9 +138,9 @@ const createDummyProduct = async (req, res) => {
         };
         const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
-
-        // 7. Build URL (TIDAK BERUBAH)
-        // ...
+        // 7. Build URL (Hanya sysParams yang masuk ke URL, karena 'payload' masuk ke body)
+        const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
+        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // 8. POST request ke Lazada
         const response = await axios.post(
@@ -152,6 +152,7 @@ const createDummyProduct = async (req, res) => {
                 }
             }
         );
+
         // Return semua info untuk debug
         res.json({
             success: true,
