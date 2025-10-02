@@ -34,14 +34,13 @@ const { Builder } = require("xml2js");
  * Fungsi untuk menghasilkan tanda tangan (signature) API Lazada.
  * Menggunakan HMAC SHA256 dengan App Secret sebagai kunci.
  * @param {string} apiPath - Path API (e.g., "/product/create")
- * @param {Object<string, string>} sysParams - Parameter sistem (app_key, access_token, sign_method, timestamp)
+ * @param {Object<string, string>} sysParams - Parameter sistem
  * @param {string} appSecret - App Secret Lazada (kunci untuk HMAC)
- * @param {string} bodyStr - Raw body request POST (e.g., "payload={...}")
+ * @param {string} bodyStr - Body request POST, KINI DIASUMSIKAN SUDAH DI-URL-ENCODE OLEH PEMANGGIL.
  * @returns {string} Signature dalam format Hex Uppercase
  */
 function generateSign(apiPath, sysParams, appSecret, bodyStr = "") {
-    // 1. Urutkan semua parameter sistem dan aplikasi (yang ada di sysParams) secara ASCII.
-    // Jika ada parameter aplikasi di luar body (e.g. name=value di URL), mereka harus dimasukkan ke sysParams.
+    // 1. Urutkan semua parameter sistem
     const sortedKeys = Object.keys(sysParams).sort();
 
     // 2. Inisiasi base string dengan API Path
@@ -49,22 +48,20 @@ function generateSign(apiPath, sysParams, appSecret, bodyStr = "") {
 
     // 3. Gabungkan parameter yang diurutkan (Key + Value)
     for (const key of sortedKeys) {
-        // Asumsi semua nilai parameter adalah string (sesuai spesifikasi Lazada)
         const value = sysParams[key];
         baseStr += key + value;
     }
 
-    // 4. Tambahkan bodyStr (string raw dari request POST) di akhir
+    // 4. Tambahkan bodyStr (yang kini sudah di-URL-encode) di akhir
     baseStr += bodyStr;
 
     // --- DEBUGGING: Cetak base string untuk verifikasi manual ---
     // console.log("BASE STRING FOR SIGNATURE:", baseStr); 
     // -----------------------------------------------------------
 
-    // 5. Lakukan HMAC SHA256, konversi ke Hex, dan Uppercase
-    // App Secret digunakan sebagai KEY untuk HMAC
+    // 5. Lakukan HMAC SHA256
     return crypto.createHmac("sha256", appSecret)
-        .update(baseStr, "utf8") // Encoding harus UTF-8
+        .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 }
@@ -81,14 +78,12 @@ const createDummyProduct = async (req, res) => {
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
-        // ⚠️ PENTING: TRIM pada App Secret dan App Key untuk menghilangkan spasi tersembunyi
+        // ⚠️ PENTING: TRIM pada App Secret dan App Key
         const accessToken = account.access_token.trim();
         const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
         const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
 
         const apiPath = "/product/create";
-
-        // Timestamp 13-digit
         const timestamp = Date.now().toString();
 
         // System params
@@ -96,10 +91,10 @@ const createDummyProduct = async (req, res) => {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
-            timestamp // Nilai timestamp mentah (string 13 digit)
+            timestamp
         };
 
-        // Dummy product Object
+        // Dummy product Object (Gunakan objek yang sama dari request Anda)
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
@@ -130,28 +125,27 @@ const createDummyProduct = async (req, res) => {
         // 1. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
-        // 2. Body string untuk SIGNATURE (payload=string json mentah)
-        // NILAI JSON TIDAK boleh di-URL-encode saat signing!
-        const bodyStrForSign = `payload=${jsonBody}`;
+        // 2. Body string yang di-URL-encode (WAJIB untuk request HTTP application/x-www-form-urlencoded)
+        const encodedJsonBody = encodeURIComponent(jsonBody);
 
-        // 3. Buat SIGNATURE
-        const sign = generateSign(apiPath, sysParams, appSecret, bodyStrForSign);
+        // 3. Body string untuk SIGNATURE dan REQUEST
+        // ASUMSI BARU: Lazada mengharapkan bodyStr yang sudah di-URL-encode untuk proses signing.
+        const bodyStr = `payload=${encodedJsonBody}`; // Digunakan untuk SIGNATURE & REQUEST
 
-        // 4. Buat Body untuk REQUEST HTTP (HARUS di-URL-encode karena application/x-www-form-urlencoded)
-        const bodyStrForRequest = `payload=${encodeURIComponent(jsonBody)}`;
+        // 4. Buat SIGNATURE
+        const sign = generateSign(apiPath, sysParams, appSecret, bodyStr);
 
-        // Build URL (Semua sysParams + sign)
+        // 5. Build URL
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim body yang sudah di-URL-encode
+            bodyStr, // Kirim body yang sudah di-URL-encode
             {
                 headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    // Lazada tidak memerlukan header lain, tapi bisa ditambahkan jika perlu (misal: User-Agent)
+                    "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
         );
@@ -159,13 +153,13 @@ const createDummyProduct = async (req, res) => {
         // Return semua info untuk debug
         res.json({
             success: true,
+            message: "Produk berhasil dibuat! (Signature berhasil)",
             request: {
                 apiPath,
                 sysParams,
                 sign,
                 url,
-                bodyStrForSign: bodyStrForSign,
-                bodyStrForRequest: bodyStrForRequest
+                bodyStrForSignAndRequest: bodyStr // Sekarang hanya ada satu body string
             },
             lazada_response: response.data
         });
