@@ -87,9 +87,10 @@ const createDummyProduct = async (req, res) => {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
-            timestamp
+            timestamp,
+            // --- PENAMBAHAN WAJIB BERDASARKAN ANALISIS ERROR ---
+            v: "1.0"
         };
-
         // 2. Dummy product Object (Data bersih)
         const productObj = {
             Product: {
