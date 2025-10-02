@@ -121,11 +121,11 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN 1: Coba nama atribut Bahasa Inggris 'net_weight' dengan unit yang benar. ***
-                        // Ini sering kali merupakan kunci yang benar, bukan Property ID atau nama Bahasa Indonesia.
-                        "net_weight": "500g",
+                        // *** PERBAIKAN 1: Menggunakan Property ID (p-120008822) dan nilai dengan unit ('500g'). ***
+                        // Ini adalah upaya terakhir untuk mengatasi error 'Berat Bersih' sebelum berasumsi ada required field lain yang mempengaruhi.
+                        "p-120008822": "500g",
 
-                        // *** PERBAIKAN 2: Tambahkan tanggal kadaluarsa (mandatory untuk makanan). ***
+                        // *** PERBAIKAN 2: Tetap pertahankan tanggal kadaluarsa (mandatory untuk makanan). ***
                         "date_expiration": getFutureDate(),
                     },
 
