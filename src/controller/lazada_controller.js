@@ -90,7 +90,7 @@ const createDummyProduct = async (req, res) => {
             timestamp
         };
 
-        // 2. Dummy product Object (PERHATIKAN short_description SUDAH DIBERSIHKAN)
+        // 2. Dummy product Object (Data bersih)
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
@@ -113,7 +113,7 @@ const createDummyProduct = async (req, res) => {
         // 3. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING (TIDAK BERUBAH - Ini sudah benar)
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING (Sudah terbukti benar)
         const allParamsForSign = {
             ...sysParams,
             payload: jsonBody // JSON MENTAH untuk signing
@@ -122,31 +122,32 @@ const createDummyProduct = async (req, res) => {
         // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (KEMBALI KE METODE MANUAL + URL ENCODING)
-        // Kita gunakan URLSearchParams standar untuk memastikan encoding yang sama dengan URL, 
-        // meskipun ini adalah body. Ini adalah upaya terakhir.
-
+        // 6. Siapkan Body untuk REQUEST HTTP (KIRIM OBJECT)
         const bodyDataForRequest = {
-            payload: jsonBody
+            payload: jsonBody // JSON mentah
         };
-        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
-        // bodyStrForRequest akan menghasilkan string seperti: payload=%7B%22Product%22... (Sama seperti qs.stringify, tapi menggunakan native API)
 
-
-        // 7. Build URL (TIDAK BERUBAH)
+        // 7. Build URL (URLSearchParams hanya untuk URL query)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada (TIDAK BERUBAH)
+        // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest,
+            bodyDataForRequest, // Kirim OBJECT ke Axios
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
-                }
+                },
+                // MENGGUNAKAN TRANSFORMER KHUSUS UNTUK MEMAKSA FORMAT FORM-URLENCODED
+                transformRequest: [(data, headers) => {
+                    return new URLSearchParams(data).toString();
+                }],
             }
         );
+
+        // Data yang dikirimkan (untuk debugging)
+        const finalBodySent = new URLSearchParams(bodyDataForRequest).toString();
 
         // Return semua info untuk debug
         res.json({
@@ -157,7 +158,7 @@ const createDummyProduct = async (req, res) => {
                 sysParams: allParamsForSign,
                 sign,
                 url,
-                bodyStrForRequest
+                bodyStrForRequest: finalBodySent // Tampilkan string yang sebenarnya dikirim
             },
             lazada_response: response.data
         });
