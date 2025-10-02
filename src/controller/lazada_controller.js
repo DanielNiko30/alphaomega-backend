@@ -60,7 +60,7 @@ const createDummyProduct = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // Helper untuk mendapatkan tanggal 1 tahun dari sekarang dalam format YYYY-MM-DD (Tidak dipakai di kategori ini, hanya untuk referensi)
+        // Helper untuk mendapatkan tanggal 1 tahun dari sekarang dalam format YYYY-MM-DD (Tidak dipakai di kategori ini)
         const getFutureDate = () => {
             const date = new Date();
             date.setFullYear(date.getFullYear() + 1);
@@ -70,8 +70,13 @@ const createDummyProduct = async (req, res) => {
             return `${yyyy}-${mm}-${dd}`;
         };
 
+        // --- Variabel untuk Atribut Wajib (CPV) ---
+        // ID CPV untuk Bag Size (p-120010433) dari GetCategoryAttributes: 41571 (Medium)
+        // Sumber: File New Text Document (3).txt
+        const requiredBagSizeCpvId = "41571";
+
         // LOGGING: Cek variabel
-        console.log("DEBUG: Kategori diubah ke Tote Bag Wanita (ID 17935). Atribut Berat Bersih dihilangkan dari payload.");
+        console.log(`DEBUG: Kategori Tote Bag Wanita (ID 17935) memerlukan 'Bag Size' (p-120010433). Nilai CPV digunakan: ${requiredBagSizeCpvId} (Medium)`);
 
         // --- 2. Parameter Sistem ---
         const sysParams = {
@@ -86,12 +91,11 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    // *** PERUBAHAN KRITIS: Menggunakan ID Kategori Tote Bag Wanita (17935) ***
+                    // *** Kategori Tote Bag Wanita (17935) ***
                     PrimaryCategory: "17935",
 
                     Images: {
                         Image: [
-                            // Menggunakan placeholder, idealnya diganti dengan gambar Tote Bag
                             "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
                         ]
                     },
@@ -102,9 +106,9 @@ const createDummyProduct = async (req, res) => {
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
 
-                        // Atribut wajib untuk Tas (Cek GetCategoryAttributes jika error terjadi)
-                        // Contoh: "Bag Material" (material_bag), "Closure Type" (tipe_penutup)
-                        // Kita coba minimalisir dulu.
+                        // *** ATRIBUT WAJIB BARU: Bag Size (ID CPV p-120010433) ***
+                        "p-120010433": requiredBagSizeCpvId, // Menggunakan ID CPV 41571 (Medium)
+
                         "material_bag": "Canvas", // Atribut umum untuk tas
                         "gender": "Female",       // Atribut umum untuk tas
                     },
@@ -114,7 +118,7 @@ const createDummyProduct = async (req, res) => {
                             SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
                             quantity: "3",
                             price: "1000",
-                            package_height: "3", // Tas cenderung tipis
+                            package_height: "3",
                             package_length: "35",
                             package_width: "30",
                             package_weight: "0.2", // Berat paket 0.2 kg
