@@ -93,20 +93,21 @@ const createDummyProduct = async (req, res) => {
         // 2. Dummy product Object (Data bersih)
         const productObj = {
             Product: {
+                // ID Kategori yang valid
                 PrimaryCategory: "18469",
                 Attributes: {
-                    name: "Dummy Product Node",
-                    short_description: "Ini product dummy untuk test",
-                    brand: "No Brand",
-                    model: "SKU-12345",
-                    warranty_type: "No Warranty",
-                    product_warranty: "false",
-                    net_weight: 1.2
+                    // Nama harus diubah agar unik setiap kali run
+                    name: "TEST SIMPLE PRODUCT " + Date.now().toString().slice(-6),
+                    brand: "No Brand"
                 },
-                Skus: [
-                    { SellerSku: "SKU-12345", quantity: 1, price: 1000, package_length: 20, package_width: 15, package_height: 10, package_weight: 1.2 }
-                ],
-                Images: ["https://via.placeholder.com/800x800.png?text=Dummy+Image"]
+                Skus: [{
+                    // SKU harus diubah agar unik setiap kali run
+                    SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
+                    quantity: 1,
+                    price: 1000,
+                    package_weight: 0.1 // Berat wajib ada di level SKU
+                }]
+                // HAPUS SEMUA: short_description, model, warranty_type, product_warranty, net_weight, Images, package_length, package_width, package_height
             }
         };
 
