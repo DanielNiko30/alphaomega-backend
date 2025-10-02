@@ -121,10 +121,15 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format ARRAY numerik. ***
-                        // Format ARRAY adalah satu-satunya yang menghilangkan error "can't be empty", 
-                        // dan kita coba hilangkan unit "g" untuk menghindari SYSTEM_EXCEPTION.
-                        "p-120008822": ["500"],
+                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format ARRAY OF OBJECTS. ***
+                        // Ini adalah format paling kompleks yang mungkin diminta untuk atribut numerik dengan unit, 
+                        // dan seringkali menjadi solusi untuk SYSTEM_EXCEPTION pada CPV.
+                        "p-120008822": [
+                            {
+                                "value": "500",
+                                "unit": "g"
+                            }
+                        ],
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
