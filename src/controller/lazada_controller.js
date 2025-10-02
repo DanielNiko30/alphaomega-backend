@@ -110,8 +110,9 @@ const createDummyProduct = async (req, res) => {
                         brand: "No Brand",
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
-                        // *** PERBAIKAN KRITIS: Hapus semua atribut yang TIDAK relevan dengan makanan (garansi, model, hazmat) ***
-                        // Atribut wajib lain (seperti expiry_date, flavor) akan ditambahkan di langkah berikutnya jika ada E051.
+
+                        // *** PERBAIKAN KRITIS: Tambahkan Berat Bersih (Net Weight) untuk mengatasi error CHK_CATPROP_CPV_REQUIRED ***
+                        "weight_net": "500g",
                     },
 
                     // Gunakan struktur SKUS yang eksplisit
