@@ -30,21 +30,6 @@ const { Builder } = require("xml2js");
 //     return hmac.digest("hex").toUpperCase();
 // }
 
-const Lazada = {
-    findOne: async () => ({
-        access_token: "50000900c41t2cDoxRUghaK0cixEzRH8Bjw5OR1hGexm4dt0BOB6c18b2cf5c9hU",
-        // Tambahkan properti lain jika diperlukan
-    })
-};
-
-// Pastikan variabel lingkungan ada (ganti dengan nilai dummy jika testing lokal)
-const process = {
-    env: {
-        LAZADA_APP_KEY: "131919", // Ganti dengan App Key Anda
-        LAZADA_APP_SECRET: "q0JLGqmdHpd3dliNMAkO6vY0WSaI4R8W" // Ganti dengan App Secret Anda yang ASLI
-    }
-};
-
 /**
  * Fungsi untuk menghasilkan tanda tangan (signature) API Lazada.
  * Menggunakan HMAC SHA256 dengan App Secret sebagai kunci.
