@@ -90,26 +90,7 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Dummy product Object (STRUKTUR JSON KRITIS: Pembungkus "Request" sudah benar)
-        const productObj = {
-            Request: {
-                Product: {
-                    PrimaryCategory: "18469",
-                    Attributes: {
-                        name: "TEST SIMPLE PRODUCT " + Date.now().toString().slice(-6),
-                        brand: "No Brand"
-                    },
-                    Skus: [{
-                        SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
-                        quantity: 1,
-                        price: 1000,
-                        package_weight: 0.1
-                    }]
-                }
-            }
-        };
-
-        // 3. String JSON mentah
+        // 2. Payload (Objek JavaScript)
         const productObj = {
             Request: {
                 Product: {
