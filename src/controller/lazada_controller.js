@@ -121,11 +121,10 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Menggunakan nama lokal ("Berat Bersih") dalam format ARRAY of numeric string (tanpa unit "g"). ***
-                        // Ini adalah upaya terakhir untuk mengatasi CHK_CATPROP_CPV_REQUIRED: "Berat Bersih" can't be empty
-                        "Berat Bersih": "500",
-
-                        // Menghapus p-120008822 yang terbukti tidak diakui format stringnya.
+                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format ARRAY numerik. ***
+                        // Format ARRAY adalah satu-satunya yang menghilangkan error "can't be empty", 
+                        // dan kita coba hilangkan unit "g" untuk menghindari SYSTEM_EXCEPTION.
+                        "p-120008822": ["500"],
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
