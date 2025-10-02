@@ -90,16 +90,14 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript) - Tambahkan atribut wajib
+        // 2. Payload (Objek JavaScript)
         const productObj = {
             Request: {
                 Product: {
-                    // Menggunakan kategori umum 100000
                     PrimaryCategory: "100000",
                     Attributes: {
                         name: "TEST-SIMPLE-PRODUCT-" + Date.now().toString().slice(-6),
                         brand: "No Brand",
-                        // *** PERBAIKAN KRITIS: Tambahkan Deskripsi Wajib ***
                         description: "This is a simple test product description for API testing. This description should be detailed and long enough to pass validation.",
                         short_description: "Test product for API."
                     },
@@ -126,9 +124,10 @@ const createDummyProduct = async (req, res) => {
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // 6. Siapkan Body (Pertahankan MANUAL URL ENCODING dari langkah sebelumnya)
-        // Ini adalah cara paling handal untuk memastikan tanda kutip di-escape dengan benar.
-        const encodedJsonBody = encodeURIComponent(jsonBody);
+        // 6. Siapkan Body (PERBAIKAN UTAMA: Konversi %20 menjadi + untuk kepatuhan form-encoding yang ketat)
+        const encodedJsonBody = encodeURIComponent(jsonBody)
+            .replace(/%20/g, '+'); // FIX E1001: Mengubah encoding spasi dari %20 ke +
+
         const bodyStrForRequest = 'payload=' + encodedJsonBody;
 
 
@@ -139,9 +138,10 @@ const createDummyProduct = async (req, res) => {
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // BODY harus selalu dikirim untuk POST product create
+            bodyStrForRequest,
             {
                 headers: {
+                    // Header tetap sederhana
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
