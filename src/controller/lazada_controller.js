@@ -111,8 +111,9 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Tambahkan Berat Bersih (Net Weight) untuk mengatasi error CHK_CATPROP_CPV_REQUIRED ***
-                        "Berat Bersih": "500g",
+                        // *** PERBAIKAN KRITIS: Gunakan Property ID (p-120008822) untuk Berat Bersih. ***
+                        // Kita asumsikan nilainya adalah 500 (gram) dan coba tanpa unit 'g' untuk menghindari masalah validasi.
+                        "p-120008822": "500",
                     },
 
                     // Gunakan struktur SKUS yang eksplisit
