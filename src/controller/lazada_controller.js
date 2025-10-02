@@ -121,13 +121,9 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format PLAIN OBJECT (NON-ARRAY). ***
-                        // Kita asumsikan array yang menyebabkan SYSTEM_EXCEPTION salah, dan string yang menyebabkan "can't be empty" juga salah.
-                        // Ini adalah format objek terakhir yang mungkin diterima Lazada untuk nilai dan unit.
-                        "p-120008822": {
-                            "value": "500",
-                            "unit": "g"
-                        },
+                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format ARRAY OF NUMBER (bukan string). ***
+                        // Ini adalah upaya terakhir untuk mengatasi SYSTEM_EXCEPTION saat menggunakan format array.
+                        "p-120008822": [500],
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
