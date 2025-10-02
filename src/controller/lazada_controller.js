@@ -72,11 +72,10 @@ const createDummyProduct = async (req, res) => {
         };
 
         // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
-        // PENTING: Mencoba mengirimkan ID CPV sebagai STRING MENTAH (bukan JSON string array)
-        // Karena semua format JSON string array sebelumnya gagal.
-        // ID 166008 (untuk 1.3kg) digunakan di sini.
-        const cpvIdForNetWeight = "166008";
-        const netWeightValue = cpvIdForNetWeight; // Format: String MENTAH dari ID CPV
+        // PERBAIKAN FINAL: Kita asumsikan Lazada mengharapkan nilai berat aktual (0.5) 
+        // sebagai STRING biasa, yang harus sesuai dengan package_weight.
+        // Kita tinggalkan ID CPV 166008 karena itu adalah ID untuk 1.3kg.
+        const netWeightValue = "0.5"; // Nilai aktual 0.5kg (dalam string)
 
         // LOGGING BARU: Periksa string yang dihasilkan untuk netWeightValue
         console.log("DEBUG: Net Weight Raw String (p-120008822):", netWeightValue);
@@ -110,7 +109,7 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** FORMAT BARU: String MENTAH dari ID CPV. ***
+                        // *** FORMAT BARU: String MENTAH nilai berat (0.5). ***
                         "p-120008822": netWeightValue,
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
@@ -131,7 +130,7 @@ const createDummyProduct = async (req, res) => {
                             package_height: "10",
                             package_length: "10",
                             package_width: "10",
-                            package_weight: "0.5",
+                            package_weight: "0.5", // Berat paket 0.5 kg
                             package_content: "Bungkus Krimer",
                         }]
                     }
