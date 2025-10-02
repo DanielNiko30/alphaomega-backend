@@ -71,12 +71,13 @@ const createDummyProduct = async (req, res) => {
         };
 
         // --- Variabel untuk Atribut Wajib (CPV) ---
-        // ID CPV untuk Bag Size (p-120010433) dari GetCategoryAttributes: 41571 (Medium)
-        // Sumber: File New Text Document (3).txt
-        const requiredBagSizeCpvId = "41571";
+        // ID CPV dari GetCategoryAttributes (New Text Document (3).txt)
+        const requiredBagSizeCpvId = "41571"; // Medium (ID p-120010433)
+        const genderCpvId = "120002131";      // Female (ID gender)
+        const materialBagCpvId = "120004547"; // Canvas/Kapas (ID material_bag)
 
         // LOGGING: Cek variabel
-        console.log(`DEBUG: Kategori Tote Bag Wanita (ID 17935) memerlukan 'Bag Size' (p-120010433). Nilai CPV digunakan: ${requiredBagSizeCpvId} (Medium)`);
+        console.log(`DEBUG: Kategori Tote Bag Wanita (ID 17935) menggunakan CPV: Size=${requiredBagSizeCpvId}, Gender=${genderCpvId}, Material=${materialBagCpvId}`);
 
         // --- 2. Parameter Sistem ---
         const sysParams = {
@@ -106,12 +107,12 @@ const createDummyProduct = async (req, res) => {
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
 
-                        // *** PERBAIKAN KRITIS: Bag Size (p-120010433) diubah menjadi array string. ***
-                        // Meskipun hanya satu nilai, sales properties seringkali memerlukan format array.
-                        "p-120010433": [requiredBagSizeCpvId], // Menggunakan Array: ["41571"]
+                        // Bag Size (p-120010433) - Diubah menjadi array string
+                        "p-120010433": [requiredBagSizeCpvId],
 
-                        "material_bag": "Canvas", // Atribut umum untuk tas
-                        "gender": "Female",       // Atribut umum untuk tas
+                        // *** PERBAIKAN: material_bag dan gender diubah ke ID CPV dan Array String ***
+                        "material_bag": [materialBagCpvId],
+                        "gender": [genderCpvId],
                     },
 
                     Skus: {
@@ -187,7 +188,6 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
-
 
 const getCategoryAttributes = async (req, res) => {
     try {
