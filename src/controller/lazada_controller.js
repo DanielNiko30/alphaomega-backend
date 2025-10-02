@@ -80,6 +80,7 @@ const createDummyProduct = async (req, res) => {
 
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
+        const uniqueSuffix = Date.now().toString().slice(-6);
 
         // 1. System params
         const sysParams = {
@@ -90,23 +91,51 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript)
+        // 2. Payload (Objek JavaScript) - Menggunakan struktur yang lebih spesifik
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: "100000",
-                    Attributes: {
-                        name: "TEST-SIMPLE-PRODUCT-" + Date.now().toString().slice(-6),
-                        brand: "No Brand",
-                        description: "This is a simple test product description for API testing. This description should be detailed and long enough to pass validation.",
-                        short_description: "Test product for API."
+                    // *** PERBAIKAN 1: Menggunakan ID Kategori Spesifik dari contoh ***
+                    PrimaryCategory: "10002019",
+
+                    // *** PERBAIKAN 2: Tambahkan Images (Wajib untuk banyak kategori) ***
+                    Images: {
+                        Image: [
+                            // Gunakan placeholder image URL yang valid
+                            "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
+                        ]
                     },
-                    Skus: [{
-                        SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
-                        quantity: 1,
-                        price: 1000,
-                        package_weight: 0.1
-                    }]
+
+                    Attributes: {
+                        name: "TEST-SPECIFIC-PRODUCT-" + uniqueSuffix,
+                        brand: "No Brand",
+                        description: "This is a simple test product description. Long enough to pass validation.",
+                        short_description: "Test product for API.",
+                        // Tambahkan minimal atribut tambahan jika kategori 10002019 membutuhkannya
+                        model: "API-Model-Test",
+                        warranty_type: "No Warranty",
+                        warranty: "N/A",
+                        Hazmat: "None",
+                    },
+
+                    // *** PERBAIKAN 3: Gunakan struktur SKUS yang eksplisit dari contoh ***
+                    Skus: {
+                        Sku: [{
+                            SellerSku: "TEST-SKU-" + uniqueSuffix,
+                            // Tambahkan saleProp minimal untuk meniru struktur contoh
+                            saleProp: {
+                                color_family: "Green",
+                                size: "10"
+                            },
+                            quantity: "3", // Pastikan kuantitas adalah string jika itu yang diharapkan
+                            price: "1000",
+                            package_height: "10",
+                            package_length: "10",
+                            package_width: "10",
+                            package_weight: "0.5",
+                            package_content: "Test Content",
+                        }]
+                    }
                 }
             }
         };
@@ -124,11 +153,12 @@ const createDummyProduct = async (req, res) => {
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // 6. Siapkan Body (PERBAIKAN UTAMA: Konversi %20 menjadi + untuk kepatuhan form-encoding yang ketat)
-        const encodedJsonBody = encodeURIComponent(jsonBody)
-            .replace(/%20/g, '+'); // FIX E1001: Mengubah encoding spasi dari %20 ke +
+        // 6. Siapkan Body (Body Request adalah objek URLSearchParams, metode paling bersih)
+        const bodyDataForRequest = { payload: jsonBody };
+        const bodyForRequest = new URLSearchParams(bodyDataForRequest);
 
-        const bodyStrForRequest = 'payload=' + encodedJsonBody;
+        // Log string yang di-encode oleh URLSearchParams
+        const bodyStrForRequest = bodyForRequest.toString();
 
 
         // 7. Build URL (URL parameter)
@@ -138,10 +168,9 @@ const createDummyProduct = async (req, res) => {
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest,
+            bodyForRequest, // Kirim OBJEK URLSearchParams, membiarkan Axios menangani encoding
             {
                 headers: {
-                    // Header tetap sederhana
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
