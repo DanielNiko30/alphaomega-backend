@@ -121,11 +121,14 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Mengirim Berat Bersih (p-120008822) sebagai ARRAY. ***
-                        // Lazada seringkali memerlukan nilai wajib dikirim sebagai array, bahkan jika hanya ada satu nilai.
-                        "p-120008822": ["500g"],
+                        // *** PERBAIKAN 1: Mengubah Net Weight kembali ke format string tunggal. ***
+                        // Array format pada langkah sebelumnya menyebabkan SYSTEM_EXCEPTION.
+                        "p-120008822": "500g",
 
-                        // *** PERBAIKAN 2: Tetap pertahankan tanggal kadaluarsa (mandatory untuk makanan). ***
+                        // *** PERBAIKAN 2: Menambahkan atribut Flavor (mandatory untuk makanan). ***
+                        "flavor": "Original",
+
+                        // *** PERBAIKAN 3: Tetap pertahankan tanggal kadaluarsa. ***
                         "date_expiration": getFutureDate(),
                     },
 
@@ -205,6 +208,7 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
+
 /**
  * Generate Login URL Lazada
  */
