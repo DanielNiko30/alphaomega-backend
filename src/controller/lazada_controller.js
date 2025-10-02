@@ -87,86 +87,89 @@ const createDummyProduct = async (req, res) => {
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "2.0" // Menggunakan API V2
+            v: "1.0" // Revert ke API V1 (Form Data Style)
         };
 
         // --- 3. Payload (Objek JavaScript) ---
-        // Struktur V2: Tanpa wrapper 'Request', dimulai dari 'Product'
+        // *** Re-introduce wrapper 'Request' untuk format V1/Form Data ***
         const productObj = {
-            Product: { // Objek dimulai langsung dari 'Product'
-                // *** Kategori Tote Bag Wanita (17935) ***
-                PrimaryCategory: "17935",
+            Request: { // Wrapper V1/Form Data
+                Product: { // Objek dimulai langsung dari 'Product'
+                    // *** Kategori Tote Bag Wanita (17935) ***
+                    PrimaryCategory: "17935",
 
-                Images: {
-                    Image: [
-                        "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
-                    ]
-                },
+                    Images: {
+                        Image: [
+                            "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
+                        ]
+                    },
 
-                Attributes: {
-                    name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
-                    brand: "No Brand",
-                    description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
-                    short_description: "Tote Bag Kanvas API Test.",
+                    Attributes: {
+                        name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
+                        brand: "No Brand",
+                        description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
+                        short_description: "Tote Bag Kanvas API Test.",
 
-                    // Sale Properties (diisi sebagai array string dengan ID CPV):
-                    "p-120010433": [requiredBagSizeCpvId], // Bag Size
-                    "material_bag": [materialBagCpvId],     // Material Bag
-                    "gender": [genderCpvId],               // Gender
-                    "fashion_size": [fashionSizeCpvId],    // Fashion Size yang Wajib
-                },
+                        // Sale Properties (diisi sebagai array string dengan ID CPV):
+                        "p-120010433": [requiredBagSizeCpvId], // Bag Size
+                        "material_bag": [materialBagCpvId],     // Material Bag
+                        "gender": [genderCpvId],               // Gender
+                        "fashion_size": [fashionSizeCpvId],    // Fashion Size yang Wajib
+                    },
 
-                Skus: {
-                    Sku: [{
-                        SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
-                        quantity: "3",
-                        price: "1000",
-                        package_height: "3",
-                        package_length: "35",
-                        package_width: "30",
-                        package_weight: "0.2", // Berat paket 0.2 kg
-                        package_content: "1x Tote Bag Wanita",
-                    }]
+                    Skus: {
+                        Sku: [{
+                            SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
+                            quantity: "3",
+                            price: "1000",
+                            package_height: "3",
+                            package_length: "35",
+                            package_width: "30",
+                            package_weight: "0.2", // Berat paket 0.2 kg
+                            package_content: "1x Tote Bag Wanita",
+                        }]
+                    }
                 }
             }
         };
 
         // --- 4. String JSON mentah (untuk signing dan payload request) ---
         const jsonBody = JSON.stringify(productObj);
-        console.log("DEBUG: Final JSON Payload (V2 Style):", jsonBody);
+        console.log("DEBUG: Final JSON Payload (V1/Form Data Style):", jsonBody);
 
         // --- 5. Tentukan Parameter untuk SIGNING ---
-        // Untuk V2 dengan JSON Body, parameter 'payload' TIDAK dimasukkan ke dalam signing.
-        // Hanya parameter sistem yang ada di URL (sysParams) yang di-sign.
+        // *** Re-include parameter 'payload' untuk signing V1/Form Data ***
         const allParamsForSign = {
             ...sysParams,
+            payload: jsonBody // WAJIB ada di signing untuk V1/Form Data
         };
         // NOTE: Kita tetap menyimpan 'payload' di objek request response untuk debugging.
-        const allParamsForResponse = {
-            ...sysParams,
-            payload: jsonBody
-        }
+        const allParamsForResponse = allParamsForSign;
 
 
         // --- 6. Buat SIGNATURE ---
         // Panggil fungsi `generateSign` Anda di sini
-        // Gunakan allParamsForSign yang hanya berisi sysParams
+        // Gunakan allParamsForSign (yang berisi sysParams + payload)
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // --- 7. Siapkan URL Query String ---
-        // Kita hanya membuat URL query string (tanpa body/payload)
+        // --- 7. Siapkan Body dan URL ---
+        // *** Revert ke Form Data Body: payload=... ***
+        const bodyDataForRequest = { payload: jsonBody };
+        const bodyForRequest = new URLSearchParams(bodyDataForRequest);
+        const bodyStrForRequest = bodyForRequest.toString(); // e.g. "payload=%7B%22Request%22%3A..."
+
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // --- 8. POST request ke Lazada ---
-        // Mengirimkan raw JSON Body dan Content-Type ke application/json
+        // *** Revert ke Content-Type: application/x-www-form-urlencoded ***
         const response = await axios.post(
             url,
-            jsonBody, // Mengirimkan raw jsonBody (string)
+            bodyForRequest, // Mengirimkan Form Data
             {
                 headers: {
-                    "Content-Type": "application/json" // Header yang sesuai untuk body JSON
+                    "Content-Type": "application/x-www-form-urlencoded" // Header yang sesuai untuk Form Data
                 }
             }
         );
@@ -176,10 +179,10 @@ const createDummyProduct = async (req, res) => {
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
             request: {
                 apiPath,
-                sysParams: allParamsForResponse, // Menggunakan objek dengan 'payload' untuk logging
+                sysParams: allParamsForResponse,
                 sign,
                 url,
-                bodyStrForRequest: jsonBody // Body sekarang adalah JSON mentah
+                bodyStrForRequest // Body sekarang adalah Form Data String
             },
             lazada_response: response.data
         });
