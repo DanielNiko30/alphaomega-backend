@@ -82,6 +82,16 @@ const createDummyProduct = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
+        // Helper untuk mendapatkan tanggal 1 tahun dari sekarang dalam format YYYY-MM-DD (Wajib untuk kategori makanan)
+        const getFutureDate = () => {
+            const date = new Date();
+            date.setFullYear(date.getFullYear() + 1);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        };
+
         // 1. System params
         const sysParams = {
             app_key: apiKey,
@@ -111,9 +121,12 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Gunakan Property ID (p-120008822) untuk Berat Bersih. ***
-                        // Kita asumsikan nilainya adalah 500 (gram) dan coba tanpa unit 'g' untuk menghindari masalah validasi.
-                        "p-120008822": "500",
+                        // *** PERBAIKAN 1: Coba nama atribut Bahasa Inggris 'net_weight' dengan unit yang benar. ***
+                        // Ini sering kali merupakan kunci yang benar, bukan Property ID atau nama Bahasa Indonesia.
+                        "net_weight": "500g",
+
+                        // *** PERBAIKAN 2: Tambahkan tanggal kadaluarsa (mandatory untuk makanan). ***
+                        "date_expiration": getFutureDate(),
                     },
 
                     // Gunakan struktur SKUS yang eksplisit
