@@ -48,8 +48,7 @@ function generateSign(apiPath, allParams, appSecret) {
  */
 const createDummyProduct = async (req, res) => {
     try {
-        // Menggunakan logic original Anda:
-        // Catatan: Anda mungkin perlu memastikan model 'Lazada' dan 'Product' tersedia/diimport
+        // --- 1. Persiapan Data dan Token ---
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -61,7 +60,7 @@ const createDummyProduct = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // Helper untuk mendapatkan tanggal 1 tahun dari sekarang dalam format YYYY-MM-DD (Wajib untuk kategori makanan)
+        // Helper untuk mendapatkan tanggal 1 tahun dari sekarang dalam format YYYY-MM-DD (Tidak dipakai di kategori ini, hanya untuk referensi)
         const getFutureDate = () => {
             const date = new Date();
             date.setFullYear(date.getFullYear() + 1);
@@ -71,19 +70,10 @@ const createDummyProduct = async (req, res) => {
             return `${yyyy}-${mm}-${dd}`;
         };
 
-        // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
-        // Kita kembali ke format ID CPV tunggal, tetapi dengan instruksi jelas.
-        // Karena semua format sebelumnya (ID 1.3kg, ID array, string 0.5) gagal,
-        // masalahnya PASTI adalah ID yang salah/tidak valid.
-        // Anda HARUS mengganti nilai PLACEHOLDER_ID_0_5KG dengan ID CPV yang BENAR
-        // untuk 0.5kg/500g yang didapatkan dari API Get Category Attributes Lazada.
-        const cpvIdForNetWeight = "TEMUKAN_ID_0_5KG_ANDA_DI_SINI";
-        const netWeightValue = cpvIdForNetWeight;
+        // LOGGING: Cek variabel
+        console.log("DEBUG: Kategori diubah ke Tote Bag Wanita (ID 17935). Atribut Berat Bersih dihilangkan dari payload.");
 
-        // LOGGING BARU: Periksa string yang dihasilkan untuk netWeightValue
-        console.log("DEBUG: Net Weight Raw String (p-120008822):", netWeightValue);
-
-        // 1. System params
+        // --- 2. Parameter Sistem ---
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -92,88 +82,76 @@ const createDummyProduct = async (req, res) => {
             v: "1.0"
         };
 
-        // 2. Payload (Objek JavaScript) - Menggunakan struktur untuk Krimer (18469)
+        // --- 3. Payload (Objek JavaScript) ---
         const productObj = {
             Request: {
                 Product: {
-                    // Menggunakan ID Kategori Krimer (18469)
-                    PrimaryCategory: "18469",
+                    // *** PERUBAHAN KRITIS: Menggunakan ID Kategori Tote Bag Wanita (17935) ***
+                    PrimaryCategory: "17935",
 
-                    // Tambahkan Images (Wajib)
                     Images: {
                         Image: [
+                            // Menggunakan placeholder, idealnya diganti dengan gambar Tote Bag
                             "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
                         ]
                     },
 
                     Attributes: {
-                        name: "TEST-KRIMER-BUBUK-" + uniqueSuffix, // Ubah nama produk
+                        name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
                         brand: "No Brand",
-                        description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
-                        short_description: "Krimer Bubuk API Test.",
+                        description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
+                        short_description: "Tote Bag Kanvas API Test.",
 
-                        // *** FORMAT BARU: String MENTAH placeholder ID CPV. ***
-                        "p-120008822": netWeightValue,
-
-                        // *** Atribut wajib lain untuk kategori makanan. ***
-                        "flavor": "Original",
-                        "ingredients": "Gula, Sirup Glukosa, Minyak Nabati, Natrium Kaseinat, Stabilizer, Garam, Perisa Alami",
-                        "storage_type": "Cool and dry place",
-
-                        // *** Tetap pertahankan tanggal kadaluarsa. ***
-                        "date_expiration": getFutureDate(),
+                        // Atribut wajib untuk Tas (Cek GetCategoryAttributes jika error terjadi)
+                        // Contoh: "Bag Material" (material_bag), "Closure Type" (tipe_penutup)
+                        // Kita coba minimalisir dulu.
+                        "material_bag": "Canvas", // Atribut umum untuk tas
+                        "gender": "Female",       // Atribut umum untuk tas
                     },
 
-                    // Gunakan struktur SKUS yang eksplisit
                     Skus: {
                         Sku: [{
-                            SellerSku: "SKU-KRIMER-" + uniqueSuffix, // Ubah SKU name
+                            SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
                             quantity: "3",
                             price: "1000",
-                            package_height: "10",
-                            package_length: "10",
-                            package_width: "10",
-                            package_weight: "0.5", // Berat paket 0.5 kg
-                            package_content: "Bungkus Krimer",
+                            package_height: "3", // Tas cenderung tipis
+                            package_length: "35",
+                            package_width: "30",
+                            package_weight: "0.2", // Berat paket 0.2 kg
+                            package_content: "1x Tote Bag Wanita",
                         }]
                     }
                 }
             }
         };
 
-        // 3. String JSON mentah (untuk signing)
+        // --- 4. String JSON mentah (untuk signing dan payload request) ---
         const jsonBody = JSON.stringify(productObj);
-
-        // LOGGING BARU: Periksa payload JSON final sebelum di-sign
         console.log("DEBUG: Final JSON Payload:", jsonBody);
 
-
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING
+        // --- 5. Gabungkan SEMUA Parameter untuk SIGNING ---
         const allParamsForSign = {
             ...sysParams,
             payload: jsonBody
         };
 
-        // 5. Buat SIGNATURE
+        // --- 6. Buat SIGNATURE ---
+        // Panggil fungsi `generateSign` Anda di sini
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // 6. Siapkan Body (Body Request adalah objek URLSearchParams, metode paling bersih)
+        // --- 7. Siapkan Body dan URL ---
         const bodyDataForRequest = { payload: jsonBody };
         const bodyForRequest = new URLSearchParams(bodyDataForRequest);
-
-        // Log string yang di-encode oleh URLSearchParams
         const bodyStrForRequest = bodyForRequest.toString();
 
-
-        // 7. Build URL (URL parameter)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada
+        // --- 8. POST request ke Lazada ---
         const response = await axios.post(
             url,
-            bodyForRequest, // Kirim OBJEK URLSearchParams, membiarkan Axios menangani encoding
+            bodyForRequest,
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
