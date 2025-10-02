@@ -72,14 +72,12 @@ const createDummyProduct = async (req, res) => {
         };
 
         // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
-        // Lazada memerlukan JSON string berisi unit dan value untuk atribut seperti Berat Bersih (p-120008822)
-        // KRITIS: Mengubah dari 'g' ke 'kg' dan dari '500' ke '0.5' karena kegagalan berulang.
-        const netWeightValue = JSON.stringify([
-            {
-                unit: "kg", // MENGUBAH UNIT ke kilogram
-                value: "0.5" // MENGUBAH NILAI (0.5 kg = 500g)
-            }
-        ]);
+        // BERDASARKAN ATRIBUT KATEGORI, p-120008822 (Berat Bersih) adalah
+        // atribut CPV (Custom Property Value) yang memerlukan ID nilai.
+        // ID 166008 (untuk 1.3kg) digunakan di sini sebagai *placeholder* // untuk memastikan FORMAT CPV ID (Array of Stringified ID) sudah benar.
+        // Jika berhasil, ganti 166008 dengan ID yang sesuai untuk 0.5kg/500g.
+        const cpvIdForNetWeight = "166008";
+        const netWeightValue = JSON.stringify([cpvIdForNetWeight]); // Format: JSON String Array of Stringified ID
 
         // LOGGING BARU: Periksa string JSON yang dihasilkan untuk netWeightValue
         console.log("DEBUG: Net Weight JSON String (p-120008822):", netWeightValue);
@@ -113,7 +111,7 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** FORMAT BARU: JSON String untuk atribut unit. ***
+                        // *** FORMAT BARU: JSON String Array of Stringified ID. ***
                         "p-120008822": netWeightValue,
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
