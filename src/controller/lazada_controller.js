@@ -127,25 +127,25 @@ const createDummyProduct = async (req, res) => {
         const bodyDataForRequest = {
             payload: jsonBody
         };
-        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
+        // Gunakan qs.stringify
+        const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
-        // 7. Build URL
+
+        // 7. Build URL (Tidak Berubah)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim STRING MENTAH
+            bodyStrForRequest, // Kirim STRING dari qs.stringify
             {
                 headers: {
-                    // Header ini harus tetap ada
-                    "Content-Type": "application/x-www-form-urlencoded"
+                    // *** SOLUSI AKHIR: Tambahkan charset=UTF-8 ke Content-Type ***
+                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
                 }
-                // transformRequest DIHAPUS
             }
         );
-
         res.json({
             success: true,
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
