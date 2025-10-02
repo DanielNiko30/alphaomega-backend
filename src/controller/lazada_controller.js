@@ -91,7 +91,7 @@ const createDummyProduct = async (req, res) => {
         };
 
         // --- 3. Payload (Objek JavaScript) ---
-        // *** PERBAIKAN KRITIS: Menghapus wrapper 'Request' agar sesuai dengan pola V2 ***
+        // Struktur V2: Tanpa wrapper 'Request', dimulai dari 'Product'
         const productObj = {
             Product: { // Objek dimulai langsung dari 'Product'
                 // *** Kategori Tote Bag Wanita (17935) ***
@@ -138,7 +138,7 @@ const createDummyProduct = async (req, res) => {
         // --- 5. Gabungkan SEMUA Parameter untuk SIGNING ---
         const allParamsForSign = {
             ...sysParams,
-            payload: jsonBody // Tetap kirim sebagai payload string untuk kompatibilitas signing V1/V2
+            payload: jsonBody // Tetap kirim string payload untuk kompatibilitas signing V1/V2
         };
 
         // --- 6. Buat SIGNATURE ---
@@ -146,21 +146,19 @@ const createDummyProduct = async (req, res) => {
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
-        // --- 7. Siapkan Body dan URL ---
-        const bodyDataForRequest = { payload: jsonBody };
-        const bodyForRequest = new URLSearchParams(bodyDataForRequest);
-        const bodyStrForRequest = bodyForRequest.toString();
-
+        // --- 7. Siapkan URL Query String ---
+        // Kita hanya membuat URL query string (tanpa body/payload)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // --- 8. POST request ke Lazada ---
+        // *** PERUBAHAN KRITIS: Mengirimkan raw JSON Body dan mengubah Content-Type ke application/json ***
         const response = await axios.post(
             url,
-            bodyForRequest,
+            jsonBody, // Mengirimkan raw jsonBody (string)
             {
                 headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
+                    "Content-Type": "application/json" // Header yang sesuai untuk body JSON
                 }
             }
         );
@@ -173,7 +171,7 @@ const createDummyProduct = async (req, res) => {
                 sysParams: allParamsForSign,
                 sign,
                 url,
-                bodyStrForRequest
+                bodyStrForRequest: jsonBody // Body sekarang adalah JSON mentah
             },
             lazada_response: response.data
         });
