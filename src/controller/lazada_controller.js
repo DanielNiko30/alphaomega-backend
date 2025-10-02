@@ -96,8 +96,7 @@ const createDummyProduct = async (req, res) => {
                 PrimaryCategory: "18469",
                 Attributes: {
                     name: "Dummy Product Node",
-                    // ❌ HAPUS TAG HTML KARENA MEMICU ERROR PARSING BODY
-                    short_description: "Ini product dummy untuk test",
+                    short_description: "Ini product dummy untuk test", // Tanpa HTML
                     brand: "No Brand",
                     model: "SKU-12345",
                     warranty_type: "No Warranty",
@@ -114,7 +113,7 @@ const createDummyProduct = async (req, res) => {
         // 3. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING (TIDAK BERUBAH - Ini sudah benar)
         const allParamsForSign = {
             ...sysParams,
             payload: jsonBody // JSON MENTAH untuk signing
@@ -123,20 +122,25 @@ const createDummyProduct = async (req, res) => {
         // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (Gunakan qs.stringify untuk format terbaik)
+        // 6. Siapkan Body untuk REQUEST HTTP (KEMBALI KE METODE MANUAL + URL ENCODING)
+        // Kita gunakan URLSearchParams standar untuk memastikan encoding yang sama dengan URL, 
+        // meskipun ini adalah body. Ini adalah upaya terakhir.
+
         const bodyDataForRequest = {
             payload: jsonBody
         };
-        const bodyStrForRequest = qs.stringify(bodyDataForRequest);
+        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
+        // bodyStrForRequest akan menghasilkan string seperti: payload=%7B%22Product%22... (Sama seperti qs.stringify, tapi menggunakan native API)
 
-        // 7. Build URL (Hanya sysParams yang masuk ke URL + sign)
+
+        // 7. Build URL (TIDAK BERUBAH)
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
-        // 8. POST request ke Lazada
+        // 8. POST request ke Lazada (TIDAK BERUBAH)
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim body yang sudah diformat qs
+            bodyStrForRequest,
             {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
