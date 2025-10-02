@@ -121,12 +121,14 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Mengirim Berat Bersih (p-120008822) sebagai ARRAY dari string numeric. ***
-                        // Kita coba format array lagi, tapi tanpa unit ("g"), karena unit mungkin yang menyebabkan SYSTEM_EXCEPTION sebelumnya dan string tunggal gagal.
-                        "p-120008822": ["500"],
+                        // *** PERBAIKAN 1: Kembali ke format string dengan unit untuk menghilangkan SYSTEM_EXCEPTION. ***
+                        // Format Array menyebabkan crash di backend Lazada.
+                        "p-120008822": "500g",
 
-                        // *** Menambahkan atribut Flavor (mandatory untuk makanan). ***
+                        // *** PERBAIKAN 2: Menambahkan atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
+                        "ingredients": "Gula, Sirup Glukosa, Minyak Nabati, Natrium Kaseinat, Stabilizer, Garam, Perisa Alami",
+                        "storage_type": "Cool and dry place",
 
                         // *** Tetap pertahankan tanggal kadaluarsa. ***
                         "date_expiration": getFutureDate(),
