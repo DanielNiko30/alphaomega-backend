@@ -87,7 +87,7 @@ const createDummyProduct = async (req, res) => {
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "1.0"
+            v: "2.0" // *** PERUBAHAN KRITIS: Menggunakan API V2 ***
         };
 
         // --- 3. Payload (Objek JavaScript) ---
@@ -114,7 +114,7 @@ const createDummyProduct = async (req, res) => {
                         "material_bag": [materialBagCpvId],     // Material Bag
                         "gender": [genderCpvId],               // Gender
 
-                        // *** PERBAIKAN BARU: Menambahkan Fashion Size yang Wajib ***
+                        // Menambahkan Fashion Size yang Wajib
                         "fashion_size": [fashionSizeCpvId],
                     },
 
