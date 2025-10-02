@@ -7,29 +7,6 @@ const FormData = require("form-data");
 const sharp = require("sharp");
 const qs = require("qs");
 const { Builder } = require("xml2js");
-
-// function generateSign(apiPath, params, appSecret, body = "") {
-//     // 1. sort params by ASCII
-//     const keys = Object.keys(params).sort();
-//     let strToSign = apiPath;
-
-//     // 2. concat key + value
-//     for (const key of keys) {
-//         const val = params[key];
-//         if (val !== undefined && val !== null && val !== "") {
-//             strToSign += key + val;
-//         }
-//     }
-
-//     // 3. concat raw body if ada
-//     if (body) strToSign += body;
-
-//     // 4. HMAC-SHA256
-//     const hmac = crypto.createHmac("sha256", appSecret);
-//     hmac.update(strToSign, "utf8");
-//     return hmac.digest("hex").toUpperCase();
-// }
-
 /**
  * Fungsi untuk menghasilkan tanda tangan (signature) API Lazada.
  * Menggunakan HMAC SHA256 dengan App Secret sebagai kunci.
@@ -71,6 +48,7 @@ function generateSign(apiPath, allParams, appSecret) {
  */
 const createDummyProduct = async (req, res) => {
     try {
+        // Menggunakan logic original Anda:
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -105,7 +83,7 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    // Menggunakan ID Kategori Krimer (18469) dari log terakhir
+                    // Menggunakan ID Kategori Krimer (18469)
                     PrimaryCategory: "18469",
 
                     // Tambahkan Images (Wajib)
@@ -121,9 +99,9 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN KRITIS: Menggunakan ID resmi (p-120008822) dalam format ARRAY OF NUMBER (bukan string). ***
-                        // Ini adalah upaya terakhir untuk mengatasi SYSTEM_EXCEPTION saat menggunakan format array.
-                        "p-120008822": [500],
+                        // *** PERBAIKAN KRITIS: Mengubah Array of Number menjadi String tunggal. ***
+                        // Ini adalah format yang paling umum untuk atribut nilai numerik (mis. Net Weight).
+                        "p-120008822": "500", // Ganti dari [500] menjadi "500" (String)
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
@@ -222,9 +200,9 @@ const getCategoryAttributes = async (req, res) => {
 
         const apiPath = "/category/attributes/get";
         const timestamp = Date.now().toString();
-        
+
         // Kita menggunakan Category ID yang sama (Krimer) untuk mendapatkan daftar atributnya.
-        const primaryCategoryId = "18469"; 
+        const primaryCategoryId = "18469";
 
         // 1. System params
         const sysParams = {
@@ -234,13 +212,13 @@ const getCategoryAttributes = async (req, res) => {
             timestamp,
             v: "1.0"
         };
-        
+
         // 2. Business params (wajib)
         const businessParams = {
             primary_category_id: primaryCategoryId,
-            language_code: "id_ID" 
+            language_code: "id_ID"
         };
-        
+
         // 3. Gabungkan SEMUA Parameter (System + Business) untuk SIGNING
         const allParamsForSignAndUrl = {
             ...sysParams,
@@ -633,40 +611,6 @@ const getBrands = async (req, res) => {
     } catch (err) {
         console.error("❌ Lazada Get Brands Error:", err.response?.data || err.message);
         return res.status(500).json({ error: err.response?.data || err.message });
-    }
-};
-
-const testLazadaIP = async (req, res) => {
-    try {
-        const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) return res.status(400).json({ error: "Token Lazada not found" });
-
-        const access_token = lazadaData.access_token;
-        const API_PATH = "/system/getIPWhitelistStatus"; // endpoint Lazada untuk cek IP
-        const timestamp = String(Date.now());
-
-        const params = {
-            app_key: process.env.LAZADA_APP_KEY,
-            sign_method: "sha256",
-            timestamp,
-            access_token
-        };
-
-        // Generate signature
-        params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
-
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
-        const response = await axios.get(url);
-
-        return res.json({
-            success: true,
-            data: response.data
-        });
-    } catch (err) {
-        console.error("❌ Lazada IP Test Error:", err.response?.data || err.message);
-        return res.status(500).json({
-            error: err.response?.data || err.message
-        });
     }
 };
 
