@@ -102,20 +102,18 @@ const createDummyProduct = async (req, res) => {
         };
 
         // Body string persis sama untuk sign
-        const bodyStr = `payload=${JSON.stringify(productObj)}`;
-
-        // Generate signature
+        const bodyStr = `payload=${JSON.stringify(productObj)}`; // persis sama untuk sign
         const sign = generateSign(apiPath, sysParams, appSecret, bodyStr);
 
         // Build URL
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         // POST request ke Lazada
-        const response = await axios.post(url, bodyStr, {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
-            }
+        await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
+
+
 
         // Return semua info untuk debug
         res.json({
