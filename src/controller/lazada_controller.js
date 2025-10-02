@@ -87,61 +87,58 @@ const createDummyProduct = async (req, res) => {
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "2.0" // *** PERUBAHAN KRITIS: Menggunakan API V2 ***
+            v: "2.0" // Menggunakan API V2
         };
 
         // --- 3. Payload (Objek JavaScript) ---
+        // *** PERBAIKAN KRITIS: Menghapus wrapper 'Request' agar sesuai dengan pola V2 ***
         const productObj = {
-            Request: {
-                Product: {
-                    // *** Kategori Tote Bag Wanita (17935) ***
-                    PrimaryCategory: "17935",
+            Product: { // Objek dimulai langsung dari 'Product'
+                // *** Kategori Tote Bag Wanita (17935) ***
+                PrimaryCategory: "17935",
 
-                    Images: {
-                        Image: [
-                            "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
-                        ]
-                    },
+                Images: {
+                    Image: [
+                        "https://my-live-02.slatic.net/p/47b6cb07bd8f80aa3cc34b180b902f3e.jpg"
+                    ]
+                },
 
-                    Attributes: {
-                        name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
-                        brand: "No Brand",
-                        description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
-                        short_description: "Tote Bag Kanvas API Test.",
+                Attributes: {
+                    name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
+                    brand: "No Brand",
+                    description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
+                    short_description: "Tote Bag Kanvas API Test.",
 
-                        // Sale Properties (diisi sebagai array string dengan ID CPV):
-                        "p-120010433": [requiredBagSizeCpvId], // Bag Size
-                        "material_bag": [materialBagCpvId],     // Material Bag
-                        "gender": [genderCpvId],               // Gender
+                    // Sale Properties (diisi sebagai array string dengan ID CPV):
+                    "p-120010433": [requiredBagSizeCpvId], // Bag Size
+                    "material_bag": [materialBagCpvId],     // Material Bag
+                    "gender": [genderCpvId],               // Gender
+                    "fashion_size": [fashionSizeCpvId],    // Fashion Size yang Wajib
+                },
 
-                        // Menambahkan Fashion Size yang Wajib
-                        "fashion_size": [fashionSizeCpvId],
-                    },
-
-                    Skus: {
-                        Sku: [{
-                            SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
-                            quantity: "3",
-                            price: "1000",
-                            package_height: "3",
-                            package_length: "35",
-                            package_width: "30",
-                            package_weight: "0.2", // Berat paket 0.2 kg
-                            package_content: "1x Tote Bag Wanita",
-                        }]
-                    }
+                Skus: {
+                    Sku: [{
+                        SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
+                        quantity: "3",
+                        price: "1000",
+                        package_height: "3",
+                        package_length: "35",
+                        package_width: "30",
+                        package_weight: "0.2", // Berat paket 0.2 kg
+                        package_content: "1x Tote Bag Wanita",
+                    }]
                 }
             }
         };
 
         // --- 4. String JSON mentah (untuk signing dan payload request) ---
         const jsonBody = JSON.stringify(productObj);
-        console.log("DEBUG: Final JSON Payload:", jsonBody);
+        console.log("DEBUG: Final JSON Payload (V2 Style):", jsonBody);
 
         // --- 5. Gabungkan SEMUA Parameter untuk SIGNING ---
         const allParamsForSign = {
             ...sysParams,
-            payload: jsonBody
+            payload: jsonBody // Tetap kirim sebagai payload string untuk kompatibilitas signing V1/V2
         };
 
         // --- 6. Buat SIGNATURE ---
