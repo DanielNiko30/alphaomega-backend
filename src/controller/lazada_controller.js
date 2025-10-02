@@ -112,7 +112,7 @@ const createDummyProduct = async (req, res) => {
                         short_description: "Krimer Bubuk API Test.",
 
                         // *** PERBAIKAN KRITIS: Tambahkan Berat Bersih (Net Weight) untuk mengatasi error CHK_CATPROP_CPV_REQUIRED ***
-                        "berat_bersih": "500g",
+                        "Berat Bersih": "500g",
                     },
 
                     // Gunakan struktur SKUS yang eksplisit
