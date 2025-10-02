@@ -121,11 +121,13 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** PERBAIKAN 1: Kembali ke format string dengan unit untuk menghilangkan SYSTEM_EXCEPTION. ***
-                        // Format Array menyebabkan crash di backend Lazada.
-                        "p-120008822": "500g",
+                        // *** PERBAIKAN KRITIS: Menggunakan nama lokal ("Berat Bersih") dalam format ARRAY of numeric string (tanpa unit "g"). ***
+                        // Ini adalah upaya terakhir untuk mengatasi CHK_CATPROP_CPV_REQUIRED: "Berat Bersih" can't be empty
+                        "Berat Bersih": ["500"],
 
-                        // *** PERBAIKAN 2: Menambahkan atribut wajib lain untuk kategori makanan. ***
+                        // Menghapus p-120008822 yang terbukti tidak diakui format stringnya.
+
+                        // *** Atribut wajib lain untuk kategori makanan. ***
                         "flavor": "Original",
                         "ingredients": "Gula, Sirup Glukosa, Minyak Nabati, Natrium Kaseinat, Stabilizer, Garam, Perisa Alami",
                         "storage_type": "Cool and dry place",
