@@ -109,7 +109,7 @@ const createDummyProduct = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         // POST request ke Lazada
-        await axios.post(url, bodyStr, {
+        const response = await axios.post(url, bodyStr, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
 
