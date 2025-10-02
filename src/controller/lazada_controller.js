@@ -90,24 +90,24 @@ const createDummyProduct = async (req, res) => {
             v: "1.0" // Parameter Wajib
         };
 
-        // 2. Dummy product Object (Data bersih)
+        // 2. Dummy product Object (PERBAIKAN STRUKTUR KRITIS)
         const productObj = {
-            Product: {
-                // ID Kategori yang valid
-                PrimaryCategory: "18469",
-                Attributes: {
-                    // Nama harus diubah agar unik setiap kali run
-                    name: "TEST SIMPLE PRODUCT " + Date.now().toString().slice(-6),
-                    brand: "No Brand"
-                },
-                Skus: [{
-                    // SKU harus diubah agar unik setiap kali run
-                    SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
-                    quantity: 1,
-                    price: 1000,
-                    package_weight: 0.1 // Berat wajib ada di level SKU
-                }]
-                // HAPUS SEMUA: short_description, model, warranty_type, product_warranty, net_weight, Images, package_length, package_width, package_height
+            // *** PENAMBAHAN WAJIB: PEMBUNGKUS "Request" ***
+            Request: {
+                Product: {
+                    // Data minimalis yang sudah teruji
+                    PrimaryCategory: "18469",
+                    Attributes: {
+                        name: "TEST SIMPLE PRODUCT " + Date.now().toString().slice(-6),
+                        brand: "No Brand"
+                    },
+                    Skus: [{
+                        SellerSku: "TEST-SKU-" + Date.now().toString().slice(-6),
+                        quantity: 1,
+                        price: 1000,
+                        package_weight: 0.1
+                    }]
+                }
             }
         };
 
@@ -127,8 +127,6 @@ const createDummyProduct = async (req, res) => {
         const bodyDataForRequest = {
             payload: jsonBody
         };
-        // Gunakan qs.stringify
-        // Pastikan bodyStrForRequest adalah string yang sudah di-encode dengan benar
         const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
 
@@ -142,11 +140,13 @@ const createDummyProduct = async (req, res) => {
             bodyStrForRequest, // Kirim STRING dari qs.stringify
             {
                 headers: {
-                    // *** SOLUSI AKHIR: Tambahkan charset=UTF-8 ke Content-Type ***
+                    // Pertahankan header charset yang ketat
                     "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
                 }
             }
         );
+
+        // Response...
         res.json({
             success: true,
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
