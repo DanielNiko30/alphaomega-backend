@@ -87,10 +87,10 @@ const createDummyProduct = async (req, res) => {
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "1.0" // Parameter Wajib
+            v: "1.0"
         };
 
-        // 2. Dummy product Object (STRUKTUR JSON KRITIS)
+        // 2. Dummy product Object (STRUKTUR JSON KRITIS: Pembungkus "Request" sudah benar)
         const productObj = {
             Request: {
                 Product: {
@@ -119,17 +119,17 @@ const createDummyProduct = async (req, res) => {
         };
 
         // 5. Buat SIGNATURE
+        // (Asumsi generateSign() sudah benar)
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (KEMBALI KE URLSearchParams)
+        // 6. Siapkan Body untuk REQUEST HTTP (Menggunakan URLSearchParams)
         const bodyDataForRequest = {
             payload: jsonBody
         };
-        // Menggunakan native API URLSearchParams
         const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
 
 
-        // 7. Build URL (Tidak Berubah)
+        // 7. Build URL
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
@@ -139,8 +139,8 @@ const createDummyProduct = async (req, res) => {
             bodyStrForRequest, // Kirim STRING dari URLSearchParams
             {
                 headers: {
-                    // Pertahankan header charset yang ketat
-                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+                    // *** PERBAIKAN AKHIR: Hapus Charset yang konflik. Gunakan header dasar. ***
+                    "Content-Type": "application/x-www-form-urlencoded"
                 }
             }
         );
