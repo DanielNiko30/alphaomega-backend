@@ -135,14 +135,22 @@ const createDummyProduct = async (req, res) => {
         const jsonBody = JSON.stringify(productObj);
         console.log("DEBUG: Final JSON Payload (V2 Style):", jsonBody);
 
-        // --- 5. Gabungkan SEMUA Parameter untuk SIGNING ---
+        // --- 5. Tentukan Parameter untuk SIGNING ---
+        // Untuk V2 dengan JSON Body, parameter 'payload' TIDAK dimasukkan ke dalam signing.
+        // Hanya parameter sistem yang ada di URL (sysParams) yang di-sign.
         const allParamsForSign = {
             ...sysParams,
-            payload: jsonBody // Tetap kirim string payload untuk kompatibilitas signing V1/V2
         };
+        // NOTE: Kita tetap menyimpan 'payload' di objek request response untuk debugging.
+        const allParamsForResponse = {
+            ...sysParams,
+            payload: jsonBody
+        }
+
 
         // --- 6. Buat SIGNATURE ---
         // Panggil fungsi `generateSign` Anda di sini
+        // Gunakan allParamsForSign yang hanya berisi sysParams
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
 
@@ -152,7 +160,7 @@ const createDummyProduct = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // --- 8. POST request ke Lazada ---
-        // *** PERUBAHAN KRITIS: Mengirimkan raw JSON Body dan mengubah Content-Type ke application/json ***
+        // Mengirimkan raw JSON Body dan Content-Type ke application/json
         const response = await axios.post(
             url,
             jsonBody, // Mengirimkan raw jsonBody (string)
@@ -168,7 +176,7 @@ const createDummyProduct = async (req, res) => {
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
             request: {
                 apiPath,
-                sysParams: allParamsForSign,
+                sysParams: allParamsForResponse, // Menggunakan objek dengan 'payload' untuk logging
                 sign,
                 url,
                 bodyStrForRequest: jsonBody // Body sekarang adalah JSON mentah
