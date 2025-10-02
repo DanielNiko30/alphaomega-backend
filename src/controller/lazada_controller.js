@@ -72,15 +72,14 @@ const createDummyProduct = async (req, res) => {
         };
 
         // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
-        // BERDASARKAN ATRIBUT KATEGORI, p-120008822 (Berat Bersih) adalah
-        // atribut CPV (Custom Property Value) yang memerlukan ID nilai.
-        // ID 166008 (untuk 1.3kg) digunakan di sini sebagai *placeholder* // untuk memastikan FORMAT CPV ID (Array of Stringified ID) sudah benar.
-        // Jika berhasil, ganti 166008 dengan ID yang sesuai untuk 0.5kg/500g.
+        // PENTING: Mencoba mengirimkan ID CPV sebagai STRING MENTAH (bukan JSON string array)
+        // Karena semua format JSON string array sebelumnya gagal.
+        // ID 166008 (untuk 1.3kg) digunakan di sini.
         const cpvIdForNetWeight = "166008";
-        const netWeightValue = JSON.stringify([cpvIdForNetWeight]); // Format: JSON String Array of Stringified ID
+        const netWeightValue = cpvIdForNetWeight; // Format: String MENTAH dari ID CPV
 
-        // LOGGING BARU: Periksa string JSON yang dihasilkan untuk netWeightValue
-        console.log("DEBUG: Net Weight JSON String (p-120008822):", netWeightValue);
+        // LOGGING BARU: Periksa string yang dihasilkan untuk netWeightValue
+        console.log("DEBUG: Net Weight Raw String (p-120008822):", netWeightValue);
 
         // 1. System params
         const sysParams = {
@@ -111,7 +110,7 @@ const createDummyProduct = async (req, res) => {
                         description: "Produk krimer bubuk untuk percobaan API Lazada. Ini adalah deskripsi produk makanan yang lengkap.",
                         short_description: "Krimer Bubuk API Test.",
 
-                        // *** FORMAT BARU: JSON String Array of Stringified ID. ***
+                        // *** FORMAT BARU: String MENTAH dari ID CPV. ***
                         "p-120008822": netWeightValue,
 
                         // *** Atribut wajib lain untuk kategori makanan. ***
