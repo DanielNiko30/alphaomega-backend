@@ -71,7 +71,6 @@ function generateSign(apiPath, allParams, appSecret) {
  */
 const createDummyProduct = async (req, res) => {
     try {
-        // Ambil account Lazada pertama dari DB
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -82,22 +81,22 @@ const createDummyProduct = async (req, res) => {
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
 
-        // 1. System params
+        // 1. System params (Termasuk v: "1.0")
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            // --- PENAMBAHAN WAJIB BERDASARKAN ANALISIS ERROR ---
-            v: "1.0"
+            v: "1.0" // Parameter Wajib
         };
+
         // 2. Dummy product Object (Data bersih)
         const productObj = {
             Product: {
                 PrimaryCategory: "18469",
                 Attributes: {
                     name: "Dummy Product Node",
-                    short_description: "Ini product dummy untuk test", // Tanpa HTML
+                    short_description: "Ini product dummy untuk test",
                     brand: "No Brand",
                     model: "SKU-12345",
                     warranty_type: "No Warranty",
@@ -114,43 +113,38 @@ const createDummyProduct = async (req, res) => {
         // 3. String JSON mentah
         const jsonBody = JSON.stringify(productObj);
 
-        // 4. Gabungkan SEMUA Parameter untuk SIGNING (Sudah terbukti benar)
+        // 4. Gabungkan SEMUA Parameter untuk SIGNING
         const allParamsForSign = {
             ...sysParams,
-            payload: jsonBody // JSON MENTAH untuk signing
+            payload: jsonBody
         };
 
         // 5. Buat SIGNATURE
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 6. Siapkan Body untuk REQUEST HTTP (KIRIM OBJECT)
+        // 6. Siapkan Body untuk REQUEST HTTP (STRING MENTAH)
         const bodyDataForRequest = {
-            payload: jsonBody // JSON mentah
+            payload: jsonBody
         };
+        const bodyStrForRequest = new URLSearchParams(bodyDataForRequest).toString();
 
-        // 7. Build URL (URLSearchParams hanya untuk URL query)
+        // 7. Build URL
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
 
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyDataForRequest, // Kirim OBJECT ke Axios
+            bodyStrForRequest, // Kirim STRING MENTAH
             {
                 headers: {
+                    // Header ini harus tetap ada
                     "Content-Type": "application/x-www-form-urlencoded"
-                },
-                // MENGGUNAKAN TRANSFORMER KHUSUS UNTUK MEMAKSA FORMAT FORM-URLENCODED
-                transformRequest: [(data, headers) => {
-                    return new URLSearchParams(data).toString();
-                }],
+                }
+                // transformRequest DIHAPUS
             }
         );
 
-        // Data yang dikirimkan (untuk debugging)
-        const finalBodySent = new URLSearchParams(bodyDataForRequest).toString();
-
-        // Return semua info untuk debug
         res.json({
             success: true,
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
@@ -159,7 +153,7 @@ const createDummyProduct = async (req, res) => {
                 sysParams: allParamsForSign,
                 sign,
                 url,
-                bodyStrForRequest: finalBodySent // Tampilkan string yang sebenarnya dikirim
+                bodyStrForRequest
             },
             lazada_response: response.data
         });
@@ -174,7 +168,6 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
-
 /**
  * Generate Login URL Lazada
  */
