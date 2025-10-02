@@ -196,7 +196,7 @@ const getCategoryAttributes = async (req, res) => {
         const timestamp = Date.now().toString();
 
         // Kita menggunakan Category ID yang sama (Krimer) untuk mendapatkan daftar atributnya.
-        const primaryCategoryId = "18469";
+        const primaryCategoryId = "17935";
 
         // 1. System params
         const sysParams = {
