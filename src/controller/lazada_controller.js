@@ -123,10 +123,6 @@ const createDummyProduct = async (req, res) => {
                         Sku: [{
                             SellerSku: "TEST-SKU-" + uniqueSuffix,
                             // Tambahkan saleProp minimal untuk meniru struktur contoh
-                            saleProp: {
-                                color_family: "Green",
-                                size: "10"
-                            },
                             quantity: "3", // Pastikan kuantitas adalah string jika itu yang diharapkan
                             price: "1000",
                             package_height: "10",
