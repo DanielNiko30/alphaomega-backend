@@ -128,6 +128,7 @@ const createDummyProduct = async (req, res) => {
             payload: jsonBody
         };
         // Gunakan qs.stringify
+        // Pastikan bodyStrForRequest adalah string yang sudah di-encode dengan benar
         const bodyStrForRequest = qs.stringify(bodyDataForRequest);
 
 
