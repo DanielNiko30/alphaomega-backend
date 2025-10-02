@@ -127,7 +127,14 @@ const createDummyProduct = async (req, res) => {
         const bodyDataForRequest = {
             payload: jsonBody
         };
-        const bodyStrForRequest = qs.stringify(bodyDataForRequest);
+
+        // *** PERBAIKAN AKHIR: Gunakan qs.stringify dengan opsi 'indices: false' dan 'arrayFormat: repeat' (praktik terbaik Lazada) ***
+        // Gunakan tanda plus (+) untuk spasi (bukan %20)
+        const bodyStrForRequest = qs.stringify(bodyDataForRequest, {
+            indices: false,
+            arrayFormat: 'repeat',
+            // MENGGANTI %20 dengan + (Axios/qs default menggunakan %20)
+        }).replace(/%20/g, '+');
 
 
         // 7. Build URL (Tidak Berubah)
@@ -137,10 +144,9 @@ const createDummyProduct = async (req, res) => {
         // 8. POST request ke Lazada
         const response = await axios.post(
             url,
-            bodyStrForRequest, // Kirim STRING dari qs.stringify
+            bodyStrForRequest,
             {
                 headers: {
-                    // Pertahankan header charset yang ketat
                     "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
                 }
             }
