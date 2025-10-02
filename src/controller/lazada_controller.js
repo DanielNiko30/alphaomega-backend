@@ -73,11 +73,11 @@ const createDummyProduct = async (req, res) => {
 
         // *** BAGIAN PERBAIKAN KRITIS UNTUK ATRIBUT BERAT BERSIH ***
         // Lazada memerlukan JSON string berisi unit dan value untuk atribut seperti Berat Bersih (p-120008822)
-        // Jika "g" gagal, Anda mungkin perlu mencoba "kg" atau ID unit yang sebenarnya.
+        // KRITIS: Mengubah dari 'g' ke 'kg' dan dari '500' ke '0.5' karena kegagalan berulang.
         const netWeightValue = JSON.stringify([
             {
-                unit: "g", // Mengasumsikan unit yang benar adalah gram (Bisa jadi "kg" atau ID unit)
-                value: "500"
+                unit: "kg", // MENGUBAH UNIT ke kilogram
+                value: "0.5" // MENGUBAH NILAI (0.5 kg = 500g)
             }
         ]);
 
