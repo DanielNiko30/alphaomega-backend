@@ -393,6 +393,7 @@ const createProductLazada = async (req, res) => {
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
+        const uniqueSuffix = Date.now().toString().slice(-6);
 
         // 2️⃣ Ambil data produk + stok
         const product = await Product.findOne({
@@ -413,7 +414,7 @@ const createProductLazada = async (req, res) => {
         const requiredAttributesResp = await getCategoryAttributes(category_id);
         const requiredAttributes = requiredAttributesResp.required_attributes || [];
 
-        // 5️⃣ Mapping semua atribut wajib
+        // 5️⃣ Mapping semua atribut wajib + optional dari body
         const attributesObj = {
             name: product.nama_product,
             description: attributes.description || product.deskripsi_product || "Deskripsi belum tersedia",
@@ -427,7 +428,12 @@ const createProductLazada = async (req, res) => {
                     throw new Error(`Atribut wajib "${key}" belum dikirim di body.attributes`);
                 }
             } else {
-                attributesObj[key] = attributes[key];
+                // Pastikan value berupa string
+                if (Array.isArray(attributes[key])) {
+                    attributesObj[key] = attributes[key].map(String);
+                } else {
+                    attributesObj[key] = String(attributes[key]);
+                }
             }
         }
 
@@ -441,13 +447,13 @@ const createProductLazada = async (req, res) => {
                     Skus: {
                         Sku: [
                             {
-                                SellerSku: attributes.SellerSku || stokTerpilih.id_stok,
+                                SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
                                 quantity: stokTerpilih.stok,
-                                price: attributes.price || stokTerpilih.harga_jual || 1000,
-                                package_height: attributes.package_height || stokTerpilih.tinggi || 10,
-                                package_length: attributes.package_length || stokTerpilih.panjang || 10,
-                                package_width: attributes.package_width || stokTerpilih.lebar || 10,
-                                package_weight: attributes.package_weight || stokTerpilih.berat || 0.5,
+                                price: attributes.price ? String(attributes.price) : String(stokTerpilih.harga_jual || 1000),
+                                package_height: attributes.package_height ? String(attributes.package_height) : String(stokTerpilih.tinggi || 10),
+                                package_length: attributes.package_length ? String(attributes.package_length) : String(stokTerpilih.panjang || 10),
+                                package_width: attributes.package_width ? String(attributes.package_width) : String(stokTerpilih.lebar || 10),
+                                package_weight: attributes.package_weight ? String(attributes.package_weight) : String(stokTerpilih.berat || 0.5),
                                 package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
                             },
                         ],
@@ -485,10 +491,10 @@ const createProductLazada = async (req, res) => {
             image_used: uploadedImageUrl,
             lazada_response: response.data,
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
 
-        // Safe handling kalau err.response undefined
         let statusCode = 500;
         let errorData = err.message;
 
