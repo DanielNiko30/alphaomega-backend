@@ -382,7 +382,8 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { category_id, brand = "No Brand", selected_unit } = req.body;
+        const { category_id, selected_unit, attributes = {} } = req.body;
+        // attributes = { dietary_needs: [...], Net_Weight: 100, flavor: "Kelapa", ... }
 
         // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
@@ -393,9 +394,8 @@ const createProductLazada = async (req, res) => {
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
-        const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk dari DB
+        // 2️⃣ Ambil data produk + stok
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -407,42 +407,47 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // 3️⃣ Upload gambar dari DB produk
+        // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
-        console.log("✅ Uploaded Image URL:", uploadedImageUrl);
 
-        // 4️⃣ Parameter sistem
-        const sysParams = {
-            app_key: apiKey,
-            access_token: accessToken,
-            sign_method: "sha256",
-            timestamp,
-            v: "1.0",
+        // 4️⃣ Ambil atribut wajib untuk category_id (misal dari DB/API)
+        const requiredAttributes = await getCategoryAttributes(category_id);
+
+        // 5️⃣ Mapping attributes dari body
+        const attributesObj = {
+            name: product.nama_product,
+            brand: attributes.brand || "No Brand",
+            description: attributes.description || product.deskripsi_product || "Deskripsi belum tersedia",
+            short_description: attributes.short_description || product.deskripsi_product || "Deskripsi belum tersedia",
         };
 
-        // 5️⃣ Payload JSON (sama format dengan dummy)
+        // Merge atribut wajib dari req.body
+        for (const attr of requiredAttributes) {
+            const key = attr.name;
+            if (!(key in attributes)) {
+                throw new Error(`Atribut wajib "${key}" belum dikirim di body.attributes`);
+            }
+            attributesObj[key] = attributes[key];
+        }
+
+        // 6️⃣ Payload JSON
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: category_id,
                     Images: { Image: [uploadedImageUrl] },
-                    Attributes: {
-                        name: product.nama_product,
-                        brand: brand,
-                        description: product.deskripsi_product || "Deskripsi belum tersedia",
-                        short_description: product.deskripsi_product || "Deskripsi belum tersedia",
-                    },
+                    Attributes: attributesObj,
                     Skus: {
                         Sku: [
                             {
-                                SellerSku: stokTerpilih.id_stok,
+                                SellerSku: attributes.SellerSku || stokTerpilih.id_stok,
                                 quantity: stokTerpilih.stok,
-                                price: stokTerpilih.harga_jual || 1000,
-                                package_height: stokTerpilih.tinggi || 10,
-                                package_length: stokTerpilih.panjang || 10,
-                                package_width: stokTerpilih.lebar || 10,
-                                package_weight: stokTerpilih.berat || 0.5,
-                                package_content: `${product.nama_product} - ${brand}`,
+                                price: attributes.price || stokTerpilih.harga_jual || 1000,
+                                package_height: attributes.package_height || stokTerpilih.tinggi || 10,
+                                package_length: attributes.package_length || stokTerpilih.panjang || 10,
+                                package_width: attributes.package_width || stokTerpilih.lebar || 10,
+                                package_weight: attributes.package_weight || stokTerpilih.berat || 0.5,
+                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
                             },
                         ],
                     },
@@ -450,35 +455,34 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 6️⃣ Convert ke JSON string dan buat signature
+        // 7️⃣ Signing
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
         const jsonBody = JSON.stringify(productObj);
         const allParamsForSign = { ...sysParams, payload: jsonBody };
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 7️⃣ Build URL dan body
+        // 8️⃣ Kirim request
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
             ...sysParams,
             sign,
         }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 8️⃣ Kirim request ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        // 9️⃣ Return response ke client
         res.json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            request: {
-                apiPath,
-                sysParams,
-                sign,
-                url,
-                bodyStrForRequest: bodyForRequest.toString(),
-            },
+            request: { apiPath, sysParams, sign, url, bodyStrForRequest: bodyForRequest.toString() },
             lazada_response: response.data,
         });
     } catch (err) {
@@ -490,6 +494,7 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
+
 
 const createDummyProduct = async (req, res) => {
     try {
