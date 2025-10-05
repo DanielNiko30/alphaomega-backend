@@ -1,4 +1,5 @@
 const axios = require('axios');
+const fs = require("fs");
 const crypto = require('crypto');
 const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
