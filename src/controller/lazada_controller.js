@@ -111,9 +111,8 @@ const createDummyProduct = async (req, res) => {
                         short_description: "Tote Bag Kanvas API Test.",
                         Bag_Size: "60766",
                         material: "30716",
-                        Bag_type: "18108" // ✅ ID CPV yang valid untuk "Tote Bag"
+                        Bag_type: ["84749"] // ✅ BENAR — array dan ID yang valid untuk "Tote Bag"
                     },
-
                     Skus: {
                         Sku: [{
                             SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
