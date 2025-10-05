@@ -20,7 +20,7 @@ router.post('/create-product/:id_product', createProductLazada);
 router.post('/create-product', createDummyProduct);
 router.put('/update-product/:id_product', updateProductLazada);
 router.get("/categories", getCategoryTree);
-router.get("/category/attributte", getCategoryAttributes);
+router.get("/category/attributte/:category_id", getCategoryAttributes);
 router.get("/brands", getBrands);
 router.get("/products", getProducts);
 
