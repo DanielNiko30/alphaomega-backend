@@ -205,7 +205,7 @@ const getCategoryAttributes = async (req, res) => {
         const apiPath = "/category/attributes/get";
         const timestamp = Date.now().toString();
 
-        // 🔹 Ambil Category ID dari params atau body
+        // 🔹 Ambil Category ID dari params / body / query
         const primaryCategoryId =
             req.params.category_id ||
             req.body.category_id ||
@@ -262,19 +262,26 @@ const getCategoryAttributes = async (req, res) => {
             });
         }
 
-        // 🔹 Filter hanya yang wajib diisi (is_mandatory = true)
+        // 🔹 Filter atribut wajib (is_mandatory / key_prop / sale_prop)
         const requiredAttributes = attributes
-            .filter((attr) => attr.is_mandatory === true)
-            .map((attr) => ({
-                attribute_id: attr.attribute_id,
+            .filter(attr =>
+                attr.is_mandatory === 1 ||
+                attr.advanced?.is_key_prop === 1 ||
+                attr.is_sale_prop === 1
+            )
+            .map(attr => ({
+                id: attr.id,
                 name: attr.name,
-                code: attr.name_en || attr.name,
+                label: attr.label,
                 input_type: attr.input_type,
                 is_mandatory: attr.is_mandatory,
-                options: attr.options?.map((opt) => ({
+                is_key_prop: attr.advanced?.is_key_prop || 0,
+                is_sale_prop: attr.is_sale_prop || 0,
+                options: attr.options?.map(opt => ({
+                    id: opt.id,
                     name: opt.name,
-                    value: opt.value,
-                })) || [],
+                    en_name: opt.en_name
+                })) || []
             }));
 
         // 🔹 Return ke frontend
@@ -284,6 +291,7 @@ const getCategoryAttributes = async (req, res) => {
             category_id: primaryCategoryId,
             required_attributes: requiredAttributes,
         });
+
     } catch (err) {
         const errorData = err.response?.data || { message: err.message };
         console.error("❌ Lazada Get Attributes Error:", errorData);
@@ -295,6 +303,7 @@ const getCategoryAttributes = async (req, res) => {
         });
     }
 };
+
 // --- Fungsi Upload Gambar ke Lazada ---
 async function uploadImageToLazadaFromDB(product, accessToken) {
     try {
