@@ -410,7 +410,7 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut wajib untuk category_id (misal dari DB/API)
+        // 4️⃣ Ambil atribut wajib untuk category_id
         const requiredAttributes = await getCategoryAttributes(category_id);
 
         // 5️⃣ Mapping attributes dari body
@@ -467,7 +467,7 @@ const createProductLazada = async (req, res) => {
         const allParamsForSign = { ...sysParams, payload: jsonBody };
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 8️⃣ Kirim request
+        // 8️⃣ Kirim request ke Lazada
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
             ...sysParams,
             sign,
@@ -486,15 +486,19 @@ const createProductLazada = async (req, res) => {
             lazada_response: response.data,
         });
     } catch (err) {
+        // ✅ Handle error Axios dengan aman
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
-        res.status(500).json({
+
+        const statusCode = err.response?.status || 500;
+        const errorData = err.response?.data || err.message || "Unknown error";
+
+        res.status(statusCode).json({
             success: false,
-            error: err.response?.data || err.message,
+            error: errorData,
             message: "Gagal membuat produk di Lazada.",
         });
     }
 };
-
 
 const createDummyProduct = async (req, res) => {
     try {
