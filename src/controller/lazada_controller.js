@@ -46,107 +46,6 @@ function generateSign(apiPath, allParams, appSecret) {
  * @param {*} req 
  * @param {*} res 
  */
-const createDummyProduct = async (req, res) => {
-    try {
-        // --- 1. Ambil token dan kredensial ---
-        const account = await Lazada.findOne();
-        if (!account) throw new Error("Tidak ada account Lazada di DB");
-
-        const accessToken = account.access_token.trim();
-        const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
-        const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
-
-        const apiPath = "/product/create";
-        const timestamp = Date.now().toString();
-        const uniqueSuffix = Date.now().toString().slice(-6);
-
-        // --- 2. Parameter Sistem ---
-        const sysParams = {
-            app_key: apiKey,
-            access_token: accessToken,
-            sign_method: "sha256",
-            timestamp,
-            v: "1.0",
-        };
-
-        // --- 3. Payload Produk ---
-        const productObj = {
-            Request: {
-                Product: {
-                    PrimaryCategory: "17935", // Tote Bag Wanita
-                    Images: {
-                        Image: [
-                            "https://placehold.co/400x400/1e88e5/ffffff?text=TOTE+BAG+TEST",
-                        ],
-                    },
-                    Attributes: {
-                        name: "TEST-TOTE-BAG-" + uniqueSuffix,
-                        brand: "No Brand",
-                        description:
-                            "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
-                        short_description: "Tote Bag Kanvas API Test.",
-                        material: "28232", // Canvas
-                    },
-                    Skus: {
-                        Sku: [
-                            {
-                                SellerSku: "SKU-TOTE-" + uniqueSuffix,
-                                quantity: 3,
-                                price: 1000,
-                                package_height: 3,
-                                package_length: 35,
-                                package_width: 30,
-                                package_weight: 0.2,
-                                package_content: "1x Tote Bag Wanita",
-
-                                // ✅ Sales Property (pindahkan ke sini)
-                                Bag_Size: "58949", // Medium
-                            },
-                        ],
-                    },
-                },
-            },
-        };
-
-        // --- 4. JSON dan Signing ---
-        const jsonBody = JSON.stringify(productObj);
-        const allParamsForSign = { ...sysParams, payload: jsonBody };
-        const sign = generateSign(apiPath, allParamsForSign, appSecret);
-
-        // --- 5. URL dan Body ---
-        const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
-        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
-        const bodyForRequest = new URLSearchParams({ payload: jsonBody });
-
-        // --- 6. Request ke Lazada ---
-        const response = await axios.post(url, bodyForRequest, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
-
-        // --- 7. Kirim response ke client ---
-        res.json({
-            success: true,
-            message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
-            request: {
-                apiPath,
-                sysParams,
-                sign,
-                url,
-                bodyStrForRequest: bodyForRequest.toString(),
-            },
-            lazada_response: response.data,
-        });
-    } catch (err) {
-        const errorData = err.response?.data || { message: err.message };
-        console.error("❌ Lazada Create Product Error:", errorData);
-
-        res.status(err.response?.status || 500).json({
-            error: errorData,
-            statusCode: err.response?.status || 500,
-            message: "Permintaan ke Lazada gagal. Cek log error untuk detailnya.",
-        });
-    }
-};
 
 const getCategoryAttributes = async (req, res) => {
     try {
@@ -370,6 +269,8 @@ async function uploadImageToLazada(base64Image, accessToken) {
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
         const imgBuffer = Buffer.from(base64Image, "base64");
+
+        // Optimize gambar agar lebih kecil
         const optimizedBuffer = await sharp(imgBuffer)
             .resize({ width: 800, withoutEnlargement: true })
             .jpeg({ quality: 80 })
@@ -383,23 +284,143 @@ async function uploadImageToLazada(base64Image, accessToken) {
         };
 
         const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({
+            ...params,
+            sign,
+        }).toString()}`;
 
         const form = new FormData();
         form.append("image", optimizedBuffer, { filename: "product.jpg" });
 
         const response = await axios.post(url, form, { headers: form.getHeaders() });
+
         if (!response.data?.data?.image?.url) {
             return { success: false, message: "Gagal upload gambar ke Lazada", responseData: response.data };
         }
 
-        return { success: true, image: response.data.data.image };
+        return { success: true, imageUrl: response.data.data.image.url };
     } catch (err) {
         console.error("❌ Upload Image Error:", err.response?.data || err.message);
         return { success: false, message: err.message, responseData: err.response?.data || null };
     }
 }
 
+// ===========================================================
+// Buat produk dummy di Lazada berdasarkan data PRO007 di DB
+// ===========================================================
+const createDummyProduct = async (req, res) => {
+    try {
+        // --- 1. Ambil token dan kredensial ---
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
+
+        const accessToken = account.access_token.trim();
+        const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
+        const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
+
+        const apiPath = "/product/create";
+        const timestamp = Date.now().toString();
+        const uniqueSuffix = timestamp.slice(-6);
+
+        // --- 2. Ambil data produk PRO007 ---
+        const product = await Product.findOne({ where: { id_product: "PRO007" } });
+        if (!product) throw new Error("Produk PRO007 tidak ditemukan di database");
+        if (!product.gambar_product) throw new Error("Produk PRO007 tidak memiliki gambar (BLOB)");
+
+        console.log("📦 Produk ditemukan:", product.nama_product);
+
+        // --- 3. Convert BLOB ke Base64 dan upload ke Lazada ---
+        const base64Image = product.gambar_product.toString("base64");
+        const uploadResult = await uploadImageToLazada(base64Image, accessToken);
+
+        if (!uploadResult.success) {
+            throw new Error("Upload gambar ke Lazada gagal: " + uploadResult.message);
+        }
+
+        const lazadaImageUrl = uploadResult.imageUrl;
+        console.log("✅ Gambar berhasil diupload:", lazadaImageUrl);
+
+        // --- 4. Parameter Sistem ---
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
+
+        // --- 5. Payload Produk ---
+        const productObj = {
+            Request: {
+                Product: {
+                    PrimaryCategory: "17935", // Tote Bag Wanita
+                    Images: {
+                        Image: [lazadaImageUrl], // ✅ dari hasil upload
+                    },
+                    Attributes: {
+                        name: `${product.nama_product}-DUMMY-${uniqueSuffix}`,
+                        brand: "No Brand",
+                        description:
+                            product.deskripsi_product ||
+                            "Deskripsi produk dummy dari PRO007.",
+                        short_description: "Produk dummy hasil API test.",
+                        material: "28232", // Canvas
+                    },
+                    Skus: {
+                        Sku: [
+                            {
+                                SellerSku: "SKU-" + product.id_product + "-" + uniqueSuffix,
+                                quantity: 3,
+                                price: 1000,
+                                package_height: 3,
+                                package_length: 35,
+                                package_width: 30,
+                                package_weight: 0.2,
+                                package_content: "1x Tote Bag Dummy",
+                                Bag_Size: "58949", // Medium
+                            },
+                        ],
+                    },
+                },
+            },
+        };
+
+        // --- 6. Generate Signature ---
+        const jsonBody = JSON.stringify(productObj);
+        const allParamsForSign = { ...sysParams, payload: jsonBody };
+        const sign = generateSign(apiPath, allParamsForSign, appSecret);
+
+        const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
+        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
+        const bodyForRequest = new URLSearchParams({ payload: jsonBody });
+
+        // --- 7. Request ke Lazada ---
+        const response = await axios.post(url, bodyForRequest, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+
+        // --- 8. Return ke client ---
+        res.json({
+            success: true,
+            message: "Produk dummy berhasil dibuat dari PRO007 dan gambar BLOB.",
+            uploaded_image: lazadaImageUrl,
+            request: {
+                apiPath,
+                sysParams,
+                sign,
+                url,
+            },
+            lazada_response: response.data,
+        });
+    } catch (err) {
+        const errorData = err.response?.data || { message: err.message };
+        console.error("❌ Lazada Create Product Error:", errorData);
+        res.status(err.response?.status || 500).json({
+            error: errorData,
+            message: "Gagal membuat produk dummy dari BLOB.",
+        });
+    }
+};
 
 /**
  * Create Product Lazada (return step status walaupun error)
