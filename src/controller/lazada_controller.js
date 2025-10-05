@@ -486,11 +486,19 @@ const createProductLazada = async (req, res) => {
             lazada_response: response.data,
         });
     } catch (err) {
-        // ✅ Handle error Axios dengan aman
-        console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
+        console.error("❌ Lazada Create Product Error:", err);
 
-        const statusCode = err.response?.status || 500;
-        const errorData = err.response?.data || err.message || "Unknown error";
+        let statusCode = 500;
+        let errorData = err.message;
+
+        if (err.response) {
+            // Server merespons, ambil status + data
+            statusCode = err.response.status;
+            errorData = err.response.data;
+        } else if (err.request) {
+            // Request dikirim tapi tidak ada response
+            errorData = "No response received from Lazada API";
+        } // else err.message tetap digunakan
 
         res.status(statusCode).json({
             success: false,
@@ -498,6 +506,7 @@ const createProductLazada = async (req, res) => {
             message: "Gagal membuat produk di Lazada.",
         });
     }
+
 };
 
 const createDummyProduct = async (req, res) => {
