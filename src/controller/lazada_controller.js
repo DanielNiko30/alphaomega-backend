@@ -274,17 +274,30 @@ async function uploadImageToLazadaFromDB(accessToken) {
 
         const imgBuffer = Buffer.from(product.gambar_product);
 
-        // Optimasi gambar ke JPEG
+        // 🔍 Cek dimensi asli
+        const metadata = await sharp(imgBuffer).metadata();
+        console.log(`📏 Dimensi asli: ${metadata.width}x${metadata.height}`);
+
+        // Jika gambar terlalu kecil (<330px), perbesar ke minimal 400x400
+        const minSize = 400;
+        const resizeWidth = Math.max(metadata.width, minSize);
+        const resizeHeight = Math.max(metadata.height, minSize);
+
+        // Optimasi dan resize
         const optimizedBuffer = await sharp(imgBuffer)
-            .resize({ width: 800, withoutEnlargement: true })
+            .resize({
+                width: resizeWidth,
+                height: resizeHeight,
+                fit: "cover",
+            })
             .jpeg({ quality: 85 })
             .toBuffer();
 
-        // Simpan sementara ke /tmp (lazada butuh stream file)
+        // Simpan sementara untuk Lazada
         const tempPath = `/tmp/lazada_upload_${Date.now()}.jpg`;
         fs.writeFileSync(tempPath, optimizedBuffer);
 
-        // === Persiapan upload ===
+        // Lazada params
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
         const params = {
@@ -314,13 +327,9 @@ async function uploadImageToLazadaFromDB(accessToken) {
             timeout: 30000,
         });
 
-        // Log respons asli untuk debugging
         console.log("🛰️ Lazada Upload Response (raw):", JSON.stringify(response.data, null, 2));
-
-        // Bersihkan file
         fs.unlinkSync(tempPath);
 
-        // Coba ekstrak berbagai kemungkinan struktur URL
         const imageUrl =
             response.data?.data?.image?.url ||
             response.data?.data?.url ||
