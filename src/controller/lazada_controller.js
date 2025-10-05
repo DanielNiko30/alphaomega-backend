@@ -194,73 +194,107 @@ const getProducts = async (req, res) => {
 
 const getCategoryAttributes = async (req, res) => {
     try {
+        // 🔹 Ambil account Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token.trim();
-        const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
-        const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
 
         const apiPath = "/category/attributes/get";
         const timestamp = Date.now().toString();
 
-        // Kita menggunakan Category ID yang sama (Krimer) untuk mendapatkan daftar atributnya.
-        const primaryCategoryId = "17935";
+        // 🔹 Ambil Category ID dari params atau body
+        const primaryCategoryId =
+            req.params.category_id ||
+            req.body.category_id ||
+            req.query.category_id;
 
-        // 1. System params
+        if (!primaryCategoryId) {
+            return res.status(400).json({
+                success: false,
+                message: "category_id wajib dikirim di params, body, atau query.",
+            });
+        }
+
+        // 🔹 System params
         const sysParams = {
             app_key: apiKey,
-            access_token: accessToken, // Meskipun opsional di docs, kita tetap kirim token untuk otorisasi
+            access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "1.0"
+            v: "1.0",
         };
 
-        // 2. Business params (wajib)
+        // 🔹 Business params
         const businessParams = {
             primary_category_id: primaryCategoryId,
-            language_code: "id_ID"
+            language_code: "id_ID",
         };
 
-        // 3. Gabungkan SEMUA Parameter (System + Business) untuk SIGNING
-        const allParamsForSignAndUrl = {
+        // 🔹 Gabungkan semua parameter untuk signing
+        const allParamsForSign = {
             ...sysParams,
-            ...businessParams
+            ...businessParams,
         };
 
-        // 4. Buat SIGNATURE
-        const sign = generateSign(apiPath, allParamsForSignAndUrl, appSecret);
+        // 🔹 Generate signature
+        const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // 5. Build URL query string dengan semua parameter dan signature
-        const urlSearchParams = new URLSearchParams({ ...allParamsForSignAndUrl, sign });
-        const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
+        // 🔹 Build URL untuk GET request
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+            ...allParamsForSign,
+            sign,
+        }).toString()}`;
 
-        // 6. GET request ke Lazada
+        console.log(`📦 Fetching attributes for category: ${primaryCategoryId}`);
+
+        // 🔹 Request ke Lazada
         const response = await axios.get(url);
+        const attributes = response.data?.data || [];
 
+        if (!Array.isArray(attributes) || attributes.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `Tidak ada atribut ditemukan untuk Category ID ${primaryCategoryId}.`,
+                lazada_response: response.data,
+            });
+        }
+
+        // 🔹 Filter hanya yang wajib diisi (is_mandatory = true)
+        const requiredAttributes = attributes
+            .filter((attr) => attr.is_mandatory === true)
+            .map((attr) => ({
+                attribute_id: attr.attribute_id,
+                name: attr.name,
+                code: attr.name_en || attr.name,
+                input_type: attr.input_type,
+                is_mandatory: attr.is_mandatory,
+                options: attr.options?.map((opt) => ({
+                    name: opt.name,
+                    value: opt.value,
+                })) || [],
+            }));
+
+        // 🔹 Return ke frontend
         res.json({
             success: true,
-            message: `Berhasil mendapatkan atribut untuk Category ID ${primaryCategoryId}.`,
-            request: {
-                apiPath,
-                url,
-                params: allParamsForSignAndUrl
-            },
-            lazada_response: response.data
+            message: `Berhasil mendapatkan ${requiredAttributes.length} atribut wajib untuk Category ID ${primaryCategoryId}.`,
+            category_id: primaryCategoryId,
+            required_attributes: requiredAttributes,
         });
-
     } catch (err) {
         const errorData = err.response?.data || { message: err.message };
         console.error("❌ Lazada Get Attributes Error:", errorData);
 
         res.status(err.response?.status || 500).json({
+            success: false,
             error: errorData,
-            statusCode: err.response?.status || 500,
-            message: "Permintaan ke Lazada gagal. Cek log error untuk detailnya."
+            message: "Gagal mendapatkan atribut dari Lazada.",
         });
     }
 };
-
 // --- Fungsi Upload Gambar ke Lazada ---
 async function uploadImageToLazadaFromDB(product, accessToken) {
     try {
@@ -333,35 +367,6 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
         console.error("❌ Upload Image Error:", err.response?.data || err.message);
         throw new Error("Upload gambar ke Lazada gagal: " + err.message);
     }
-}
-
-async function fetchRequiredAttributes(categoryId, accessToken, apiKey, appSecret) {
-    const apiPath = "/category/attributes/get";
-    const timestamp = Date.now().toString();
-
-    const sysParams = {
-        app_key: apiKey,
-        access_token: accessToken,
-        sign_method: "sha256",
-        timestamp,
-        v: "1.0",
-    };
-
-    const businessParams = {
-        primary_category_id: categoryId,
-        language_code: "id_ID",
-    };
-
-    const allParams = { ...sysParams, ...businessParams };
-    const sign = generateSign(apiPath, allParams, appSecret);
-    const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
-        ...allParams,
-        sign,
-    }).toString()}`;
-
-    const response = await axios.get(url);
-    const attributes = response.data?.data || [];
-    return attributes.filter((attr) => attr.is_mandatory === true);
 }
 
 // 🔹 Fungsi utama untuk create product
