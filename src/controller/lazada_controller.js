@@ -268,14 +268,21 @@ async function uploadImageToLazada(base64Image, accessToken) {
     try {
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
-        const imgBuffer = Buffer.from(base64Image, "base64");
 
-        // Optimize gambar agar lebih kecil
+        // --- Validasi dan konversi gambar dari DB ---
+        const imgBuffer = Buffer.from(base64Image, "base64");
+        const metadata = await sharp(imgBuffer).metadata().catch(() => null);
+        if (!metadata || !metadata.format) {
+            throw new Error("Data BLOB bukan file gambar yang valid.");
+        }
+
+        // --- Optimasi ukuran sebelum upload ---
         const optimizedBuffer = await sharp(imgBuffer)
             .resize({ width: 800, withoutEnlargement: true })
-            .jpeg({ quality: 80 })
+            .jpeg({ quality: 85 })
             .toBuffer();
 
+        // --- Param & Signature ---
         const params = {
             access_token: accessToken,
             app_key: process.env.LAZADA_APP_KEY,
@@ -289,19 +296,28 @@ async function uploadImageToLazada(base64Image, accessToken) {
             sign,
         }).toString()}`;
 
+        // --- Kirim request ---
         const form = new FormData();
         form.append("image", optimizedBuffer, { filename: "product.jpg" });
 
         const response = await axios.post(url, form, { headers: form.getHeaders() });
 
-        if (!response.data?.data?.image?.url) {
-            return { success: false, message: "Gagal upload gambar ke Lazada", responseData: response.data };
+        console.log("🛰️ Lazada upload response:", JSON.stringify(response.data, null, 2));
+
+        // --- Cek hasil upload ---
+        const imageUrl = response.data?.data?.image?.url;
+        if (!imageUrl) {
+            throw new Error("Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.");
         }
 
-        return { success: true, imageUrl: response.data.data.image.url };
+        return { success: true, imageUrl };
     } catch (err) {
         console.error("❌ Upload Image Error:", err.response?.data || err.message);
-        return { success: false, message: err.message, responseData: err.response?.data || null };
+        return {
+            success: false,
+            message: err.message,
+            responseData: err.response?.data || null,
+        };
     }
 }
 
