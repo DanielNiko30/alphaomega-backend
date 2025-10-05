@@ -89,7 +89,6 @@ const createDummyProduct = async (req, res) => {
                         short_description: "Tote Bag Kanvas API Test.",
                         Bag_Size: "60766", // Medium (valid)
                         material: "30716", // Canvas (valid)
-                        Bag_type: "110222841", // ✅ Ganti ID CPV valid ("Shopping Bag")
                     },
 
                     Skus: {
