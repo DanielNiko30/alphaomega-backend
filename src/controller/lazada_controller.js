@@ -269,20 +269,22 @@ async function uploadImageToLazada(base64Image, accessToken) {
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
 
-        // --- Validasi dan konversi gambar dari DB ---
+        // --- Convert blob to buffer ---
         const imgBuffer = Buffer.from(base64Image, "base64");
+
+        // --- Validate image format ---
         const metadata = await sharp(imgBuffer).metadata().catch(() => null);
         if (!metadata || !metadata.format) {
             throw new Error("Data BLOB bukan file gambar yang valid.");
         }
 
-        // --- Optimasi ukuran sebelum upload ---
+        // --- Optimize image ---
         const optimizedBuffer = await sharp(imgBuffer)
             .resize({ width: 800, withoutEnlargement: true })
             .jpeg({ quality: 85 })
             .toBuffer();
 
-        // --- Param & Signature ---
+        // --- Params & Signature ---
         const params = {
             access_token: accessToken,
             app_key: process.env.LAZADA_APP_KEY,
@@ -296,16 +298,22 @@ async function uploadImageToLazada(base64Image, accessToken) {
             sign,
         }).toString()}`;
 
-        // --- Kirim request ---
+        // --- Upload Form ---
         const form = new FormData();
-        form.append("image", optimizedBuffer, { filename: "product.jpg" });
+        form.append("image", optimizedBuffer, { filename: "product.jpg", contentType: "image/jpeg" });
 
-        const response = await axios.post(url, form, { headers: form.getHeaders() });
+        const response = await axios.post(url, form, {
+            headers: form.getHeaders(),
+        });
 
-        console.log("🛰️ Lazada upload response:", JSON.stringify(response.data, null, 2));
+        console.log("🛰️ Lazada upload response FULL:", JSON.stringify(response.data, null, 2));
 
-        // --- Cek hasil upload ---
-        const imageUrl = response.data?.data?.image?.url;
+        // --- Lazada kadang mengirim `data.image` atau `data.images` ---
+        const imageUrl =
+            response.data?.data?.image?.url ||
+            response.data?.data?.image ||
+            response.data?.data?.images?.[0]?.url;
+
         if (!imageUrl) {
             throw new Error("Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.");
         }
@@ -313,9 +321,12 @@ async function uploadImageToLazada(base64Image, accessToken) {
         return { success: true, imageUrl };
     } catch (err) {
         console.error("❌ Upload Image Error:", err.response?.data || err.message);
+        if (err.response?.data) {
+            console.log("🧾 Lazada Error Response:", JSON.stringify(err.response.data, null, 2));
+        }
         return {
             success: false,
-            message: err.message,
+            message: "Upload gambar ke Lazada gagal: " + err.message,
             responseData: err.response?.data || null,
         };
     }
