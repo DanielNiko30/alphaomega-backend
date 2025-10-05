@@ -48,7 +48,7 @@ function generateSign(apiPath, allParams, appSecret) {
  */
 const createDummyProduct = async (req, res) => {
     try {
-        // --- 1. Persiapan Data dan Token ---
+        // --- 1. Ambil token dan kredensial ---
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -66,31 +66,27 @@ const createDummyProduct = async (req, res) => {
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
-            v: "1.0", // Lazada API v1 (Form Data)
+            v: "1.0",
         };
 
-        // --- 3. Payload Produk (Form Data Style) ---
+        // --- 3. Payload Produk ---
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: "17935", // Tote Bag Wanita
-
                     Images: {
                         Image: [
                             "https://placehold.co/400x400/1e88e5/ffffff?text=TOTE+BAG+TEST",
                         ],
                     },
-
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
                         brand: "No Brand",
                         description:
                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        Bag_Size: "58949", // Medium (valid)
-                        material: "28232", // Canvas (valid)
+                        material: "28232", // Canvas
                     },
-
                     Skus: {
                         Sku: [
                             {
@@ -102,6 +98,9 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
+
+                                // ✅ Sales Property (pindahkan ke sini)
+                                Bag_Size: "58949", // Medium
                             },
                         ],
                     },
@@ -109,33 +108,22 @@ const createDummyProduct = async (req, res) => {
             },
         };
 
-        // --- 4. Stringify Payload ---
+        // --- 4. JSON dan Signing ---
         const jsonBody = JSON.stringify(productObj);
-        console.log("DEBUG: Final JSON Payload:", jsonBody);
-
-        // --- 5. Generate Signature ---
-        const allParamsForSign = {
-            ...sysParams,
-            payload: jsonBody,
-        };
-
+        const allParamsForSign = { ...sysParams, payload: jsonBody };
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // --- 6. Buat URL dan Body ---
+        // --- 5. URL dan Body ---
         const urlSearchParams = new URLSearchParams({ ...sysParams, sign });
         const url = `https://api.lazada.co.id/rest${apiPath}?${urlSearchParams.toString()}`;
+        const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        const bodyDataForRequest = { payload: jsonBody };
-        const bodyForRequest = new URLSearchParams(bodyDataForRequest);
-
-        // --- 7. Kirim Request ---
+        // --- 6. Request ke Lazada ---
         const response = await axios.post(url, bodyForRequest, {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        // --- 8. Return ke Client ---
+        // --- 7. Kirim response ke client ---
         res.json({
             success: true,
             message: "Signature berhasil, menunggu response validasi produk dari Lazada.",
