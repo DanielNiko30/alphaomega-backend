@@ -383,7 +383,6 @@ const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
-        // attributes = { dietary_needs: [...], Net_Weight: 100, flavor: "Kelapa", SellerSku: "SKU123", price: 10000, ... }
 
         // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
@@ -410,25 +409,26 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut wajib dari category_id
-        const requiredAttributes = await getCategoryAttributes(category_id);
-        // contoh output: [{name: "dietary_needs"}, {name: "Net_Weight"}, {name: "flavor"}, ...]
+        // 4️⃣ Ambil atribut wajib untuk category_id
+        const requiredAttributesResp = await getCategoryAttributes(category_id);
+        const requiredAttributes = requiredAttributesResp.required_attributes || [];
 
-        // 5️⃣ Mapping attributes
+        // 5️⃣ Mapping semua atribut wajib
         const attributesObj = {
             name: product.nama_product,
-            brand: attributes.brand || "No Brand",
             description: attributes.description || product.deskripsi_product || "Deskripsi belum tersedia",
             short_description: attributes.short_description || product.deskripsi_product || "Deskripsi belum tersedia",
         };
 
-        // ✅ Merge semua atribut wajib dari req.body
         for (const attr of requiredAttributes) {
             const key = attr.name;
             if (!(key in attributes)) {
-                throw new Error(`Atribut wajib "${key}" belum dikirim di body.attributes`);
+                if (attr.is_mandatory) {
+                    throw new Error(`Atribut wajib "${key}" belum dikirim di body.attributes`);
+                }
+            } else {
+                attributesObj[key] = attributes[key];
             }
-            attributesObj[key] = attributes[key];
         }
 
         // 6️⃣ Payload produk + SKU
@@ -483,12 +483,12 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            request: { apiPath, sysParams, sign, url, bodyStrForRequest: bodyForRequest.toString() },
             lazada_response: response.data,
         });
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
 
+        // Safe handling kalau err.response undefined
         let statusCode = 500;
         let errorData = err.message;
 
@@ -506,7 +506,6 @@ const createProductLazada = async (req, res) => {
         });
     }
 };
-
 
 const createDummyProduct = async (req, res) => {
     try {
