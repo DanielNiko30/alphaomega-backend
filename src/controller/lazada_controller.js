@@ -104,15 +104,16 @@ const createDummyProduct = async (req, res) => {
                             "https://placehold.co/400x400/1e88e5/ffffff?text=TOTE+BAG+TEST"
                         ]
                     },
-
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
                         brand: "No Brand",
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        Bag_Size: ["60766"], 
-                        material: ["30716"],  
-                        Bag_type: ["84749"]   
+
+                        // ✅ ubah semua dari array → string (karena kategori 17935 tidak mendukung array untuk CPV)
+                        Bag_Size: "60766",    // Medium
+                        material: "30716",    // Canvas
+                        Bag_type: "84749"     // Tote Bag
                     },
                     Skus: {
                         Sku: [{
