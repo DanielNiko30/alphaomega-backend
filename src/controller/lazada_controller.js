@@ -106,19 +106,14 @@ const createDummyProduct = async (req, res) => {
                     },
 
                     Attributes: {
-                        name: "TEST-TOTE-BAG-" + uniqueSuffix, // Nama produk baru
+                        name: "TEST-TOTE-BAG-" + uniqueSuffix,
                         brand: "No Brand",
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        // net_weight dihapus sesuai permintaan.
-
-                        // Sale Properties (diisi sebagai array string dengan ID CPV):
-                        "p-120010433": [requiredBagSizeCpvId], // Bag Size
-                        "material_bag": [materialBagCpvId],     // Material Bag
-                        "gender": [genderCpvId],               // Gender
-                        "fashion_size": [fashionSizeCpvId],    // Fashion Size yang Wajib
+                        Bag_Size: ["60766"], 
+                        material: ["30716"],  
+                        Bag_type: ["84749"]   
                     },
-
                     Skus: {
                         Sku: [{
                             SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
