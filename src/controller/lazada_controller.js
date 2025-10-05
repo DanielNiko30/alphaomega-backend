@@ -383,7 +383,7 @@ const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
-        // attributes = { dietary_needs: [...], Net_Weight: 100, flavor: "Kelapa", ... }
+        // attributes = { dietary_needs: [...], Net_Weight: 100, flavor: "Kelapa", SellerSku: "SKU123", price: 10000, ... }
 
         // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
@@ -410,10 +410,11 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut wajib untuk category_id
+        // 4️⃣ Ambil atribut wajib dari category_id
         const requiredAttributes = await getCategoryAttributes(category_id);
+        // contoh output: [{name: "dietary_needs"}, {name: "Net_Weight"}, {name: "flavor"}, ...]
 
-        // 5️⃣ Mapping attributes dari body
+        // 5️⃣ Mapping attributes
         const attributesObj = {
             name: product.nama_product,
             brand: attributes.brand || "No Brand",
@@ -421,7 +422,7 @@ const createProductLazada = async (req, res) => {
             short_description: attributes.short_description || product.deskripsi_product || "Deskripsi belum tersedia",
         };
 
-        // Merge atribut wajib dari req.body
+        // ✅ Merge semua atribut wajib dari req.body
         for (const attr of requiredAttributes) {
             const key = attr.name;
             if (!(key in attributes)) {
@@ -430,7 +431,7 @@ const createProductLazada = async (req, res) => {
             attributesObj[key] = attributes[key];
         }
 
-        // 6️⃣ Payload JSON
+        // 6️⃣ Payload produk + SKU
         const productObj = {
             Request: {
                 Product: {
@@ -492,13 +493,11 @@ const createProductLazada = async (req, res) => {
         let errorData = err.message;
 
         if (err.response) {
-            // Server merespons, ambil status + data
             statusCode = err.response.status;
             errorData = err.response.data;
         } else if (err.request) {
-            // Request dikirim tapi tidak ada response
             errorData = "No response received from Lazada API";
-        } // else err.message tetap digunakan
+        }
 
         res.status(statusCode).json({
             success: false,
@@ -506,8 +505,8 @@ const createProductLazada = async (req, res) => {
             message: "Gagal membuat produk di Lazada.",
         });
     }
-
 };
+
 
 const createDummyProduct = async (req, res) => {
     try {
