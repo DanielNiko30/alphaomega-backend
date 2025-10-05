@@ -264,6 +264,14 @@ const getProducts = async (req, res) => {
 /**
  * Upload Image to Lazada
  */
+const FormData = require("form-data");
+const sharp = require("sharp");
+const axios = require("axios");
+const { Product } = require("../models/product_model");
+const { Lazada } = require("../models/lazada_model");
+const { generateSign } = require("../utils/lazadaSign");
+
+// --- Fungsi Upload Gambar ke Lazada ---
 async function uploadImageToLazadaFromDB(accessToken) {
     try {
         const product = await Product.findByPk("PRO007");
@@ -271,18 +279,21 @@ async function uploadImageToLazadaFromDB(accessToken) {
             throw new Error("Produk PRO007 tidak ditemukan atau tidak memiliki gambar.");
         }
 
+        console.log("📸 Mengambil gambar dari DB untuk PRO007...");
+
         // Konversi BLOB → Buffer
         const imgBuffer = Buffer.from(product.gambar_product);
 
-        // Kompres gambar
+        // Kompres gambar agar efisien
         const optimizedBuffer = await sharp(imgBuffer)
             .resize({ width: 800, withoutEnlargement: true })
             .jpeg({ quality: 80 })
             .toBuffer();
 
-        // Siapkan parameter Lazada
+        // Siapkan parameter untuk upload ke Lazada
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
+
         const params = {
             access_token: accessToken,
             app_key: process.env.LAZADA_APP_KEY,
@@ -296,22 +307,40 @@ async function uploadImageToLazadaFromDB(accessToken) {
             sign,
         }).toString()}`;
 
-        // Form data (gambar)
+        // Buat FormData dengan buffer gambar
         const form = new FormData();
         form.append("image", optimizedBuffer, {
             filename: "product.jpg",
             contentType: "image/jpeg",
         });
 
-        const response = await axios.post(url, form, { headers: form.getHeaders() });
+        const headers = form.getHeaders();
 
-        console.log("🛰️ Lazada Upload Response:", JSON.stringify(response.data, null, 2));
+        let response;
+        try {
+            response = await axios.post(url, form, { headers });
+        } catch (error) {
+            console.error(
+                "🛰️ Lazada Upload Response (ERROR):",
+                JSON.stringify(error.response?.data || error.message, null, 2)
+            );
+            throw new Error("Upload gambar ke Lazada gagal: " + (error.response?.data?.message || error.message));
+        }
 
-        const imageUrl = response.data?.data?.image?.url || response.data?.data?.url;
+        console.log("🛰️ Lazada Upload Response (SUCCESS):", JSON.stringify(response.data, null, 2));
+
+        // Cek apakah Lazada balas URL
+        const imageUrl =
+            response.data?.data?.image?.url ||
+            response.data?.data?.url ||
+            response.data?.data?.full_url ||
+            null;
+
         if (!imageUrl) {
             throw new Error("Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.");
         }
 
+        console.log("✅ Gambar berhasil diupload ke Lazada:", imageUrl);
         return imageUrl;
     } catch (err) {
         console.error("❌ Upload Image Error:", err.response?.data || err.message);
@@ -327,8 +356,8 @@ const createDummyProduct = async (req, res) => {
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token.trim();
-        const apiKey = (process.env.LAZADA_APP_KEY || "").trim();
-        const appSecret = (process.env.LAZADA_APP_SECRET || "").trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
 
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
