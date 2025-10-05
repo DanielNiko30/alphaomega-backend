@@ -87,9 +87,9 @@ const createDummyProduct = async (req, res) => {
                         description:
                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        Bag_Size: "60766", // Medium
-                        material: "30716", // Canvas
-                        Bag_type: "84749", // ✅ Tote Bag (string, bukan array)
+                        Bag_Size: "60766", // Medium (valid)
+                        material: "30716", // Canvas (valid)
+                        Bag_type: "110222841", // ✅ Ganti ID CPV valid ("Shopping Bag")
                     },
 
                     Skus: {
@@ -160,7 +160,6 @@ const createDummyProduct = async (req, res) => {
         });
     }
 };
-
 
 const getCategoryAttributes = async (req, res) => {
     try {
