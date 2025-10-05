@@ -113,7 +113,8 @@ const createDummyProduct = async (req, res) => {
                         material: "30716",
                         Bag_type: "120147845" // ✅ ID CPV yang valid untuk "Tote Bag"
                     },
-                    s: {
+
+                    Skus: {
                         Sku: [{
                             SellerSku: "SKU-TOTE-" + uniqueSuffix, // SKU baru
                             // Mengubah nilai numerik menjadi tipe Number (tanpa kutip)
