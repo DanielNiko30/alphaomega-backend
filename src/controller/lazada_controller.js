@@ -274,16 +274,17 @@ async function uploadImageToLazadaFromDB(accessToken) {
 
         const imgBuffer = Buffer.from(product.gambar_product);
 
-        // Optimasi gambar ke JPEG 80%
+        // Optimasi gambar ke JPEG
         const optimizedBuffer = await sharp(imgBuffer)
             .resize({ width: 800, withoutEnlargement: true })
-            .jpeg({ quality: 80 })
+            .jpeg({ quality: 85 })
             .toBuffer();
 
-        // Simpan sementara di file sistem (Lazada kadang error kalau pakai buffer langsung)
+        // Simpan sementara ke /tmp (lazada butuh stream file)
         const tempPath = `/tmp/lazada_upload_${Date.now()}.jpg`;
         fs.writeFileSync(tempPath, optimizedBuffer);
 
+        // === Persiapan upload ===
         const API_PATH = "/image/upload";
         const timestamp = Date.now().toString();
         const params = {
@@ -313,19 +314,25 @@ async function uploadImageToLazadaFromDB(accessToken) {
             timeout: 30000,
         });
 
-        console.log("🛰️ Lazada Upload Response:", JSON.stringify(response.data, null, 2));
+        // Log respons asli untuk debugging
+        console.log("🛰️ Lazada Upload Response (raw):", JSON.stringify(response.data, null, 2));
 
-        // Hapus file sementara
+        // Bersihkan file
         fs.unlinkSync(tempPath);
 
+        // Coba ekstrak berbagai kemungkinan struktur URL
         const imageUrl =
             response.data?.data?.image?.url ||
             response.data?.data?.url ||
+            response.data?.data?.images?.[0]?.url ||
             response.data?.data?.full_url ||
             null;
 
         if (!imageUrl) {
-            throw new Error("Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.");
+            throw new Error(
+                "Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.\nRespon penuh: " +
+                JSON.stringify(response.data)
+            );
         }
 
         console.log("✅ Gambar berhasil diupload ke Lazada:", imageUrl);
@@ -336,7 +343,6 @@ async function uploadImageToLazadaFromDB(accessToken) {
     }
 }
 
-// --- Create Dummy Product ---
 const createDummyProduct = async (req, res) => {
     try {
         // 1️⃣ Ambil akun Lazada
@@ -355,7 +361,7 @@ const createDummyProduct = async (req, res) => {
         const uploadedImageUrl = await uploadImageToLazadaFromDB(accessToken);
         console.log("✅ Uploaded Image URL:", uploadedImageUrl);
 
-        // 3️⃣ Siapkan payload produk
+        // 3️⃣ Payload produk
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -368,15 +374,13 @@ const createDummyProduct = async (req, res) => {
             Request: {
                 Product: {
                     PrimaryCategory: "17935", // Tote Bag Wanita
-                    Images: {
-                        Image: [uploadedImageUrl],
-                    },
+                    Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
                         brand: "No Brand",
                         description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        material: "28232", // Canvas
+                        material: "28232",
                     },
                     Skus: {
                         Sku: [
@@ -389,7 +393,7 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
-                                Bag_Size: "58949", // Medium
+                                Bag_Size: "58949",
                             },
                         ],
                     },
@@ -413,7 +417,6 @@ const createDummyProduct = async (req, res) => {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        // 5️⃣ Response ke client
         res.json({
             success: true,
             message: "Produk dummy berhasil dibuat menggunakan gambar dari PRO007.",
