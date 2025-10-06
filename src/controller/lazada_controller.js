@@ -507,7 +507,7 @@ const createProductLazada = async (req, res) => {
             brand: attributes.brand || 167886 // Ellenka ID default
         };
 
-        // 6️⃣ SKU Attributes
+        // 6️⃣ SKU Attributes (pakai default dari stok + body)
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -523,14 +523,12 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             const key = attr.name;
 
-            // brand tetap di Product, jangan di SKU
-            if (key === "brand") continue;
+            if (key === "brand") continue; // brand tetap di Product
 
-            // Ambil dari body jika ada, jika numeric pakai default "1" jika perlu
             if (attributes[key] !== undefined) {
                 skuAttributes[key] = attributes[key];
             } else if (attr.input_type === "numeric") {
-                // kalau Net_Weight / numeric pakai opsi pertama jika ada
+                // numeric: kalau ada opsi pakai id opsi pertama, kalau tidak pakai "1"
                 if (attr.options?.length) skuAttributes[key] = attr.options[0].id;
                 else skuAttributes[key] = "1";
             } else if (attr.input_type === "singleSelect") {
