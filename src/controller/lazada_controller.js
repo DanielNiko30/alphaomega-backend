@@ -479,7 +479,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk
+        // 2️⃣ Ambil data produk dari DB
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -522,8 +522,9 @@ const createProductLazada = async (req, res) => {
         // 5️⃣ Product Attributes dasar
         const productAttributes = {
             name: product.nama_product,
-            description: product.deskripsi_product || "Deskripsi belum tersedia",
             brand: attributes.brand || "No Brand",
+            description: product.deskripsi_product || "Deskripsi belum tersedia",
+            short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan dari toko kami.",
         };
 
         // 6️⃣ SKU dasar
@@ -538,55 +539,43 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
         };
 
-        // 7️⃣ Mapping atribut wajib
+        // 7️⃣ Isi atribut mandatory dari kategori (gunakan name, bukan id)
         for (const attr of requiredAttributes) {
-            const attrId = attr.id;
-            const keyName = attr.name?.toLowerCase() || "";
-            const labelName = attr.label?.toLowerCase() || "";
+            const keyName = attr.name;
+            if (!keyName) continue;
 
-            if (keyName === "brand") continue;
+            // lewati atribut yang sudah diisi manual
+            if (["brand", "name", "description", "short_description"].includes(keyName)) continue;
 
-            let value =
-                attributes[attr.name] ||
+            const valueFromClient =
+                attributes[keyName] ||
                 attributes[attr.label] ||
-                attributes[attrId] ||
+                attributes[attr.id] ||
                 "";
 
-            // 🔹 Jika user kirim object { value_id }, langsung gunakan
-            if (typeof value === "object" && value.value_id) {
-                productAttributes[attrId] = { value_id: Number(value.value_id) };
-                continue;
+            if (attr.input_type === "enumInput" && typeof valueFromClient === "object" && valueFromClient.value_id) {
+                // jika dropdown enum (misal Bag_Size)
+                skuAttributes[keyName] = String(valueFromClient.value_id);
+            } else if (attr.input_type === "enumInput" && typeof valueFromClient === "number") {
+                skuAttributes[keyName] = String(valueFromClient);
+            } else if (attr.input_type === "numeric") {
+                // isi nilai numeric default jika kosong
+                skuAttributes[keyName] = String(valueFromClient || 1);
+            } else if (attr.input_type === "text") {
+                skuAttributes[keyName] = valueFromClient || `AUTO-${uniqueSuffix}`;
             }
-
-            // 🔹 Jika atribut "Berat Bersih" (Net_Weight)
-            if (keyName.includes("net_weight") || labelName.includes("berat")) {
-                const netWeightValue =
-                    typeof attributes.Net_Weight === "object"
-                        ? attributes.Net_Weight.value_id
-                        : attributes.Net_Weight;
-
-                if (!netWeightValue) {
-                    throw new Error("Net_Weight wajib memiliki value_id (misal 231651 untuk 500g)");
-                }
-
-                productAttributes[attrId] = { value_id: Number(netWeightValue) };
-                continue;
-            }
-
-            // 🔹 Jika atribut numeric tapi kosong, isi default 1
-            if (!value && attr.input_type === "numeric") {
-                value = "1";
-            }
-
-            // 🔹 Default simpan value string
-            productAttributes[attrId] = value;
         }
 
-        // 8️⃣ Payload final ke Lazada
+        // ✅ Tambah atribut enum "Bag_Size" jika belum diisi
+        if (!skuAttributes.Bag_Size) {
+            skuAttributes.Bag_Size = String(attributes.Bag_Size || 58949); // default "Kecil"
+        }
+
+        // 8️⃣ Payload final (sama format dengan dummy)
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: category_id,
+                    PrimaryCategory: String(category_id),
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: productAttributes,
                     Skus: { Sku: [skuAttributes] },
@@ -605,7 +594,6 @@ const createProductLazada = async (req, res) => {
 
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
-
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
             ...sysParams,
             sign,
@@ -623,6 +611,7 @@ const createProductLazada = async (req, res) => {
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
             lazada_response: response.data,
+            payload_sent: productObj,
         });
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
