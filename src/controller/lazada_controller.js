@@ -498,7 +498,7 @@ const createProductLazada = async (req, res) => {
         let requiredAttributes = [];
         try {
             const attrResp = await axios.get(
-                `https://tokalphaomegaploso.my.id/api/lazada/category/attributte/${category_id}`
+                `https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`
             );
 
             if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
