@@ -523,8 +523,9 @@ const createProductLazada = async (req, res) => {
                                 package_weight: attributes.package_weight || 0.5,
                                 package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
                                 Net_Weight: attributes.Net_Weight
-                                    ? Math.round(Number(attributes.Net_Weight)) // pastikan integer
-                                    : Math.round((stokTerpilih.berat || 0.02) * 1000) // default kg -> gram
+                                    ? `${attributes.Net_Weight} g`  // tambahkan satuan g/gram
+                                    : `${Math.round((stokTerpilih.berat || 0.02) * 1000)} g`
+
                             },
                         ],
                     },
