@@ -509,7 +509,10 @@ const createProductLazada = async (req, res) => {
                         description: product.deskripsi_product || "Deskripsi belum tersedia",
                         short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan toko kami",
                         // Berat bersih harus numeric dan di sini
-                        Net_Weight: attributes.Net_Weight || Math.round((stokTerpilih.berat || 0.5) * 1000),
+                        Net_Weight: attributes.Net_Weight
+                            ? Number(attributes.Net_Weight)
+                            : Math.round((stokTerpilih.berat || 0.5) * 1000)  // asumsi stok.berat dalam kg
+                        ,
                         // Enum input bisa dikirim id langsung
                         ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }),
                     },
