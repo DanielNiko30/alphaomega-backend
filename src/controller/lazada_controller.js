@@ -468,18 +468,19 @@ const createProductLazada = async (req, res) => {
             });
         }
 
-        // 1️⃣ Ambil akun Lazada
+        // Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
         const accessToken = account.access_token.trim();
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
+
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk
+        // Ambil data produk
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -491,13 +492,13 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error(`Stok untuk satuan '${selected_unit}' tidak ditemukan`);
 
-        // 3️⃣ Upload gambar
+        // Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Harga final
+        // Harga final
         const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
 
-        // 5️⃣ Build payload dengan Net_Weight di Attributes
+        // Build payload
         const productObj = {
             Request: {
                 Product: {
@@ -508,13 +509,7 @@ const createProductLazada = async (req, res) => {
                         brand: attributes.brand || "No Brand",
                         description: product.deskripsi_product || "Deskripsi belum tersedia",
                         short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan toko kami",
-                        // Berat bersih harus numeric dan di sini
-                        Net_Weight: attributes.Net_Weight
-                            ? Number(attributes.Net_Weight)
-                            : Math.round((stokTerpilih.berat || 0.5) * 1000)  // asumsi stok.berat dalam kg
-                        ,
-                        // Enum input bisa dikirim id langsung
-                        ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }),
+                        ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }) // enumInput id
                     },
                     Skus: {
                         Sku: [
@@ -526,7 +521,10 @@ const createProductLazada = async (req, res) => {
                                 package_length: attributes.package_length || 10,
                                 package_width: attributes.package_width || 10,
                                 package_weight: attributes.package_weight || 0.5,
-                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
+                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
+                                Net_Weight: attributes.Net_Weight
+                                    ? Math.round(Number(attributes.Net_Weight)) // pastikan integer
+                                    : Math.round((stokTerpilih.berat || 0.02) * 1000) // default kg -> gram
                             },
                         ],
                     },
@@ -534,7 +532,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 6️⃣ Generate Signature
+        // Generate signature
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -552,7 +550,7 @@ const createProductLazada = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 7️⃣ Kirim ke Lazada
+        // Kirim request ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
