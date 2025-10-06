@@ -548,9 +548,17 @@ const createProductLazada = async (req, res) => {
 
             // Kalau value berupa object { attribute_id, value_id }
             if (typeof value === "object" && value.attribute_id && value.value_id) {
-                productAttributes[value.attribute_id] = {
-                    value_id: value.value_id,
-                };
+                const attrId = value.attribute_id;
+                // Kalau ada field “unit” atau ini adalah Net Weight, tambahkan value dan unit
+                if (attr.name.toLowerCase().includes("berat") || attr.name_en?.toLowerCase().includes("weight")) {
+                    productAttributes[attrId] = {
+                        value_id: String(value.value_id),
+                        value: String(value.value || "500"),
+                        unit: "g",
+                    };
+                } else {
+                    productAttributes[attrId] = { value_id: String(value.value_id) };
+                }
                 continue;
             }
 
