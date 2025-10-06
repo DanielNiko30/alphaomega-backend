@@ -545,26 +545,31 @@ const createProductLazada = async (req, res) => {
         };
 
         // 7️⃣ Isi atribut mandatory kategori
+        // ganti loop requiredAttributes jadi
         for (const attr of requiredAttributes) {
             const keyName = attr.name;
             if (!keyName) continue;
 
-            if (["brand", "name", "description", "short_description"].includes(keyName)) continue;
+            if (keyName === "Net_Weight") {
+                // otomatis isi berdasarkan stok terpilih, misal 20g
+                const netWeightOption = attr.options.find(opt =>
+                    opt.name.toLowerCase().includes(stokTerpilih.berat.toString())
+                );
 
-            const valueFromClient =
-                attributes[keyName] ||
-                attributes[attr.label] ||
-                attributes[attr.id] ||
-                "";
+                if (netWeightOption) {
+                    skuAttributes.Net_Weight = { value_id: netWeightOption.id };
+                } else {
+                    skuAttributes.Net_Weight = { value_id: 134739 }; // default 20g
+                }
 
-            if (attr.input_type === "enumInput" && typeof valueFromClient === "object" && valueFromClient.value_id) {
-                skuAttributes[keyName] = String(valueFromClient.value_id);
-            } else if (attr.input_type === "enumInput" && typeof valueFromClient === "number") {
-                skuAttributes[keyName] = String(valueFromClient);
-            } else if (attr.input_type === "numeric") {
-                skuAttributes[keyName] = String(valueFromClient || 1);
+                continue;
+            }
+
+            // atribut lainnya seperti biasa
+            if (attr.input_type === "numeric") {
+                skuAttributes[keyName] = String(attributes[keyName] || 1);
             } else if (attr.input_type === "text") {
-                skuAttributes[keyName] = valueFromClient || `AUTO-${uniqueSuffix}`;
+                skuAttributes[keyName] = attributes[keyName] || `AUTO-${uniqueSuffix}`;
             }
         }
 
