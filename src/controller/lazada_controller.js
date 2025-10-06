@@ -541,34 +541,45 @@ const createProductLazada = async (req, res) => {
         // 7️⃣ Mapping atribut wajib
         for (const attr of requiredAttributes) {
             const attrId = attr.id;
-            const keyName = attr.name?.toLowerCase();
+            const keyName = attr.name?.toLowerCase() || "";
+            const labelName = attr.label?.toLowerCase() || "";
 
             if (keyName === "brand") continue;
 
-            let value = attributes[attr.name] || attributes[attr.label] || "";
+            let value =
+                attributes[attr.name] ||
+                attributes[attr.label] ||
+                attributes[attrId] ||
+                "";
 
-            // Kalau value berupa object { attribute_id, value_id }
+            // 🔹 Jika user kirim object { value_id }, langsung gunakan
             if (typeof value === "object" && value.value_id) {
-                productAttributes[attrId] = { value_id: value.value_id };
+                productAttributes[attrId] = { value_id: Number(value.value_id) };
                 continue;
             }
 
-            // Jika atribut numeric
-            if (!value && attr.input_type === "numeric") value = "1";
-
-            // Jika atribut berat bersih
-            if (keyName.includes("net_weight") || keyName.includes("berat")) {
-                // Jika user kirim langsung ID, bungkus jadi object { value_id }
+            // 🔹 Jika atribut "Berat Bersih" (Net_Weight)
+            if (keyName.includes("net_weight") || labelName.includes("berat")) {
                 const netWeightValue =
                     typeof attributes.Net_Weight === "object"
                         ? attributes.Net_Weight.value_id
                         : attributes.Net_Weight;
 
+                if (!netWeightValue) {
+                    throw new Error("Net_Weight wajib memiliki value_id (misal 231651 untuk 500g)");
+                }
+
                 productAttributes[attrId] = { value_id: Number(netWeightValue) };
-            } else {
-                productAttributes[attrId] = value;
+                continue;
             }
 
+            // 🔹 Jika atribut numeric tapi kosong, isi default 1
+            if (!value && attr.input_type === "numeric") {
+                value = "1";
+            }
+
+            // 🔹 Default simpan value string
+            productAttributes[attrId] = value;
         }
 
         // 8️⃣ Payload final ke Lazada
@@ -594,6 +605,7 @@ const createProductLazada = async (req, res) => {
 
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
+
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
             ...sysParams,
             sign,
@@ -653,7 +665,7 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: "18469", // Tote Bag Wanita
+                    PrimaryCategory: "17935", // Tote Bag Wanita
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
@@ -673,7 +685,7 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
-                                net_weight: "166007",
+                                Bag_Size: "58949",
                             },
                         ],
                     },
