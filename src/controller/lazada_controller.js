@@ -494,7 +494,7 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil required attributes dari Lazada
+        // 4️⃣ Ambil required attributes Lazada
         const requiredRes = await axios.get(`https://api.lazada.co.id/rest/category/attributes`, {
             params: { category_id, access_token: accessToken, app_key: apiKey },
         });
@@ -506,8 +506,8 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             switch (attr.name) {
                 case "Net_Weight":
-                    // pakai input user langsung, jangan diubah
-                    if (attributes.Net_Weight) productAttributes.Net_Weight = attributes.Net_Weight;
+                    // selalu pakai input user
+                    productAttributes.Net_Weight = attributes.Net_Weight || 0;
                     break;
                 case "package_height":
                     productAttributes.package_height = attributes.package_height || 10;
@@ -525,10 +525,8 @@ const createProductLazada = async (req, res) => {
                     productAttributes.price = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
                     break;
                 case "brand":
-                    // cuma pakai brand jika ada options, kalau kosong skip
-                    if (attr.options && attr.options.length > 0) {
-                        productAttributes.brand = attributes.brand || "No Brand";
-                    }
+                    // Kirim brand dari input user meski options kosong
+                    productAttributes.brand = attributes.brand || "No Brand";
                     break;
                 case "SellerSku":
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
@@ -538,7 +536,7 @@ const createProductLazada = async (req, res) => {
             }
         }
 
-        // Tambahkan atribut tambahan opsional
+        // Tambahkan atribut opsional
         if (attributes.short_description) productAttributes.short_description = attributes.short_description;
         if (product.deskripsi_product) productAttributes.description = product.deskripsi_product;
         productAttributes.name = product.nama_product;
@@ -560,7 +558,7 @@ const createProductLazada = async (req, res) => {
                                 package_length: productAttributes.package_length,
                                 package_width: productAttributes.package_width,
                                 package_weight: productAttributes.package_weight,
-                                package_content: `${product.nama_product} - ${productAttributes.brand || ''}`.trim(),
+                                package_content: `${product.nama_product} - ${productAttributes.brand}`.trim(),
                                 Net_Weight: productAttributes.Net_Weight,
                             },
                         ],
