@@ -521,10 +521,11 @@ const createProductLazada = async (req, res) => {
                                 package_width: attributes.package_width || 10,
                                 package_weight: attributes.package_weight || 0.5,
                                 package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-                                Net_Weight: attributes.Net_Weight || Math.round((stokTerpilih.berat || 0.01) * 1000) // dalam gram, integer
+                                Net_Weight: attributes.Net_Weight || Math.round((stokTerpilih.berat || 0.01) * 1000) // gram integer
                             }
                         ]
                     }
+
                 }
             }
         };
