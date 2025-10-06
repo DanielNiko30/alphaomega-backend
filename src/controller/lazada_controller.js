@@ -494,7 +494,7 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil required attributes dari Lazada (fetch dari API Lazada)
+        // 4️⃣ Ambil required attributes dari Lazada
         const requiredRes = await axios.get(`https://api.lazada.co.id/rest/category/attributes`, {
             params: { category_id, access_token: accessToken, app_key: apiKey },
         });
@@ -506,13 +506,8 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             switch (attr.name) {
                 case "Net_Weight":
-                    // pilih option yang paling dekat dengan stok.berat
-                    let netWeightOption = attr.options.find(opt => {
-                        const val = parseFloat(opt.name.replace(/[^\d.]/g, ''));
-                        return Math.round(val) === Math.round((stokTerpilih.berat || 0.02) * 1000);
-                    });
-                    if (!netWeightOption) netWeightOption = attr.options[0]; // fallback
-                    productAttributes.Net_Weight = netWeightOption.name; // gunakan string persis
+                    // pakai input user langsung, jangan diubah
+                    if (attributes.Net_Weight) productAttributes.Net_Weight = attributes.Net_Weight;
                     break;
                 case "package_height":
                     productAttributes.package_height = attributes.package_height || 10;
@@ -530,13 +525,15 @@ const createProductLazada = async (req, res) => {
                     productAttributes.price = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
                     break;
                 case "brand":
-                    productAttributes.brand = attributes.brand || "No Brand";
+                    // cuma pakai brand jika ada options, kalau kosong skip
+                    if (attr.options && attr.options.length > 0) {
+                        productAttributes.brand = attributes.brand || "No Brand";
+                    }
                     break;
                 case "SellerSku":
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
                     break;
                 default:
-                    // jika ada atribut lain mandatory, bisa tambahkan logika di sini
                     break;
             }
         }
@@ -563,7 +560,7 @@ const createProductLazada = async (req, res) => {
                                 package_length: productAttributes.package_length,
                                 package_width: productAttributes.package_width,
                                 package_weight: productAttributes.package_weight,
-                                package_content: `${product.nama_product} - ${productAttributes.brand}`,
+                                package_content: `${product.nama_product} - ${productAttributes.brand || ''}`.trim(),
                                 Net_Weight: productAttributes.Net_Weight,
                             },
                         ],
