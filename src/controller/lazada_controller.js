@@ -475,6 +475,7 @@ const createProductLazada = async (req, res) => {
         const accessToken = account.access_token.trim();
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
+
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
@@ -497,20 +498,43 @@ const createProductLazada = async (req, res) => {
         // 4️⃣ Harga final
         const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
 
-        // 5️⃣ Build payload
+        // 5️⃣ Ambil required attributes category dari Lazada
+        const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
+        if (!attrResp.data.success || !Array.isArray(attrResp.data.required_attributes)) {
+            throw new Error("Gagal ambil category attributes");
+        }
+        const requiredAttributes = attrResp.data.required_attributes;
+
+        // 6️⃣ Build Attributes object sesuai yang required
+        const productAttributes = {
+            name: product.nama_product,
+            brand: attributes.brand || "No Brand",
+            description: product.deskripsi_product || "Deskripsi belum tersedia",
+            short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan toko kami",
+        };
+
+        // Tambahkan Net_Weight jika ada di required
+        const netWeightAttr = requiredAttributes.find(attr => attr.name === "Net_Weight");
+        if (netWeightAttr) {
+            productAttributes.Net_Weight = attributes.Net_Weight
+                ? Number(attributes.Net_Weight)
+                : Math.round((stokTerpilih.berat || 0.02) * 1000); // berat dalam gram
+        }
+
+        // Tambahkan enum input yang required jika dikirim
+        requiredAttributes.forEach(attr => {
+            if (attr.input_type === "enumInput" && attributes[attr.name]) {
+                productAttributes[attr.name] = attributes[attr.name]; // pakai id enum Lazada
+            }
+        });
+
+        // 7️⃣ Build payload JSON
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: String(category_id),
                     Images: { Image: [uploadedImageUrl] },
-                    Attributes: {
-                        name: product.nama_product,
-                        brand: attributes.brand || "No Brand",
-                        description: product.deskripsi_product || "Deskripsi belum tersedia",
-                        short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan toko kami",
-                        ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }) // enumInput id
-                        // Jangan kirim "g" atau "kg", cukup numeric
-                    },
+                    Attributes: productAttributes,
                     Skus: {
                         Sku: [
                             {
@@ -521,10 +545,7 @@ const createProductLazada = async (req, res) => {
                                 package_length: attributes.package_length || 10,
                                 package_width: attributes.package_width || 10,
                                 package_weight: attributes.package_weight || 0.5,
-                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-                                Net_Weight: attributes.Net_Weight
-                                    ? Number(attributes.Net_Weight) // numeric
-                                    : Math.round((stokTerpilih.berat || 0.02) * 1000) // kg → gram
+                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
                             },
                         ],
                     },
@@ -532,7 +553,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 6️⃣ Generate Signature
+        // 8️⃣ Generate Signature
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -550,7 +571,7 @@ const createProductLazada = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 7️⃣ Kirim ke Lazada
+        // 9️⃣ Kirim request ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
