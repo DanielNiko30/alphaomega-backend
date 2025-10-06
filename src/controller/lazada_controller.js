@@ -491,23 +491,27 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut Lazada untuk category
+        // 4️⃣ Ambil atribut kategori langsung dari endpoint lokal
         let requiredAttributes = [];
         try {
-            const requiredAttributesResp = await getCategoryAttributes(category_id);
-            requiredAttributes = requiredAttributesResp?.required_attributes || [];
+            const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
+            if (attrResp.data?.success && Array.isArray(attrResp.data.attributes)) {
+                requiredAttributes = attrResp.data.attributes;
+            } else {
+                console.warn("⚠️ Format response atribut tidak sesuai:", attrResp.data);
+            }
         } catch (err) {
             console.warn("⚠️ Gagal ambil category attributes, pakai default empty", err.message);
         }
 
-        // 5️⃣ Product Attributes (brand tetap di product)
+        // 5️⃣ Product Attributes
         const productAttributes = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
-            brand: attributes.brand || 167886 // Ellenka ID default
+            brand: attributes.brand || 167886, // Default Ellenka
         };
 
-        // 6️⃣ SKU Attributes (pakai default dari stok + body)
+        // 6️⃣ SKU Attributes
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -519,18 +523,15 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`
         };
 
-        // 7️⃣ Masukkan semua mandatory category attribute ke SKU
+        // 7️⃣ Tambahkan mandatory attributes ke SKU
         for (const attr of requiredAttributes) {
             const key = attr.name;
-
-            if (key === "brand") continue; // brand tetap di Product
+            if (key === "brand") continue;
 
             if (attributes[key] !== undefined) {
                 skuAttributes[key] = attributes[key];
             } else if (attr.input_type === "numeric") {
-                // numeric: kalau ada opsi pakai id opsi pertama, kalau tidak pakai "1"
-                if (attr.options?.length) skuAttributes[key] = attr.options[0].id;
-                else skuAttributes[key] = "1";
+                skuAttributes[key] = "1";
             } else if (attr.input_type === "singleSelect") {
                 skuAttributes[key] = attr.options?.[0]?.id || "";
             } else {
@@ -538,36 +539,47 @@ const createProductLazada = async (req, res) => {
             }
         }
 
-        // 8️⃣ Payload
+        // 8️⃣ Payload Lazada
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: category_id,
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: productAttributes,
-                    Skus: { Sku: [skuAttributes] }
-                }
-            }
+                    Skus: { Sku: [skuAttributes] },
+                },
+            },
         };
 
-        // 9️⃣ Signing
-        const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
+        // 9️⃣ Generate Sign
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
+
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
 
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+            ...sysParams,
+            sign,
+        }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 🔟 Kirim request
-        const response = await axios.post(url, bodyForRequest, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        // 🔟 Kirim ke Lazada
+        const response = await axios.post(url, bodyForRequest, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
 
         res.json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            lazada_response: response.data
+            lazada_response: response.data,
         });
-
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
 
@@ -579,7 +591,7 @@ const createProductLazada = async (req, res) => {
         res.status(500).json({
             success: false,
             error: errorData,
-            message: "Gagal membuat produk di Lazada."
+            message: "Gagal membuat produk di Lazada.",
         });
     }
 };
