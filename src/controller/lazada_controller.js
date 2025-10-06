@@ -234,10 +234,7 @@ const getCategoryAttributes = async (req, res) => {
         };
 
         // 🔹 Gabungkan semua parameter untuk signing
-        const allParamsForSign = {
-            ...sysParams,
-            ...businessParams,
-        };
+        const allParamsForSign = { ...sysParams, ...businessParams };
 
         // 🔹 Generate signature
         const sign = generateSign(apiPath, allParamsForSign, appSecret);
@@ -262,13 +259,9 @@ const getCategoryAttributes = async (req, res) => {
             });
         }
 
-        // 🔹 Filter atribut wajib (is_mandatory / key_prop / sale_prop)
+        // 🔹 Filter hanya atribut yang mandatory (is_mandatory = 1)
         const requiredAttributes = attributes
-            .filter(attr =>
-                attr.is_mandatory === 1 ||
-                attr.advanced?.is_key_prop === 1 ||
-                attr.is_sale_prop === 1
-            )
+            .filter(attr => attr.is_mandatory === 1)
             .map(attr => ({
                 id: attr.id,
                 name: attr.name,
@@ -284,10 +277,9 @@ const getCategoryAttributes = async (req, res) => {
                 })) || []
             }));
 
-        // 🔹 Return ke frontend
         res.json({
             success: true,
-            message: `Berhasil mendapatkan ${requiredAttributes.length} atribut wajib untuk Category ID ${primaryCategoryId}.`,
+            message: `Berhasil mendapatkan ${requiredAttributes.length} atribut mandatory untuk Category ID ${primaryCategoryId}.`,
             category_id: primaryCategoryId,
             required_attributes: requiredAttributes,
         });
