@@ -558,12 +558,17 @@ const createProductLazada = async (req, res) => {
 
             // Jika atribut berat bersih
             if (keyName.includes("net_weight") || keyName.includes("berat")) {
-                productAttributes[attrId] = {
-                    value_id: attributes?.Net_Weight?.value_id || 231651,
-                };
+                // Jika user kirim langsung ID, bungkus jadi object { value_id }
+                const netWeightValue =
+                    typeof attributes.Net_Weight === "object"
+                        ? attributes.Net_Weight.value_id
+                        : attributes.Net_Weight;
+
+                productAttributes[attrId] = { value_id: Number(netWeightValue) };
             } else {
                 productAttributes[attrId] = value;
             }
+
         }
 
         // 8️⃣ Payload final ke Lazada
