@@ -494,36 +494,10 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil required attributes kategori
-        const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
-        if (!attrResp.data.success || !Array.isArray(attrResp.data.required_attributes)) {
-            throw new Error("Gagal ambil category attributes");
-        }
-        const requiredAttributes = attrResp.data.required_attributes;
-
-        // 5️⃣ Map Net_Weight sesuai berat stok
-        let netWeightId = null;
-        const netWeightAttr = requiredAttributes.find(attr => attr.name === "Net_Weight");
-        if (netWeightAttr && Array.isArray(netWeightAttr.options)) {
-            const beratStokGram = stokTerpilih.berat * 1000; // asumsi stokTerpilih.berat dalam kg
-            // pilih option paling mendekati berat stok
-            let closestOption = netWeightAttr.options[0];
-            let minDiff = Math.abs(beratStokGram - parseInt(closestOption.name));
-            for (const opt of netWeightAttr.options) {
-                const optGram = parseInt(opt.name.replace(/\D/g, '')); // ambil angka dari nama option
-                const diff = Math.abs(beratStokGram - optGram);
-                if (diff < minDiff) {
-                    closestOption = opt;
-                    minDiff = diff;
-                }
-            }
-            netWeightId = closestOption.id;
-        }
-
-        // 6️⃣ Harga final
+        // 4️⃣ Harga final
         const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
 
-        // 7️⃣ Bangun payload JSON
+        // 5️⃣ Build payload dengan Net_Weight di Attributes
         const productObj = {
             Request: {
                 Product: {
@@ -534,6 +508,10 @@ const createProductLazada = async (req, res) => {
                         brand: attributes.brand || "No Brand",
                         description: product.deskripsi_product || "Deskripsi belum tersedia",
                         short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan toko kami",
+                        // Berat bersih harus numeric dan di sini
+                        Net_Weight: attributes.Net_Weight || Math.round((stokTerpilih.berat || 0.5) * 1000),
+                        // Enum input bisa dikirim id langsung
+                        ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }),
                     },
                     Skus: {
                         Sku: [
@@ -545,9 +523,7 @@ const createProductLazada = async (req, res) => {
                                 package_length: attributes.package_length || 10,
                                 package_width: attributes.package_width || 10,
                                 package_weight: attributes.package_weight || 0.5,
-                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-                                ...(netWeightId && { Net_Weight: netWeightId }),
-                                ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }),
+                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
                             },
                         ],
                     },
@@ -555,7 +531,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 8️⃣ Generate Signature
+        // 6️⃣ Generate Signature
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -573,7 +549,7 @@ const createProductLazada = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 9️⃣ Kirim ke Lazada
+        // 7️⃣ Kirim ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
