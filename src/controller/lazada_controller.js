@@ -793,5 +793,6 @@ module.exports = {
     getBrands,
     getProducts,
     createDummyProduct,
-    getCategoryAttributes
+    getCategoryAttributes,
+    getAllCategoryAttributes
 };
