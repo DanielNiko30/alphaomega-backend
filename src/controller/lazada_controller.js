@@ -500,22 +500,14 @@ const createProductLazada = async (req, res) => {
             console.warn("⚠️ Gagal ambil category attributes, pakai default empty", err.message);
         }
 
-        // 5️⃣ Mapping atribut product vs SKU
+        // 5️⃣ Product Attributes (brand tetap di product)
         const productAttributes = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
             brand: attributes.brand || 167886 // Ellenka ID default
         };
 
-        // isi atribut lain mandatory di product level (jika ada)
-        for (const attr of requiredAttributes) {
-            if (attr.name === "brand") continue; // brand sudah diisi
-            if (attr.input_type !== "singleSelect") {
-                productAttributes[attr.name] = attributes[attr.name] || (attr.input_type === "numeric" ? "1" : "");
-            }
-        }
-
-        // 6️⃣ Mapping SKU (sales prop / sku_prop)
+        // 6️⃣ SKU Attributes
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -527,16 +519,28 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`
         };
 
-        // ✅ Cek atribut mandatory sku
+        // 7️⃣ Masukkan semua mandatory category attribute ke SKU
         for (const attr of requiredAttributes) {
-            if (attr.input_type === "singleSelect" && attr.name !== "brand" && attr.options?.length) {
-                // contoh: Bag_Size
-                const optionId = attributes[attr.name] || attr.options[0]?.id;
-                if (optionId) skuAttributes[attr.name] = optionId;
+            const key = attr.name;
+
+            // brand tetap di Product, jangan di SKU
+            if (key === "brand") continue;
+
+            // Ambil dari body jika ada, jika numeric pakai default "1" jika perlu
+            if (attributes[key] !== undefined) {
+                skuAttributes[key] = attributes[key];
+            } else if (attr.input_type === "numeric") {
+                // kalau Net_Weight / numeric pakai opsi pertama jika ada
+                if (attr.options?.length) skuAttributes[key] = attr.options[0].id;
+                else skuAttributes[key] = "1";
+            } else if (attr.input_type === "singleSelect") {
+                skuAttributes[key] = attr.options?.[0]?.id || "";
+            } else {
+                skuAttributes[key] = "";
             }
         }
 
-        // 7️⃣ Payload
+        // 8️⃣ Payload
         const productObj = {
             Request: {
                 Product: {
@@ -548,7 +552,7 @@ const createProductLazada = async (req, res) => {
             }
         };
 
-        // 8️⃣ Signing
+        // 9️⃣ Signing
         const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
@@ -556,7 +560,7 @@ const createProductLazada = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 9️⃣ Kirim request
+        // 🔟 Kirim request
         const response = await axios.post(url, bodyForRequest, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
 
         res.json({
