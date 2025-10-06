@@ -462,7 +462,10 @@ const createProductLazada = async (req, res) => {
         const { category_id, selected_unit, attributes = {} } = req.body;
 
         if (!category_id) {
-            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
+            return res.status(400).json({
+                success: false,
+                message: "category_id wajib dikirim di body",
+            });
         }
 
         // 1️⃣ Ambil akun Lazada
@@ -491,17 +494,28 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut kategori langsung dari endpoint lokal
+        // 4️⃣ Ambil atribut kategori dari endpoint lokal
         let requiredAttributes = [];
         try {
-            const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
-            if (attrResp.data?.success && Array.isArray(attrResp.data.attributes)) {
-                requiredAttributes = attrResp.data.attributes;
+            const attrResp = await axios.get(
+                `https://tokalphaomegaploso.my.id/api/lazada/category/attributte/${category_id}`
+            );
+
+            if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
+                requiredAttributes = attrResp.data.required_attributes;
             } else {
-                console.warn("⚠️ Format response atribut tidak sesuai:", attrResp.data);
+                return res.status(400).json({
+                    success: false,
+                    message: "Format response atribut tidak sesuai",
+                    response_data: attrResp.data,
+                });
             }
         } catch (err) {
-            console.warn("⚠️ Gagal ambil category attributes, pakai default empty", err.message);
+            return res.status(500).json({
+                success: false,
+                message: "Gagal ambil category attributes",
+                error: err.response?.data || err.message,
+            });
         }
 
         // 5️⃣ Product Attributes
@@ -520,7 +534,7 @@ const createProductLazada = async (req, res) => {
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
             package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-            package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`
+            package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`,
         };
 
         // 7️⃣ Tambahkan mandatory attributes ke SKU
@@ -584,7 +598,8 @@ const createProductLazada = async (req, res) => {
         console.error("❌ Lazada Create Product Error:", err);
 
         let errorData;
-        if (err.response) errorData = err.response.data || err.response.statusText || err.message;
+        if (err.response)
+            errorData = err.response.data || err.response.statusText || err.message;
         else if (err.request) errorData = "No response from Lazada";
         else errorData = err.message;
 
