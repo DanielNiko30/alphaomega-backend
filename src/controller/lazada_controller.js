@@ -359,6 +359,14 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
 
+        // ✅ Validasi category_id
+        if (!category_id) {
+            return res.status(400).json({
+                success: false,
+                message: "category_id wajib dikirim di body",
+            });
+        }
+
         // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
@@ -386,10 +394,15 @@ const createProductLazada = async (req, res) => {
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
         // 4️⃣ Ambil atribut mandatory Lazada
-        const requiredAttributesResp = await getCategoryAttributes(category_id);
-        const requiredAttributes = requiredAttributesResp.required_attributes || [];
+        let requiredAttributes = [];
+        try {
+            const requiredAttributesResp = await getCategoryAttributes(category_id);
+            requiredAttributes = requiredAttributesResp?.required_attributes || [];
+        } catch (err) {
+            console.warn("⚠️ Gagal ambil category attributes, pakai default empty", err.message);
+        }
 
-        // 5️⃣ Mapping atribut mandatory (ambil dari body jika tidak ada di DB)
+        // 5️⃣ Mapping atribut mandatory
         const attributesObj = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
@@ -398,11 +411,10 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             const key = attr.name;
 
-            // Jika ada di body.attributes gunakan itu, jika tidak ambil dari DB atau fallback default
             if (attributes[key] !== undefined) {
                 attributesObj[key] = String(attributes[key]);
             } else {
-                // Buat fallback default jika DB tidak punya
+                // fallback default jika DB/body tidak ada
                 if (key === "brand") attributesObj[key] = "No Brand";
                 else if (key === "Net_Weight") attributesObj[key] = attr.options?.[0]?.id || "127488014";
                 else if (attr.input_type === "numeric") attributesObj[key] = "1";
@@ -458,7 +470,6 @@ const createProductLazada = async (req, res) => {
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
 
-        // ✅ Error handling aman
         let errorData;
         if (err.response) errorData = err.response.data || err.response.statusText || err.message;
         else if (err.request) errorData = "No response from Lazada";
