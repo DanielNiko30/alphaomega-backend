@@ -461,12 +461,8 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
 
-        // ✅ Validasi category_id
         if (!category_id) {
-            return res.status(400).json({
-                success: false,
-                message: "category_id wajib dikirim di body",
-            });
+            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
         }
 
         // 1️⃣ Ambil akun Lazada
@@ -495,7 +491,7 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut mandatory Lazada
+        // 4️⃣ Ambil atribut Lazada untuk category
         let requiredAttributes = [];
         try {
             const requiredAttributesResp = await getCategoryAttributes(category_id);
@@ -504,52 +500,55 @@ const createProductLazada = async (req, res) => {
             console.warn("⚠️ Gagal ambil category attributes, pakai default empty", err.message);
         }
 
-        // 5️⃣ Mapping atribut mandatory
-        const attributesObj = {
+        // 5️⃣ Mapping atribut product vs SKU
+        const productAttributes = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
+            brand: attributes.brand || 167886 // Ellenka ID default
         };
 
+        // isi atribut lain mandatory di product level (jika ada)
         for (const attr of requiredAttributes) {
-            const key = attr.name;
-
-            if (attributes[key] !== undefined) {
-                attributesObj[key] = String(attributes[key]);
-            } else {
-                // fallback default jika DB/body tidak ada
-                if (key === "brand") attributesObj[key] = "No Brand";
-                else if (key === "Net_Weight") attributesObj[key] = attr.options?.[0]?.id || "127488014";
-                else if (attr.input_type === "numeric") attributesObj[key] = "1";
-                else attributesObj[key] = "";
+            if (attr.name === "brand") continue; // brand sudah diisi
+            if (attr.input_type !== "singleSelect") {
+                productAttributes[attr.name] = attributes[attr.name] || (attr.input_type === "numeric" ? "1" : "");
             }
         }
 
-        // 6️⃣ Payload produk + SKU
+        // 6️⃣ Mapping SKU (sales prop / sku_prop)
+        const skuAttributes = {
+            SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
+            quantity: stokTerpilih.stok,
+            price: String(stokTerpilih.harga_jual || 1000),
+            package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
+            package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
+            package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
+            package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
+            package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`
+        };
+
+        // ✅ Cek atribut mandatory sku
+        for (const attr of requiredAttributes) {
+            if (attr.input_type === "singleSelect" && attr.name !== "brand" && attr.options?.length) {
+                // contoh: Bag_Size
+                const optionId = attributes[attr.name] || attr.options[0]?.id;
+                if (optionId) skuAttributes[attr.name] = optionId;
+            }
+        }
+
+        // 7️⃣ Payload
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: category_id,
                     Images: { Image: [uploadedImageUrl] },
-                    Attributes: attributesObj,
-                    Skus: {
-                        Sku: [
-                            {
-                                SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
-                                quantity: stokTerpilih.stok,
-                                price: String(stokTerpilih.harga_jual || 1000),
-                                package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
-                                package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
-                                package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
-                                package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-                                package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-                            },
-                        ],
-                    },
-                },
-            },
+                    Attributes: productAttributes,
+                    Skus: { Sku: [skuAttributes] }
+                }
+            }
         };
 
-        // 7️⃣ Signing
+        // 8️⃣ Signing
         const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
@@ -557,16 +556,14 @@ const createProductLazada = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 8️⃣ Kirim request ke Lazada
-        const response = await axios.post(url, bodyForRequest, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
+        // 9️⃣ Kirim request
+        const response = await axios.post(url, bodyForRequest, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
 
         res.json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            lazada_response: response.data,
+            lazada_response: response.data
         });
 
     } catch (err) {
@@ -580,7 +577,7 @@ const createProductLazada = async (req, res) => {
         res.status(500).json({
             success: false,
             error: errorData,
-            message: "Gagal membuat produk di Lazada.",
+            message: "Gagal membuat produk di Lazada."
         });
     }
 };
