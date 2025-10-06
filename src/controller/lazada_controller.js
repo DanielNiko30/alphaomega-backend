@@ -299,9 +299,13 @@ const getCategoryAttributes = async (req, res) => {
 // --- Fungsi Upload Gambar ke Lazada ---
 async function uploadImageToLazadaFromDB(product, accessToken) {
     try {
-        if (!product || !product.gambar_product) throw new Error("Produk tidak ditemukan atau tidak memiliki gambar.");
+        if (!product || !product.gambar_product) {
+            throw new Error("Produk tidak ditemukan atau tidak memiliki gambar.");
+        }
 
         const imgBuffer = Buffer.from(product.gambar_product);
+
+        // Resize minimal 400x400
         const metadata = await sharp(imgBuffer).metadata();
         const resizeWidth = Math.max(metadata.width || 400, 400);
         const resizeHeight = Math.max(metadata.height || 400, 400);
@@ -322,18 +326,35 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
             sign_method: "sha256",
             timestamp,
         };
+
         const sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
-        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({ ...params, sign }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams({
+            ...params,
+            sign,
+        }).toString()}`;
 
         const form = new FormData();
-        form.append("image", fs.createReadStream(tempPath), { filename: `${product.id_product}.jpg`, contentType: "image/jpeg" });
+        form.append("image", fs.createReadStream(tempPath), {
+            filename: `${product.id_product}.jpg`,
+            contentType: "image/jpeg",
+        });
 
-        const response = await axios.post(url, form, { headers: form.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 30000 });
+        const response = await axios.post(url, form, {
+            headers: form.getHeaders(),
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+            timeout: 30000,
+        });
 
         fs.unlinkSync(tempPath);
 
-        const imageUrl = response.data?.data?.image?.url || response.data?.data?.url || response.data?.data?.full_url || null;
-        if (!imageUrl) throw new Error("Gagal upload gambar ke Lazada. Tidak ada URL gambar dalam response.");
+        const imageUrl =
+            response.data?.data?.image?.url ||
+            response.data?.data?.url ||
+            response.data?.data?.full_url ||
+            null;
+
+        if (!imageUrl) throw new Error("Gagal upload gambar ke Lazada, tidak ada URL");
 
         return imageUrl;
     } catch (err) {
@@ -346,6 +367,7 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
 
+        // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -356,44 +378,58 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // Ambil data produk + stok
-        const product = await Product.findOne({ where: { id_product }, include: [{ model: Stok, as: "stok" }] });
+        // 2️⃣ Ambil data produk + stok
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
         if (!product) throw new Error("Produk tidak ditemukan di database");
 
-        const stokTerpilih = selected_unit ? product.stok.find((s) => s.satuan === selected_unit) : product.stok[0];
+        const stokTerpilih = selected_unit
+            ? product.stok.find((s) => s.satuan === selected_unit)
+            : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // Upload gambar
+        // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // Ambil atribut mandatory
+        // 4️⃣ Ambil atribut mandatory untuk category_id
         const requiredAttributesResp = await getCategoryAttributes(category_id);
         const requiredAttributes = requiredAttributesResp.required_attributes || [];
 
-        // Mapping atribut mandatory
-        const attributesObj = { name: product.nama_product, description: product.deskripsi_product || "Deskripsi belum tersedia" };
+        // 5️⃣ Mapping atribut mandatory
+        const attributesObj = {
+            name: product.nama_product,
+            description: product.deskripsi_product || "Deskripsi belum tersedia",
+        };
 
         for (const attr of requiredAttributes) {
             const key = attr.name;
 
+            // Net_Weight harus ID
             if (key === "Net_Weight") {
-                if (!attributes[key]) throw new Error(`Atribut wajib "Net_Weight" belum dikirim di body.attributes`);
+                if (!attributes[key]) throw new Error(`Atribut wajib "Net_Weight" belum dikirim`);
                 attributesObj[key] = String(attributes[key]);
                 continue;
             }
 
-            if (key === "brand") {
-                if (!attributes[key]) throw new Error(`Atribut wajib "brand" belum dikirim di body.attributes`);
-                attributesObj[key] = String(attributes[key]);
-                continue;
-            }
-
+            // price & short_description tidak dimasukkan ke Attributes
             if (["price", "short_description"].includes(key)) continue;
 
-            if (attr.input_type === "numeric" && attributes[key] !== undefined) attributesObj[key] = String(attributes[key]);
+            // brand wajib
+            if (key === "brand") {
+                if (!attributes[key]) throw new Error(`Atribut wajib "brand" belum dikirim`);
+                attributesObj[key] = String(attributes[key]);
+                continue;
+            }
+
+            // package_* numeric
+            if (attr.input_type === "numeric" && attributes[key] !== undefined) {
+                attributesObj[key] = String(attributes[key]);
+            }
         }
 
-        // Payload product + SKU
+        // 6️⃣ Payload produk + SKU
         const productObj = {
             Request: {
                 Product: {
@@ -418,25 +454,57 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // Signing
-        const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
+        // 7️⃣ Signing
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
         const jsonBody = JSON.stringify(productObj);
-        const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
+        const allParamsForSign = { ...sysParams, payload: jsonBody };
+        const sign = generateSign(apiPath, allParamsForSign, appSecret);
 
-        // Kirim request ke Lazada
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        // 8️⃣ Kirim request ke Lazada
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+            ...sysParams,
+            sign,
+        }).toString()}`;
+
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        const response = await axios.post(url, bodyForRequest, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const response = await axios.post(url, bodyForRequest, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
 
-        res.json({ success: true, message: "Produk berhasil ditambahkan ke Lazada.", image_used: uploadedImageUrl, lazada_response: response.data });
+        res.json({
+            success: true,
+            message: "Produk berhasil ditambahkan ke Lazada.",
+            image_used: uploadedImageUrl,
+            lazada_response: response.data,
+        });
 
     } catch (err) {
-        console.error("❌ Lazada Create Product Error:", err);
-        const statusCode = err.response?.status || 500;
-        const errorData = err.response?.data || err.message || "Unknown error";
+        console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
 
-        res.status(statusCode).json({ success: false, error: errorData, message: "Gagal membuat produk di Lazada." });
+        let statusCode = 500;
+        let errorData;
+
+        if (err.response) {
+            statusCode = err.response?.status || 500;
+            errorData = err.response?.data || err.response?.statusText || err.message;
+        } else if (err.request) {
+            errorData = "No response received from Lazada API";
+        } else {
+            errorData = err.message || "Unknown error";
+        }
+
+        res.status(statusCode).json({
+            success: false,
+            error: errorData,
+            message: "Gagal membuat produk di Lazada.",
+        });
     }
 };
 
