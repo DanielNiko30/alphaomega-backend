@@ -518,14 +518,14 @@ const createProductLazada = async (req, res) => {
             });
         }
 
-        // 5️⃣ Product Attributes
+        // 5️⃣ Product Attributes (wajib: name, description, brand)
         const productAttributes = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
-            brand: attributes.brand || 167886, // Default Ellenka
+            brand: attributes.brand || "No Brand", // gunakan No Brand jika tidak ada brand
         };
 
-        // 6️⃣ SKU Attributes
+        // 6️⃣ SKU Attributes dasar
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -534,23 +534,28 @@ const createProductLazada = async (req, res) => {
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
             package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-            package_content: `${product.nama_product} - ${attributes.brand || "Ellenka"}`,
+            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
         };
 
-        // 7️⃣ Tambahkan mandatory attributes ke SKU
+        // 7️⃣ Isi atribut wajib kategori ("Berat Bersih" dll.)
         for (const attr of requiredAttributes) {
             const key = attr.name;
-            if (key === "brand") continue;
+            const code = attr.name_en || attr.name || attr.attribute_type;
 
-            if (attributes[key] !== undefined) {
-                skuAttributes[key] = attributes[key];
-            } else if (attr.input_type === "numeric") {
-                skuAttributes[key] = "1";
-            } else if (attr.input_type === "singleSelect") {
-                skuAttributes[key] = attr.options?.[0]?.id || "";
-            } else {
-                skuAttributes[key] = "";
+            // Pastikan atribut ini tidak duplikat (misal brand sudah ada)
+            if (key.toLowerCase() === "brand") continue;
+
+            let value = attributes[key] || attributes[code] || "";
+
+            if (!value) {
+                if (attr.input_type === "numeric") value = "1";
+                else if (attr.input_type === "singleSelect")
+                    value = attr.options?.[0]?.name || attr.options?.[0]?.id || "";
+                else if (attr.input_type === "text") value = "Default";
             }
+
+            // Simpan atribut ke Attributes (bukan ke Sku)
+            productAttributes[attr.name] = value;
         }
 
         // 8️⃣ Payload Lazada
@@ -565,7 +570,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 9️⃣ Generate Sign
+        // 9️⃣ Generate Signature
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -583,7 +588,7 @@ const createProductLazada = async (req, res) => {
         }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 🔟 Kirim ke Lazada
+        // 🔟 Kirim request ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
