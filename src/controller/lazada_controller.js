@@ -192,6 +192,108 @@ const getProducts = async (req, res) => {
     }
 };
 
+const getAllCategoryAttributes = async (req, res) => {
+    try {
+        // 🔹 Ambil account Lazada
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
+
+        const accessToken = account.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+
+        const apiPath = "/category/attributes/get";
+        const timestamp = Date.now().toString();
+
+        // 🔹 Ambil Category ID dari params / body / query
+        const primaryCategoryId =
+            req.params.category_id ||
+            req.body.category_id ||
+            req.query.category_id;
+
+        if (!primaryCategoryId) {
+            return res.status(400).json({
+                success: false,
+                message: "category_id wajib dikirim di params, body, atau query.",
+            });
+        }
+
+        // 🔹 System params
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
+
+        // 🔹 Business params
+        const businessParams = {
+            primary_category_id: primaryCategoryId,
+            language_code: "id_ID",
+        };
+
+        // 🔹 Gabungkan semua parameter untuk signing
+        const allParamsForSign = { ...sysParams, ...businessParams };
+
+        // 🔹 Generate signature
+        const sign = generateSign(apiPath, allParamsForSign, appSecret);
+
+        // 🔹 Build URL untuk GET request
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+            ...allParamsForSign,
+            sign,
+        }).toString()}`;
+
+        console.log(`📦 Fetching all attributes for category: ${primaryCategoryId}`);
+
+        // 🔹 Request ke Lazada
+        const response = await axios.get(url);
+        const attributes = response.data?.data || [];
+
+        if (!Array.isArray(attributes) || attributes.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `Tidak ada atribut ditemukan untuk Category ID ${primaryCategoryId}.`,
+                lazada_response: response.data,
+            });
+        }
+
+        // 🔹 Mapping semua atribut tanpa filter mandatory
+        const allAttributes = attributes.map(attr => ({
+            id: attr.id,
+            name: attr.name,
+            label: attr.label,
+            input_type: attr.input_type,
+            is_mandatory: attr.is_mandatory,
+            is_key_prop: attr.advanced?.is_key_prop || 0,
+            is_sale_prop: attr.is_sale_prop || 0,
+            options: attr.options?.map(opt => ({
+                id: opt.id,
+                name: opt.name,
+                en_name: opt.en_name
+            })) || []
+        }));
+
+        res.json({
+            success: true,
+            message: `Berhasil mendapatkan semua atribut (${allAttributes.length}) untuk Category ID ${primaryCategoryId}.`,
+            category_id: primaryCategoryId,
+            attributes: allAttributes,
+        });
+
+    } catch (err) {
+        const errorData = err.response?.data || { message: err.message };
+        console.error("❌ Lazada Get All Attributes Error:", errorData);
+
+        res.status(err.response?.status || 500).json({
+            success: false,
+            error: errorData,
+            message: "Gagal mendapatkan atribut dari Lazada.",
+        });
+    }
+};
+
 const getCategoryAttributes = async (req, res) => {
     try {
         // 🔹 Ambil account Lazada
