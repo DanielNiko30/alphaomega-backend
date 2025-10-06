@@ -486,11 +486,11 @@ const createProductLazada = async (req, res) => {
         });
         if (!product) throw new Error("Produk tidak ditemukan di database");
 
+        // 🔹 Pastikan stok satuan yang dipilih ditemukan
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
-        if (!stokTerpilih)
-            throw new Error("Stok untuk satuan tersebut tidak ditemukan");
+        if (!stokTerpilih) throw new Error(`Stok untuk satuan '${selected_unit}' tidak ditemukan`);
 
         // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
@@ -524,14 +524,19 @@ const createProductLazada = async (req, res) => {
             name: product.nama_product,
             brand: attributes.brand || "No Brand",
             description: product.deskripsi_product || "Deskripsi belum tersedia",
-            short_description: attributes.short_description || product.deskripsi_product || "Produk unggulan dari toko kami.",
+            short_description:
+                attributes.short_description ||
+                product.deskripsi_product ||
+                "Produk unggulan dari toko kami.",
         };
 
-        // 6️⃣ SKU dasar
+        // 6️⃣ SKU dasar — ambil harga dari stokTerpilih
+        const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
+
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
-            price: String(stokTerpilih.harga_jual || 1000),
+            price: String(hargaFinal), // ✅ Harga dari stok yang dipilih
             package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
@@ -539,12 +544,11 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
         };
 
-        // 7️⃣ Isi atribut mandatory dari kategori (gunakan name, bukan id)
+        // 7️⃣ Isi atribut mandatory kategori
         for (const attr of requiredAttributes) {
             const keyName = attr.name;
             if (!keyName) continue;
 
-            // lewati atribut yang sudah diisi manual
             if (["brand", "name", "description", "short_description"].includes(keyName)) continue;
 
             const valueFromClient =
@@ -554,24 +558,22 @@ const createProductLazada = async (req, res) => {
                 "";
 
             if (attr.input_type === "enumInput" && typeof valueFromClient === "object" && valueFromClient.value_id) {
-                // jika dropdown enum (misal Bag_Size)
                 skuAttributes[keyName] = String(valueFromClient.value_id);
             } else if (attr.input_type === "enumInput" && typeof valueFromClient === "number") {
                 skuAttributes[keyName] = String(valueFromClient);
             } else if (attr.input_type === "numeric") {
-                // isi nilai numeric default jika kosong
                 skuAttributes[keyName] = String(valueFromClient || 1);
             } else if (attr.input_type === "text") {
                 skuAttributes[keyName] = valueFromClient || `AUTO-${uniqueSuffix}`;
             }
         }
 
-        // ✅ Tambah atribut enum "Bag_Size" jika belum diisi
+        // ✅ Default enum tambahan kalau belum ada
         if (!skuAttributes.Bag_Size) {
-            skuAttributes.Bag_Size = String(attributes.Bag_Size || 58949); // default "Kecil"
+            skuAttributes.Bag_Size = String(attributes.Bag_Size || 58949);
         }
 
-        // 8️⃣ Payload final (sama format dengan dummy)
+        // 8️⃣ Payload final ke Lazada
         const productObj = {
             Request: {
                 Product: {
@@ -611,6 +613,7 @@ const createProductLazada = async (req, res) => {
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
             lazada_response: response.data,
+            harga_digunakan: hargaFinal, // ✅ Debug info harga
             payload_sent: productObj,
         });
     } catch (err) {
