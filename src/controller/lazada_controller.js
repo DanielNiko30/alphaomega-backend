@@ -382,14 +382,14 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // 3️⃣ Upload gambar
+        // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
         // 4️⃣ Ambil atribut mandatory Lazada
         const requiredAttributesResp = await getCategoryAttributes(category_id);
         const requiredAttributes = requiredAttributesResp.required_attributes || [];
 
-        // 5️⃣ Mapping atribut mandatory
+        // 5️⃣ Mapping atribut mandatory (ambil dari body jika tidak ada di DB)
         const attributesObj = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
@@ -398,14 +398,15 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             const key = attr.name;
 
-            if (key === "Net_Weight") {
-                if (!attributes[key]) throw new Error(`Atribut wajib "Net_Weight" belum dikirim`);
+            // Jika ada di body.attributes gunakan itu, jika tidak ambil dari DB atau fallback default
+            if (attributes[key] !== undefined) {
                 attributesObj[key] = String(attributes[key]);
-            } else if (key === "brand") {
-                if (!attributes[key]) throw new Error(`Atribut wajib "brand" belum dikirim`);
-                attributesObj[key] = String(attributes[key]);
-            } else if (attr.input_type === "numeric" && attributes[key] !== undefined) {
-                attributesObj[key] = String(attributes[key]);
+            } else {
+                // Buat fallback default jika DB tidak punya
+                if (key === "brand") attributesObj[key] = "No Brand";
+                else if (key === "Net_Weight") attributesObj[key] = attr.options?.[0]?.id || "127488014";
+                else if (attr.input_type === "numeric") attributesObj[key] = "1";
+                else attributesObj[key] = "";
             }
         }
 
@@ -453,11 +454,16 @@ const createProductLazada = async (req, res) => {
             image_used: uploadedImageUrl,
             lazada_response: response.data,
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
 
-        // ✅ Error handling lebih aman
-        const errorData = err.response?.data || err.request ? "No response from Lazada" : err.message;
+        // ✅ Error handling aman
+        let errorData;
+        if (err.response) errorData = err.response.data || err.response.statusText || err.message;
+        else if (err.request) errorData = "No response from Lazada";
+        else errorData = err.message;
+
         res.status(500).json({
             success: false,
             error: errorData,
