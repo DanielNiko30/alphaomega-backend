@@ -475,7 +475,6 @@ const createProductLazada = async (req, res) => {
         const accessToken = account.access_token.trim();
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
-
         const apiPath = "/product/create";
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
@@ -495,10 +494,36 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Harga final
+        // 4️⃣ Ambil required attributes kategori
+        const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
+        if (!attrResp.data.success || !Array.isArray(attrResp.data.required_attributes)) {
+            throw new Error("Gagal ambil category attributes");
+        }
+        const requiredAttributes = attrResp.data.required_attributes;
+
+        // 5️⃣ Map Net_Weight sesuai berat stok
+        let netWeightId = null;
+        const netWeightAttr = requiredAttributes.find(attr => attr.name === "Net_Weight");
+        if (netWeightAttr && Array.isArray(netWeightAttr.options)) {
+            const beratStokGram = stokTerpilih.berat * 1000; // asumsi stokTerpilih.berat dalam kg
+            // pilih option paling mendekati berat stok
+            let closestOption = netWeightAttr.options[0];
+            let minDiff = Math.abs(beratStokGram - parseInt(closestOption.name));
+            for (const opt of netWeightAttr.options) {
+                const optGram = parseInt(opt.name.replace(/\D/g, '')); // ambil angka dari nama option
+                const diff = Math.abs(beratStokGram - optGram);
+                if (diff < minDiff) {
+                    closestOption = opt;
+                    minDiff = diff;
+                }
+            }
+            netWeightId = closestOption.id;
+        }
+
+        // 6️⃣ Harga final
         const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
 
-        // 5️⃣ Bangun payload JSON
+        // 7️⃣ Bangun payload JSON
         const productObj = {
             Request: {
                 Product: {
@@ -521,8 +546,7 @@ const createProductLazada = async (req, res) => {
                                 package_width: attributes.package_width || 10,
                                 package_weight: attributes.package_weight || 0.5,
                                 package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-                                // opsional: Net_Weight atau Bag_Size
-                                ...(attributes.Net_Weight && { Net_Weight: attributes.Net_Weight }),
+                                ...(netWeightId && { Net_Weight: netWeightId }),
                                 ...(attributes.Bag_Size && { Bag_Size: attributes.Bag_Size }),
                             },
                         ],
@@ -531,7 +555,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 6️⃣ Generate Signature
+        // 8️⃣ Generate Signature
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -539,7 +563,6 @@ const createProductLazada = async (req, res) => {
             timestamp,
             v: "1.0",
         };
-
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
 
@@ -550,12 +573,11 @@ const createProductLazada = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 7️⃣ Kirim ke Lazada
+        // 9️⃣ Kirim ke Lazada
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        // ✅ Berhasil
         res.json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
@@ -564,6 +586,7 @@ const createProductLazada = async (req, res) => {
             payload_sent: productObj,
             lazada_response: response.data,
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err);
         res.status(500).json({
