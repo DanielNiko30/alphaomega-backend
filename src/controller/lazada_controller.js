@@ -479,7 +479,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // === 2️⃣ Ambil produk & stok dari DB ===
+        // === 2️⃣ Ambil data produk dari DB ===
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -495,28 +495,59 @@ const createProductLazada = async (req, res) => {
         // === 3️⃣ Upload gambar ke Lazada ===
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // === 4️⃣ Siapkan data harga & berat ===
-        const hargaFinal =
-            stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
-        const beratFinal = attributes.Net_Weight || 500; // gram (default 500g)
+        // === 4️⃣ Ambil attribute kategori dari backend lokal ===
+        let requiredAttributes = [];
+        try {
+            const attrResp = await axios.get(
+                `https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`
+            );
+            if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
+                requiredAttributes = attrResp.data.required_attributes;
+            }
+        } catch (err) {
+            console.warn("⚠️ Gagal ambil category attributes:", err.message);
+        }
 
-        // === 5️⃣ Brand fix (gunakan ID resmi No Brand: 4484) ===
-        const brandData = {
-            id: 4484,
-            name: "No Brand",
+        // === 5️⃣ Ambil CPV ID dari requiredAttributes ===
+        const brandAttr = requiredAttributes.find((a) => a.name === "brand");
+        const netWeightAttr = requiredAttributes.find((a) => a.name === "Net_Weight");
+
+        // ✅ Brand fix — gunakan CPV ID dari daftar opsi
+        const brandValue =
+            attributes.brand ||
+            brandAttr?.options?.[0]?.id ||
+            4484; // fallback "No Brand"
+
+        // ✅ Net weight fix — gunakan CPV ID dari daftar opsi
+        const netWeightValue =
+            attributes.Net_Weight ||
+            netWeightAttr?.options?.[0]?.id ||
+            134739; // fallback default
+
+        // === 6️⃣ Siapkan data SKU ===
+        const hargaFinal = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
+
+        const skuAttributes = {
+            SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
+            quantity: stokTerpilih.stok || 10,
+            price: hargaFinal,
+            package_height: attributes.package_height || 10,
+            package_length: attributes.package_length || 10,
+            package_width: attributes.package_width || 10,
+            package_weight: attributes.package_weight || 0.5,
+            package_content: `${product.nama_product} - ${brandValue}`,
+            Net_Weight: { value: netWeightValue }, // ✅ wajib kirim { value: <id> }
         };
 
-        // === 6️⃣ Bangun payload produk ===
+        // === 7️⃣ Bangun payload product ===
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: String(category_id),
-                    Images: {
-                        Image: [uploadedImageUrl],
-                    },
+                    Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: product.nama_product,
-                        brand: brandData, // ✅ FIX: gunakan object {id, name}
+                        brand: { value: brandValue }, // ✅ wajib kirim { value: <id> }
                         description:
                             product.deskripsi_product || "Deskripsi belum tersedia.",
                         short_description:
@@ -524,26 +555,12 @@ const createProductLazada = async (req, res) => {
                             product.deskripsi_product ||
                             "Produk unggulan toko kami.",
                     },
-                    Skus: {
-                        Sku: [
-                            {
-                                SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
-                                quantity: stokTerpilih.stok || 10,
-                                price: hargaFinal,
-                                package_height: attributes.package_height || 10,
-                                package_length: attributes.package_length || 10,
-                                package_width: attributes.package_width || 10,
-                                package_weight: attributes.package_weight || 0.5,
-                                package_content: `${product.nama_product} - ${brandData.name}`,
-                                Net_Weight: beratFinal, // ✅ FIX: kirim sebagai angka langsung
-                            },
-                        ],
-                    },
+                    Skus: { Sku: [skuAttributes] },
                 },
             },
         };
 
-        // === 7️⃣ Generate Signature ===
+        // === 8️⃣ Generate Signature ===
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -554,7 +571,6 @@ const createProductLazada = async (req, res) => {
 
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
-
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
             ...sysParams,
             sign,
@@ -562,7 +578,7 @@ const createProductLazada = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // === 8️⃣ Kirim ke Lazada ===
+        // === 9️⃣ Kirim ke Lazada ===
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -572,8 +588,8 @@ const createProductLazada = async (req, res) => {
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
             harga_digunakan: hargaFinal,
-            berat_digunakan: beratFinal,
-            brand_digunakan: brandData,
+            brand_value_used: brandValue,
+            net_weight_value_used: netWeightValue,
             payload_sent: productObj,
             lazada_response: response.data,
         });
