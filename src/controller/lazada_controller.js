@@ -504,7 +504,7 @@ const createProductLazada = async (req, res) => {
         const productAttributes = {};
 
         // === 5a️⃣ Tangani Brand ===
-        let brandData = { id: 4484, name: "No Brand" }; // default
+        let brandData = { id: 4484, name: "No Brand" }; // default seperti createDummyProduct
 
         try {
             // Coba ambil semua brand dari kategori tersebut
@@ -539,7 +539,11 @@ const createProductLazada = async (req, res) => {
             console.warn("⚠️ Tidak bisa ambil brand per kategori, fallback ke No Brand:", err.message);
         }
 
-        productAttributes.brand = brandData;
+        // ✅ Format pengiriman brand sama seperti createDummyProduct
+        productAttributes.brand = {
+            id: brandData.id,
+            name: brandData.name,
+        };
 
         // === 5b️⃣ Isi atribut mandatory lainnya ===
         for (const attr of requiredAttributes) {
