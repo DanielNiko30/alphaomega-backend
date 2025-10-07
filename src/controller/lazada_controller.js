@@ -628,7 +628,7 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: "17935", // Tote Bag Wanita
+                    PrimaryCategory: "18469", // Tote Bag Wanita
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
