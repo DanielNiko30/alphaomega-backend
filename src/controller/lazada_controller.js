@@ -608,7 +608,7 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: "17935", // Tote Bag Wanita
+                    PrimaryCategory: "18469", // Tote Bag Wanita
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
@@ -616,8 +616,8 @@ const createDummyProduct = async (req, res) => {
                         description:
                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        material: "28232", // Canvas
-                        // Bisa tambahkan attribute lain sesuai category
+                        // material: "28232", // Canvas
+                        // // Bisa tambahkan attribute lain sesuai category
                     },
                     Skus: {
                         Sku: [
@@ -629,8 +629,8 @@ const createDummyProduct = async (req, res) => {
                                 package_length: 35,
                                 package_width: 30,
                                 package_weight: 0.2,
-                                package_content: "1x Tote Bag Wanita",
-                                Bag_Size: "58949", // Medium
+                                // package_content: "1x Tote Bag Wanita",
+                                Net_Weight: "166019", // Medium
                             },
                         ],
                     },
