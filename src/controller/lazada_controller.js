@@ -487,15 +487,21 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // Upload gambar
+        // Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // Ambil atribut mandatory Lazada
-        const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
-        if (!attrResp.data?.success || !Array.isArray(attrResp.data.required_attributes))
-            return res.status(400).json({ success: false, message: "Format response atribut tidak sesuai", response_data: attrResp.data });
-
-        const requiredAttributes = attrResp.data.required_attributes;
+        // Ambil atribut mandatory dari category Lazada
+        let requiredAttributes = [];
+        try {
+            const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
+            if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
+                requiredAttributes = attrResp.data.required_attributes;
+            } else {
+                return res.status(400).json({ success: false, message: "Format response atribut tidak sesuai", response_data: attrResp.data });
+            }
+        } catch (err) {
+            return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
+        }
 
         // Mapping atribut mandatory
         const productAttributes = {};
@@ -508,9 +514,20 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // Net_Weight pakai ID Lazada
+            // NET_WEIGHT
             if (keyName === "net_weight") {
-                productAttributes[attr.name] = attributes.Net_Weight; // HARUS string ID Lazada
+                const weightGram = parseFloat(attributes.Net_Weight || 100);
+                let matchedOption = attr.options.find(o => {
+                    let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.'); // hapus spasi & koma
+                    let n = parseFloat(text.replace(/[^\d\.]/g, ''));
+                    if (text.includes('kg')) n *= 1000; // convert kg ke gram
+                    return n === weightGram;
+                });
+                if (!matchedOption) {
+                    // fallback ke "Others"
+                    matchedOption = attr.options.find(o => o.en_name.toLowerCase().includes('other'));
+                }
+                productAttributes[attr.name] = matchedOption.id;
                 continue;
             }
 
@@ -521,7 +538,7 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // Text / default
+            // Text
             productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
         }
 
