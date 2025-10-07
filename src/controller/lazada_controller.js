@@ -488,75 +488,57 @@ const createProductLazada = async (req, res) => {
 
     const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-    // Ambil atribut mandatory Lazada
-    let requiredAttributes = [];
-    try {
-      const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
-      if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
-        requiredAttributes = attrResp.data.required_attributes;
-      } else {
-        return res.status(400).json({ success: false, message: "Format response atribut tidak sesuai", response_data: attrResp.data });
-      }
-    } catch (err) {
-      return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
-    }
+    // Mapping atribut langsung ke catProperty sesuai Lazada
+    const catProperty = {};
 
-    // Mapping atribut
-    const productAttributes = {};
-    for (const attr of requiredAttributes) {
-      const keyName = (attr.name || "").toLowerCase();
-
-      if (keyName === "brand") {
-        productAttributes[attr.name] = attributes.brand || "No Brand";
-        continue;
-      }
-
-      if (keyName === "net_weight") {
-        const weight = parseFloat(attributes.Net_Weight);
-        if (!weight) throw new Error("Net_Weight wajib diisi");
-
-        // Map berat ke option Lazada otomatis
-        productAttributes[attr.name] = mapWeightToLazadaOption(weight, attr.options);
-        continue;
-      }
-
-      if (attr.input_type === "numeric") {
-        const val = attributes[attr.name] !== undefined ? attributes[attr.name] : 1;
-        productAttributes[attr.name] = String(val);
-        continue;
-      }
-
-      productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
-    }
-
-    // Title/deskripsi
-    productAttributes.name = product.nama_product;
-    productAttributes.description = product.deskripsi_product || "Deskripsi belum tersedia";
-    productAttributes.short_description = product.deskripsi_product?.slice(0, 100) || "Short description";
-
-    // SKU
-    const skuAttributes = {
-      SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
-      quantity: String(stokTerpilih.stok),
-      price: String(stokTerpilih.harga_jual || 1000),
-      package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
-      package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
-      package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
-      package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-      package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
+    // Brand
+    catProperty["p-20000"] = {
+      value: 0,
+      text: attributes.brand || "No Brand"
     };
+
+    // Net Weight
+    const weight = attributes.Net_Weight || 0;
+    catProperty["p-120008822"] = {
+      unit: "g",       // Lazada expects "g", "kg", atau "mg"
+      text: String(weight)
+    };
+
+    // Package/sku
+    const sku = [{
+      props: [],
+      active: true,
+      price: stokTerpilih.harga_jual || 1000,
+      quantity: stokTerpilih.stok,
+      oldQuantity: 0
+    }];
 
     const productObj = {
-      Request: {
-        Product: {
-          PrimaryCategory: category_id,
-          Images: { Image: [uploadedImageUrl] },
-          Attributes: productAttributes,
-          Skus: { Sku: [skuAttributes] }
-        }
-      }
+      global: {
+        sellerId: account.seller_id || 0,
+        render_tag: uniqueSuffix,
+        renderTimestamp: Date.now()
+      },
+      title: [
+        { label: "Indonesian", value: product.nama_product, key: "in_ID" },
+        { label: "English", value: product.nama_product, key: "en_ID" }
+      ],
+      categoryPath: { id: category_id },
+      catProperty,
+      description: { html: {}, type: "html" },
+      shortDescription: [
+        { label: "Indonesian", key: "in_ID" },
+        { label: "English", key: "en_ID" }
+      ],
+      packageContent: [
+        { label: "Indonesian", key: "in_ID" },
+        { label: "English", key: "en_ID" }
+      ],
+      sku,
+      mainImage: [{ url: uploadedImageUrl }]
     };
 
+    // Signature & Request
     const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
     const jsonBody = JSON.stringify(productObj);
     const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
@@ -572,28 +554,6 @@ const createProductLazada = async (req, res) => {
     res.status(500).json({ success: false, error: err.response?.data || err.message, message: "Gagal membuat produk di Lazada." });
   }
 };
-
-// Helper → mapping berat ke option.id Lazada
-function mapWeightToLazadaOption(weight, options) {
-  if (!weight || !options?.length) throw new Error("Weight atau options tidak tersedia");
-
-  // cari option yang match (dalam gram)
-  let matchedOption = options.find(o => {
-    let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.');
-    let n = parseFloat(text.replace(/[^\d\.]/g, ''));
-    if (text.includes('kg')) n *= 1000;
-    if (text.includes('mg')) n /= 1000;
-    return n === weight;
-  });
-
-  // fallback ke "Other" kalau nggak ada
-  if (!matchedOption) {
-    matchedOption = options.find(o => o.en_name.toLowerCase().includes('other'));
-    if (!matchedOption) throw new Error("Net_Weight tidak ada di Lazada options, dan 'Other' tidak tersedia");
-  }
-
-  return matchedOption.id;
-}
 
 const createDummyProduct = async (req, res) => {
     try {
