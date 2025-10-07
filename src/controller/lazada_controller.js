@@ -627,7 +627,7 @@ const createDummyProduct = async (req, res) => {
         const productObj = {
             Request: {
                 Product: {
-                    PrimaryCategory: "18469", // Tote Bag Wanita
+                    PrimaryCategory: "17935", // Tote Bag Wanita
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
@@ -649,8 +649,7 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
-                                Net_Weight: 500,
-                                unit_metric: "5450" // Medium
+                                Bag_Size: "60766"
                             },
                         ],
                     },
