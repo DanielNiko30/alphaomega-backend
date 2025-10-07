@@ -521,9 +521,10 @@ const createProductLazada = async (req, res) => {
                     // Mapping dari angka gram/selected_unit ke Lazada option ID
                     const weightGrams = attributes.Net_Weight || 100; // default 100 g
                     let matchedOption = attr.options.find(o => {
-                        const n = parseFloat(o.en_name.replace(/[^\d\.]/g, '')); // ambil angka
-                        if (o.en_name.includes('kg')) return weightGrams / 1000 === n;
-                        return weightGrams === n;
+                        let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.'); // hapus spasi & ubah koma
+                        let n = parseFloat(text.replace(/[^\d\.]/g, '')); // ambil angka
+                        if (text.includes('kg')) n *= 1000; // convert kg ke gram
+                        return n === weightGrams;
                     });
                     productAttributes[attr.name] = matchedOption ? matchedOption.id : attr.options[0].id;
                 } else {
