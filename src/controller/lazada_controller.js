@@ -674,11 +674,13 @@ const createDummyProduct = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Upload gambar dari DB PRO007
-        const uploadedImageUrl = await uploadImageToLazadaFromDB(accessToken);
-        console.log("✅ Uploaded Image URL:", uploadedImageUrl);
+        // 2️⃣ Pakai URL gambar langsung
+        const uploadedImageUrl =
+            "https://ae01.alicdn.com/kf/S4b0a02ef50ab42ac805f39ab31d4cf30r/3-Pieces-Boho-Canvas-Tote-Bag-Reusable-Aesthetic-Canvas-Bag-Minimalist-Canvas-Totes-School-Shoulder-Bag-For.jpg";
 
-        // 3️⃣ Payload produk
+        console.log("✅ Menggunakan gambar URL langsung:", uploadedImageUrl);
+
+        // 3️⃣ Payload produk (kategori: Tote Bag Wanita - 17935)
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -695,9 +697,11 @@ const createDummyProduct = async (req, res) => {
                     Attributes: {
                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
                         brand: "No Brand",
-                        description: "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
+                        description:
+                            "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        material: "28232",
+                        material: "28232", // Canvas
+                        // Bisa tambahkan attribute lain sesuai category
                     },
                     Skus: {
                         Sku: [
@@ -710,7 +714,7 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
-                                Bag_Size: "58949",
+                                Bag_Size: "58949", // Medium
                             },
                         ],
                     },
@@ -730,28 +734,23 @@ const createDummyProduct = async (req, res) => {
 
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
+        // 5️⃣ Kirim request
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
+        // ✅ Success
         res.json({
             success: true,
-            message: "Produk dummy berhasil dibuat menggunakan gambar dari PRO007.",
+            message: "Produk dummy berhasil dibuat (kategori Tote Bag Wanita).",
             image_used: uploadedImageUrl,
-            request: {
-                apiPath,
-                sysParams,
-                sign,
-                url,
-                bodyStrForRequest: bodyForRequest.toString(),
-            },
             lazada_response: response.data,
         });
     } catch (err) {
-        console.error("❌ Create Dummy Product Error:", err);
+        console.error("❌ Create Dummy Product Error:", err.response?.data || err.message);
         res.status(500).json({
-            error: { message: err.message },
-            message: "Gagal membuat produk dummy dari BLOB.",
+            error: err.response?.data || err.message,
+            message: "Gagal membuat produk dummy ke Lazada.",
         });
     }
 };
