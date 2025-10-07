@@ -462,10 +462,7 @@ const createProductLazada = async (req, res) => {
         const { category_id, selected_unit, attributes = {} } = req.body;
 
         if (!category_id) {
-            return res.status(400).json({
-                success: false,
-                message: "category_id wajib dikirim di body",
-            });
+            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
         }
 
         // 1️⃣ Ambil akun Lazada
@@ -531,6 +528,10 @@ const createProductLazada = async (req, res) => {
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
                     break;
                 default:
+                    // Jika ada attribute tambahan dari user
+                    if (attributes[attr.name] !== undefined) {
+                        productAttributes[attr.name] = attributes[attr.name];
+                    }
                     break;
             }
         }
@@ -577,10 +578,7 @@ const createProductLazada = async (req, res) => {
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
 
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
-            ...sysParams,
-            sign,
-        }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
         // 8️⃣ Kirim request ke Lazada
@@ -807,7 +805,7 @@ const getBrands = async (req, res) => {
 const checkNoBrand = async (req, res) => {
     try {
         const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) 
+        if (!lazadaData?.access_token)
             return res.status(400).json({ error: "Token Lazada not found" });
 
         const access_token = lazadaData.access_token;
@@ -816,13 +814,13 @@ const checkNoBrand = async (req, res) => {
         const { startPage = 1, pageSize = 50 } = req.query;
 
         const startRow = (Number(startPage) - 1) * Number(pageSize);
-        const params = { 
-            app_key: process.env.LAZADA_APP_KEY, 
-            sign_method: "sha256", 
-            timestamp, 
-            access_token, 
-            startRow, 
-            pageSize 
+        const params = {
+            app_key: process.env.LAZADA_APP_KEY,
+            sign_method: "sha256",
+            timestamp,
+            access_token,
+            startRow,
+            pageSize
         };
 
         params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
