@@ -638,7 +638,7 @@ const createDummyProduct = async (req, res) => {
                         short_description: "Tote Bag Kanvas API Test.",
                         material: "28232", // Canvas
                         Net_Weight: 500,
-                        unit_metric: "5450"
+                        unit_metric: "G"
                     },
                     Skus: {
                         Sku: [
