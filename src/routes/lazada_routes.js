@@ -11,7 +11,8 @@ const {
     getProducts,
     createDummyProduct,
     getCategoryAttributes,
-    getAllCategoryAttributes
+    getAllCategoryAttributes,
+    checkNoBrand
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -25,5 +26,6 @@ router.get("/category/attribute/:category_id", getCategoryAttributes);
 router.get("/brands", getBrands);
 router.get("/products", getProducts);
 router.get("/category/attributes/:category_id?", getAllCategoryAttributes);
+router.get("/check-no-brand", checkNoBrand);
 
 module.exports = router;

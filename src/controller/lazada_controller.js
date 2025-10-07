@@ -804,6 +804,51 @@ const getBrands = async (req, res) => {
     }
 };
 
+const checkNoBrand = async (req, res) => {
+    try {
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) 
+            return res.status(400).json({ error: "Token Lazada not found" });
+
+        const access_token = lazadaData.access_token;
+        const API_PATH = "/category/brands/query";
+        const timestamp = String(Date.now());
+        const { startPage = 1, pageSize = 50 } = req.query;
+
+        const startRow = (Number(startPage) - 1) * Number(pageSize);
+        const params = { 
+            app_key: process.env.LAZADA_APP_KEY, 
+            sign_method: "sha256", 
+            timestamp, 
+            access_token, 
+            startRow, 
+            pageSize 
+        };
+
+        params.sign = generateSign(API_PATH, params, process.env.LAZADA_APP_SECRET);
+
+        const url = `https://api.lazada.co.id/rest${API_PATH}?${new URLSearchParams(params).toString()}`;
+        const response = await axios.get(url);
+
+        const brands = response.data?.data?.module || [];
+
+        // Filter apakah ada No Brand
+        const noBrand = brands.find(b => b.name.toLowerCase() === "no brand");
+
+        return res.json({
+            success: true,
+            total_brands: brands.length,
+            hasNoBrand: !!noBrand,
+            noBrandData: noBrand || null,
+            allBrands: brands
+        });
+    } catch (err) {
+        console.error("❌ Lazada Check No Brand Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
+};
+
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
@@ -816,4 +861,5 @@ module.exports = {
     createDummyProduct,
     getCategoryAttributes,
     getAllCategoryAttributes,
+    checkNoBrand
 };
