@@ -464,7 +464,7 @@ const createProductLazada = async (req, res) => {
         if (!category_id)
             return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
 
-        // 1️⃣ Ambil akun Lazada
+        // Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -475,7 +475,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk dari DB
+        // Ambil data produk dari DB
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -487,10 +487,10 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // 3️⃣ Upload gambar ke Lazada
+        // Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut mandatory dari category Lazada
+        // Ambil atribut mandatory dari category Lazada
         let requiredAttributes = [];
         try {
             const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
@@ -503,7 +503,7 @@ const createProductLazada = async (req, res) => {
             return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
         }
 
-        // 5️⃣ Mapping atribut mandatory
+        // Mapping atribut mandatory
         const productAttributes = {};
         for (const attr of requiredAttributes) {
             const keyName = (attr.name || "").toLowerCase();
@@ -515,25 +515,20 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // Numeric wajib pakai ID dari options jika ada (Net_Weight)
-            if (attr.input_type === "numeric") {
-                if (attr.options && attr.options.length > 0 && keyName === "net_weight") {
-                    // Mapping dari angka gram ke Lazada option ID
-                    const weightGrams = Number(attributes.Net_Weight) || 100; // default 100 g
-                    let matchedOption = attr.options.find(o => {
-                        let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.'); // hapus spasi & ubah koma
-                        let n = parseFloat(text.replace(/[^\d\.]/g, '')); // ambil angka
-                        if (text.includes('kg')) n *= 1000; // convert kg ke gram
-                        return n === weightGrams;
-                    });
-                    productAttributes[attr.name] = matchedOption ? String(matchedOption.id) : String(attr.options[0].id);
-                } else {
-                    productAttributes[attr.name] = String(attributes[attr.name] || 1);
-                }
+            // Net_Weight pakai ID langsung dari Postman
+            if (keyName === "net_weight") {
+                productAttributes[attr.name] = attributes.Net_Weight; // langsung ID Lazada
                 continue;
             }
 
-            // Text wajib default nama produk
+            // Numeric lain
+            if (attr.input_type === "numeric") {
+                const val = attributes[attr.name] !== undefined ? attributes[attr.name] : "1";
+                productAttributes[attr.name] = String(val);
+                continue;
+            }
+
+            // Text
             productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
         }
 
@@ -542,10 +537,10 @@ const createProductLazada = async (req, res) => {
         productAttributes.description = product.deskripsi_product || "Deskripsi belum tersedia";
         productAttributes.short_description = product.deskripsi_product?.slice(0, 100) || "Short description";
 
-        // 6️⃣ SKU
+        // SKU
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
-            quantity: stokTerpilih.stok,
+            quantity: String(stokTerpilih.stok),
             price: String(stokTerpilih.harga_jual || 1000),
             package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
@@ -554,7 +549,7 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
         };
 
-        // 7️⃣ Payload final
+        // Payload final
         const productObj = {
             Request: {
                 Product: {
@@ -566,7 +561,7 @@ const createProductLazada = async (req, res) => {
             }
         };
 
-        // 8️⃣ Signature & Request
+        // Signature & Request
         const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
