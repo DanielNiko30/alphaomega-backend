@@ -518,8 +518,19 @@ const createProductLazada = async (req, res) => {
             // Numeric wajib pakai ID dari options jika ada (Net_Weight)
             if (attr.input_type === "numeric") {
                 if (attr.options && attr.options.length > 0) {
-                    // ambil ID dari options atau pakai value yang dikirim
-                    productAttributes[attr.name] = attributes[attr.name] || attr.options[0].id;
+                    // contoh: mapping Net_Weight sesuai value dari attributes
+                    if (attr.name === "Net_Weight" && attributes.Net_Weight) {
+                        // cari option ID yang sesuai berat
+                        const matchedOption = attr.options.find(o => o.id === Number(attributes.Net_Weight) || o.name.includes(attributes.Net_Weight));
+                        if (matchedOption) {
+                            productAttributes[attr.name] = matchedOption.id;
+                        } else {
+                            // default ke option pertama jika nggak match
+                            productAttributes[attr.name] = attr.options[0].id;
+                        }
+                    } else {
+                        productAttributes[attr.name] = attributes[attr.name] || attr.options[0].id;
+                    }
                 } else {
                     productAttributes[attr.name] = attributes[attr.name] || 1;
                 }
@@ -616,8 +627,8 @@ const createDummyProduct = async (req, res) => {
                         description:
                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        // material: "28232", // Canvas
-                        // // Bisa tambahkan attribute lain sesuai category
+                        material: "28232", // Canvas
+                        // Bisa tambahkan attribute lain sesuai category
                     },
                     Skus: {
                         Sku: [
@@ -629,8 +640,8 @@ const createDummyProduct = async (req, res) => {
                                 package_length: 35,
                                 package_width: 30,
                                 package_weight: 0.2,
-                                // package_content: "1x Tote Bag Wanita",
-                                Net_Weight: "166019", // Medium
+                                package_content: "1x Tote Bag Wanita",
+                                Bag_Size: "58949", // Medium
                             },
                         ],
                     },
