@@ -528,7 +528,7 @@ const createProductLazada = async (req, res) => {
                     productAttributes.package_weight = attributes.package_weight || 0.5;
                     break;
                 case "price":
-                    productAttributes.price = attributes.price || stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
+                    productAttributes.price = attributes.price || stokTerpilih.harga_jual || stokTerpilih.harga_beli || 1000;
                     break;
                 case "SellerSku":
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
