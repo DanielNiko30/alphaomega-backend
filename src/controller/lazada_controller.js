@@ -491,13 +491,13 @@ const createProductLazada = async (req, res) => {
     // Upload gambar
     const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-    // Mapping atribut sederhana
+    // Atribut produk sederhana, berat bersih langsung string
     const productAttributes = {
       name: product.nama_product,
       brand: attributes.brand || "No Brand",
       description: product.deskripsi_product || "Deskripsi belum tersedia",
       short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
-      net_weight: attributes.Net_Weight ? `${attributes.Net_Weight} g` : "500 g", // hanya berat bersih
+      Net_Weight: attributes.Net_Weight ? `${attributes.Net_Weight} g` : "500 g", // BERAT BERSIH
     };
 
     // SKU
