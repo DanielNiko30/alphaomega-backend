@@ -544,36 +544,61 @@ const createProductLazada = async (req, res) => {
             const keyName = attr.name?.toLowerCase() || "";
             const labelName = attr.label?.toLowerCase() || "";
 
-            if (keyName === "brand") continue;
+            // 🔒 BRAND tidak disentuh
+            if (keyName === "brand" || labelName.includes("brand")) continue;
 
+            // Ambil value dari body attributes (bisa dari nama, label, atau id)
             let value =
                 attributes[attr.name] ||
                 attributes[attr.label] ||
                 attributes[attrId] ||
                 "";
 
-            // 🔹 Jika user kirim object { value_id }, langsung gunakan
+            // 🔹 Jika user kirim object { value_id }
             if (typeof value === "object" && value.value_id) {
                 productAttributes[attrId] = { value_id: Number(value.value_id) };
                 continue;
             }
 
-            // 🔹 Jika atribut "Berat Bersih" (Net_Weight)
-            if (keyName.includes("net_weight") || labelName.includes("berat")) {
+            // 🔹 Handle khusus: Net Weight / Berat Bersih
+            if (
+                keyName.includes("net_weight") ||
+                labelName.includes("berat bersih") ||
+                labelName.includes("net weight")
+            ) {
                 const netWeightValue =
                     typeof attributes.Net_Weight === "object"
                         ? attributes.Net_Weight.value_id
-                        : attributes.Net_Weight;
+                        : attributes.Net_Weight || value;
 
                 if (!netWeightValue) {
-                    throw new Error("Net_Weight wajib memiliki value_id (misal 231651 untuk 500g)");
+                    throw new Error(
+                        `Attribute "Berat Bersih / Net Weight" wajib diisi. Gunakan value_id yang valid dari getCategoryAttributes(${category_id}).`
+                    );
                 }
 
                 productAttributes[attrId] = { value_id: Number(netWeightValue) };
                 continue;
             }
 
-            // 🔹 Jika atribut numeric tapi kosong, isi default 1
+            // 🔹 Handle khusus: Bag Size
+            if (labelName.includes("bag size") || keyName.includes("bag_size")) {
+                const bagSizeValue =
+                    typeof attributes.Bag_Size === "object"
+                        ? attributes.Bag_Size.value_id
+                        : attributes.Bag_Size || value;
+
+                if (!bagSizeValue) {
+                    throw new Error(
+                        `Attribute "Bag Size" wajib diisi. Gunakan value_id yang valid dari getCategoryAttributes(${category_id}).`
+                    );
+                }
+
+                productAttributes[attrId] = { value_id: Number(bagSizeValue) };
+                continue;
+            }
+
+            // 🔹 Kalau numeric tapi kosong → isi default 1
             if (!value && attr.input_type === "numeric") {
                 value = "1";
             }
