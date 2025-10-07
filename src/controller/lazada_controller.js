@@ -503,8 +503,14 @@ const createProductLazada = async (req, res) => {
         for (const attr of requiredAttributes) {
             switch (attr.name) {
                 case "brand":
-                    // selalu kirim No Brand jika user tidak input brand
-                    productAttributes.brand = attributes.brand?.trim() || "No Brand";
+                    // jika user input "No Brand" -> otomatis 4484
+                    if (attributes.brand?.toLowerCase?.() === "no brand") {
+                        productAttributes.brand = 4484;
+                    } else if (attributes.brand_id) {
+                        productAttributes.brand = attributes.brand_id; // jika user input ID langsung
+                    } else {
+                        throw new Error("Brand wajib diisi atau gunakan 'No Brand'");
+                    }
                     break;
                 case "Net_Weight":
                     productAttributes.Net_Weight = attributes.Net_Weight || 0;
@@ -522,7 +528,7 @@ const createProductLazada = async (req, res) => {
                     productAttributes.package_weight = attributes.package_weight || 0.5;
                     break;
                 case "price":
-                    productAttributes.price = stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
+                    productAttributes.price = attributes.price || stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
                     break;
                 case "SellerSku":
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
@@ -594,6 +600,7 @@ const createProductLazada = async (req, res) => {
             payload_sent: productObj,
             lazada_response: response.data,
         });
+
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         res.status(500).json({
