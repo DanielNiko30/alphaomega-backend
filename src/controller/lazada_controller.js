@@ -479,7 +479,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk
+        // 2️⃣ Ambil data produk dari DB
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -495,7 +495,7 @@ const createProductLazada = async (req, res) => {
         // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut kategori
+        // 4️⃣ Ambil atribut kategori dari API lokal
         let requiredAttributes = [];
         try {
             const attrResp = await axios.get(
@@ -523,7 +523,6 @@ const createProductLazada = async (req, res) => {
         const productAttributes = {
             name: product.nama_product,
             description: product.deskripsi_product || "Deskripsi belum tersedia",
-            brand: attributes.brand || "No Brand",
         };
 
         // 6️⃣ SKU dasar
@@ -535,54 +534,53 @@ const createProductLazada = async (req, res) => {
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
             package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
+            package_content: `${product.nama_product}`,
         };
 
-        // 7️⃣ Mapping atribut wajib
+        // 7️⃣ Mapping atribut wajib (dari response kategori)
         for (const attr of requiredAttributes) {
             const attrId = attr.id;
-            const keyName = attr.name?.toLowerCase() || "";
-            const labelName = attr.label?.toLowerCase() || "";
+            const attrName = attr.name?.toLowerCase() || "";
+            const attrLabel = attr.label?.toLowerCase() || "";
 
-            if (keyName === "brand") continue;
+            // Skip yang otomatis diisi
+            if (["package_height", "package_width", "package_length", "package_weight", "price", "seller_sku"].includes(attrName)) continue;
 
-            let value =
-                attributes[attr.name] ||
-                attributes[attr.label] ||
-                attributes[attrId] ||
-                "";
-
-            // 🔹 Jika user kirim object { value_id }, langsung gunakan
-            if (typeof value === "object" && value.value_id) {
-                productAttributes[attrId] = { value_id: Number(value.value_id) };
+            // === BRAND ===
+            if (attrName === "brand") {
+                // Gunakan CPV ID (bukan string)
+                if (typeof attributes.brand === "object" && attributes.brand.value_id) {
+                    productAttributes[attrId] = { value_id: Number(attributes.brand.value_id) };
+                } else if (typeof attributes.brand === "number") {
+                    productAttributes[attrId] = { value_id: attributes.brand };
+                } else {
+                    productAttributes[attrId] = { value_id: 4484 }; // default "No Brand"
+                }
                 continue;
             }
 
-            // 🔹 Jika atribut "Berat Bersih" (Net_Weight)
-            if (keyName.includes("net_weight") || labelName.includes("berat")) {
-                const netWeightValue =
+            // === NET WEIGHT (BERAT BERSIH) ===
+            if (attrName.includes("net_weight") || attrLabel.includes("berat")) {
+                const netValue =
                     typeof attributes.Net_Weight === "object"
                         ? attributes.Net_Weight.value_id
                         : attributes.Net_Weight;
 
-                if (!netWeightValue) {
-                    throw new Error("Net_Weight wajib memiliki value_id (misal 231651 untuk 500g)");
+                if (!netValue) {
+                    throw new Error("Net_Weight wajib memiliki value_id, contoh: 231651 (500 g)");
                 }
 
-                productAttributes[attrId] = { value_id: Number(netWeightValue) };
+                productAttributes[attrId] = { value_id: Number(netValue) };
                 continue;
             }
 
-            // 🔹 Jika atribut numeric tapi kosong, isi default 1
-            if (!value && attr.input_type === "numeric") {
-                value = "1";
-            }
-
-            // 🔹 Default simpan value string
-            productAttributes[attrId] = value;
+            // === Default text/numeric value ===
+            let value = attributes[attr.name] || attributes[attr.label] || "";
+            if (!value && attr.input_type === "numeric") value = "1";
+            if (value) productAttributes[attrId] = value;
         }
 
-        // 8️⃣ Payload final ke Lazada
+        // 8️⃣ Bangun payload final
         const productObj = {
             Request: {
                 Product: {
@@ -622,6 +620,7 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
+            lazada_payload: productObj,
             lazada_response: response.data,
         });
     } catch (err) {
@@ -629,8 +628,8 @@ const createProductLazada = async (req, res) => {
 
         res.status(500).json({
             success: false,
-            error: err.response?.data || err.message,
             message: "Gagal membuat produk di Lazada.",
+            error: err.response?.data || err.message,
         });
     }
 };
