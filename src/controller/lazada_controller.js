@@ -457,7 +457,6 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
     }
 }
 
-// ✅ Controller create product Lazada (versi unit internal bebas)
 const createProductLazada = async (req, res) => {
   try {
     const { id_product } = req.params;
@@ -507,29 +506,26 @@ const createProductLazada = async (req, res) => {
     for (const attr of requiredAttributes) {
       const keyName = (attr.name || "").toLowerCase();
 
-      // Brand
       if (keyName === "brand") {
         productAttributes[attr.name] = attributes.brand || "No Brand";
         continue;
       }
 
-      // Net_Weight → otomatis map ke option.id Lazada
       if (keyName === "net_weight") {
-        const weightBody = String(attributes.Net_Weight || "").trim().toLowerCase();
-        if (!weightBody) throw new Error("Net_Weight wajib diisi");
+        const weight = parseFloat(attributes.Net_Weight);
+        if (!weight) throw new Error("Net_Weight wajib diisi");
 
-        productAttributes[attr.name] = mapWeightToLazadaOption(weightBody, attr.options);
+        // Map berat ke option Lazada otomatis
+        productAttributes[attr.name] = mapWeightToLazadaOption(weight, attr.options);
         continue;
       }
 
-      // Numeric lain
       if (attr.input_type === "numeric") {
         const val = attributes[attr.name] !== undefined ? attributes[attr.name] : 1;
         productAttributes[attr.name] = String(val);
         continue;
       }
 
-      // Text fallback
       productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
     }
 
@@ -561,7 +557,6 @@ const createProductLazada = async (req, res) => {
       }
     };
 
-    // Signature & Request
     const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
     const jsonBody = JSON.stringify(productObj);
     const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
@@ -579,31 +574,19 @@ const createProductLazada = async (req, res) => {
 };
 
 // Helper → mapping berat ke option.id Lazada
-function mapWeightToLazadaOption(weightBody, options) {
-  if (!weightBody || !options?.length) throw new Error("Weight atau options tidak tersedia");
+function mapWeightToLazadaOption(weight, options) {
+  if (!weight || !options?.length) throw new Error("Weight atau options tidak tersedia");
 
-  // contoh input: "500", "500g", "0.5kg"
-  let weightGram;
-  if (weightBody.endsWith("kg")) {
-    weightGram = parseFloat(weightBody.replace("kg", "")) * 1000;
-  } else if (weightBody.endsWith("mg")) {
-    weightGram = parseFloat(weightBody.replace("mg", "")) / 1000;
-  } else if (weightBody.endsWith("g")) {
-    weightGram = parseFloat(weightBody.replace("g", ""));
-  } else {
-    weightGram = parseFloat(weightBody); // asumsi gram default
-  }
-
-  // cari option Lazada yang cocok
+  // cari option yang match (dalam gram)
   let matchedOption = options.find(o => {
-    const text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.');
+    let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.');
     let n = parseFloat(text.replace(/[^\d\.]/g, ''));
     if (text.includes('kg')) n *= 1000;
     if (text.includes('mg')) n /= 1000;
-    return n === weightGram;
+    return n === weight;
   });
 
-  // fallback ke "Other"
+  // fallback ke "Other" kalau nggak ada
   if (!matchedOption) {
     matchedOption = options.find(o => o.en_name.toLowerCase().includes('other'));
     if (!matchedOption) throw new Error("Net_Weight tidak ada di Lazada options, dan 'Other' tidak tersedia");
