@@ -514,10 +514,9 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // NET_WEIGHT
-            // Di bagian mapping atribut
             if (keyName === "net_weight") {
                 const weightGram = parseFloat(attributes.Net_Weight || 100);
+                // Cari opsi di required_attributes
                 let matchedOption = attr.options.find(o => {
                     let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.');
                     let n = parseFloat(text.replace(/[^\d\.]/g, ''));
@@ -525,13 +524,11 @@ const createProductLazada = async (req, res) => {
                     return n === weightGram;
                 });
                 if (!matchedOption) {
-                    // fallback ke "Others" jika berat tidak ada di list
+                    // fallback ke "Others"
                     matchedOption = attr.options.find(o => o.en_name.toLowerCase().includes('other'));
-                    if (!matchedOption) {
-                        throw new Error("Tidak ada opsi Net_Weight valid di Lazada (tidak ada 'Others')");
-                    }
+                    if (!matchedOption) throw new Error("Net_Weight tidak ada di Lazada options");
                 }
-                productAttributes[attr.name] = matchedOption.id;
+                productAttributes[attr.name] = matchedOption.id; // <-- ID option yang dikirim ke Lazada
                 continue;
             }
 
