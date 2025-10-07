@@ -494,7 +494,7 @@ const createProductLazada = async (req, res) => {
         // === 3️⃣ Upload gambar ke Lazada ===
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // === 4️⃣ Ambil atribut mandatory kategori (opsional, bisa dipakai nanti) ===
+        // === 4️⃣ Ambil atribut mandatory kategori ===
         const requiredRes = await axios.get("https://api.lazada.co.id/rest/category/attributes", {
             params: { category_id, access_token: accessToken, app_key: apiKey },
         });
@@ -504,15 +504,42 @@ const createProductLazada = async (req, res) => {
         const productAttributes = {};
 
         // === 5a️⃣ Tangani Brand ===
-        if (attributes.brand_id && attributes.brand_name) {
-            productAttributes.brand = {
-                id: attributes.brand_id,
-                name: attributes.brand_name,
-            };
-        } else {
-            // default ke No Brand
-            productAttributes.brand = { id: 4484, name: "No Brand" };
+        let brandData = { id: 4484, name: "No Brand" }; // default
+
+        try {
+            // Coba ambil semua brand dari kategori tersebut
+            const brandRes = await axios.get("https://api.lazada.co.id/rest/category/brands/get", {
+                params: {
+                    category_id,
+                    access_token: accessToken,
+                    app_key: apiKey,
+                },
+            });
+
+            const allBrands = brandRes?.data?.data || [];
+            const brandName = attributes.brand_name?.trim()?.toLowerCase();
+
+            const matchedBrand = allBrands.find(
+                (b) => b.name?.toLowerCase() === brandName || b.global_identifier?.toLowerCase() === brandName
+            );
+
+            if (matchedBrand) {
+                brandData = {
+                    id: matchedBrand.brand_id,
+                    name: matchedBrand.name,
+                };
+            } else if (attributes.brand_id && attributes.brand_name) {
+                // fallback kalau user sudah kirim brand manual tapi tidak cocok di kategori
+                brandData = {
+                    id: attributes.brand_id,
+                    name: attributes.brand_name,
+                };
+            }
+        } catch (err) {
+            console.warn("⚠️ Tidak bisa ambil brand per kategori, fallback ke No Brand:", err.message);
         }
+
+        productAttributes.brand = brandData;
 
         // === 5b️⃣ Isi atribut mandatory lainnya ===
         for (const attr of requiredAttributes) {
@@ -609,6 +636,7 @@ const createProductLazada = async (req, res) => {
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
             harga_digunakan: productAttributes.price,
+            brand_digunakan: brandData,
             payload_sent: productObj,
             lazada_response: response.data,
         });
