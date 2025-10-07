@@ -462,10 +462,13 @@ const createProductLazada = async (req, res) => {
         const { category_id, selected_unit, attributes = {} } = req.body;
 
         if (!category_id) {
-            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
+            return res.status(400).json({
+                success: false,
+                message: "category_id wajib dikirim di body",
+            });
         }
 
-        // 1️⃣ Ambil akun Lazada
+        // === 1️⃣ Ambil akun Lazada ===
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -476,7 +479,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk
+        // === 2️⃣ Ambil data produk dari DB ===
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -488,30 +491,34 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error(`Stok untuk satuan '${selected_unit}' tidak ditemukan`);
 
-        // 3️⃣ Upload gambar
+        // === 3️⃣ Upload gambar ke Lazada ===
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil required attributes Lazada
-        const requiredRes = await axios.get(`https://api.lazada.co.id/rest/category/attributes`, {
+        // === 4️⃣ Ambil atribut mandatory kategori (opsional, bisa dipakai nanti) ===
+        const requiredRes = await axios.get("https://api.lazada.co.id/rest/category/attributes", {
             params: { category_id, access_token: accessToken, app_key: apiKey },
         });
         const requiredAttributes = requiredRes.data.required_attributes || [];
 
-        // 5️⃣ Build attributes payload
+        // === 5️⃣ Build atribut produk ===
         const productAttributes = {};
 
+        // === 5a️⃣ Tangani Brand ===
+        if (attributes.brand_id && attributes.brand_name) {
+            productAttributes.brand = {
+                id: attributes.brand_id,
+                name: attributes.brand_name,
+            };
+        } else {
+            // default ke No Brand
+            productAttributes.brand = { id: 4484, name: "No Brand" };
+        }
+
+        // === 5b️⃣ Isi atribut mandatory lainnya ===
         for (const attr of requiredAttributes) {
+            if (attr.name === "brand") continue;
+
             switch (attr.name) {
-                case "brand":
-                    // jika user input "No Brand" -> otomatis 4484
-                    if (attributes.brand?.toLowerCase?.() === "no brand") {
-                        productAttributes.brand = 4484;
-                    } else if (attributes.brand_id) {
-                        productAttributes.brand = attributes.brand_id; // jika user input ID langsung
-                    } else {
-                        throw new Error("Brand wajib diisi atau gunakan 'No Brand'");
-                    }
-                    break;
                 case "Net_Weight":
                     productAttributes.Net_Weight = attributes.Net_Weight || 0;
                     break;
@@ -528,13 +535,13 @@ const createProductLazada = async (req, res) => {
                     productAttributes.package_weight = attributes.package_weight || 0.5;
                     break;
                 case "price":
-                    productAttributes.price = attributes.price || stokTerpilih.harga_jual || stokTerpilih.harga_beli || 1000;
+                    productAttributes.price =
+                        attributes.price || stokTerpilih.harga_jual || stokTerpilih.harga_beli || 1000;
                     break;
                 case "SellerSku":
                     productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
                     break;
                 default:
-                    // Jika ada attribute tambahan dari user
                     if (attributes[attr.name] !== undefined) {
                         productAttributes[attr.name] = attributes[attr.name];
                     }
@@ -542,12 +549,14 @@ const createProductLazada = async (req, res) => {
             }
         }
 
-        // Tambahkan atribut opsional
-        if (attributes.short_description) productAttributes.short_description = attributes.short_description;
-        if (product.deskripsi_product) productAttributes.description = product.deskripsi_product;
+        // === 5c️⃣ Tambahan opsional ===
+        if (attributes.short_description)
+            productAttributes.short_description = attributes.short_description;
+        if (product.deskripsi_product)
+            productAttributes.description = product.deskripsi_product;
         productAttributes.name = product.nama_product;
 
-        // 6️⃣ Build payload
+        // === 6️⃣ Build payload final ===
         const productObj = {
             Request: {
                 Product: {
@@ -564,7 +573,7 @@ const createProductLazada = async (req, res) => {
                                 package_length: productAttributes.package_length,
                                 package_width: productAttributes.package_width,
                                 package_weight: productAttributes.package_weight,
-                                package_content: `${product.nama_product} - ${productAttributes.brand}`,
+                                package_content: `${product.nama_product} - ${productAttributes.brand?.name || "No Brand"}`,
                                 Net_Weight: productAttributes.Net_Weight,
                             },
                         ],
@@ -573,7 +582,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // 7️⃣ Generate signature
+        // === 7️⃣ Generate signature Lazada ===
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -584,10 +593,13 @@ const createProductLazada = async (req, res) => {
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
 
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+            ...sysParams,
+            sign,
+        }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // 8️⃣ Kirim request ke Lazada
+        // === 8️⃣ Kirim request ke Lazada ===
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -600,7 +612,6 @@ const createProductLazada = async (req, res) => {
             payload_sent: productObj,
             lazada_response: response.data,
         });
-
     } catch (err) {
         console.error("❌ Lazada Create Product Error:", err.response?.data || err.message);
         res.status(500).json({
