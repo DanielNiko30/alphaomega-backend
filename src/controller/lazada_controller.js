@@ -461,9 +461,10 @@ const createProductLazada = async (req, res) => {
         const { id_product } = req.params;
         const { category_id, selected_unit, attributes = {} } = req.body;
 
-        if (!category_id) return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
+        if (!category_id)
+            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
 
-        // Ambil akun Lazada
+        // 1️⃣ Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -474,10 +475,10 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // Ambil data produk dari DB
+        // 2️⃣ Ambil data produk dari DB
         const product = await Product.findOne({
             where: { id_product },
-            include: [{ model: Stok, as: "stok" }]
+            include: [{ model: Stok, as: "stok" }],
         });
         if (!product) throw new Error("Produk tidak ditemukan di database");
 
@@ -486,10 +487,10 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // Upload gambar ke Lazada
+        // 3️⃣ Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // Ambil atribut mandatory dari category Lazada
+        // 4️⃣ Ambil atribut mandatory dari category Lazada
         let requiredAttributes = [];
         try {
             const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
@@ -502,54 +503,34 @@ const createProductLazada = async (req, res) => {
             return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
         }
 
-        // Mapping atribut wajib
+        // 5️⃣ Mapping atribut mandatory lainnya
         const productAttributes = {};
         for (const attr of requiredAttributes) {
-            const attrId = attr.id;
             const keyName = (attr.name || "").toLowerCase();
             const labelName = (attr.label || "").toLowerCase();
 
-            // Brand
+            // BRAND wajib string
             if (keyName === "brand" || labelName.includes("brand")) {
-                productAttributes[attrId] = attributes.brand || "No Brand";
+                productAttributes[attr.name] = attributes.brand || "No Brand";
                 continue;
             }
 
-            // Net Weight / Berat Bersih
-            if (keyName.includes("net_weight") || labelName.includes("berat bersih") || labelName.includes("net weight")) {
-                const netWeightValue = typeof attributes.Net_Weight === "object"
-                    ? attributes.Net_Weight.value_id
-                    : attributes.Net_Weight || value;
-                if (!netWeightValue) throw new Error(`Attribute "Berat Bersih / Net Weight" wajib diisi. Gunakan value_id dari getCategoryAttributes(${category_id})`);
-                productAttributes[attrId] = { value_id: Number(netWeightValue) };
+            // Numeric wajib default 1
+            if (attr.input_type === "numeric") {
+                productAttributes[attr.name] = attributes[attr.name] || 1;
                 continue;
             }
 
-            // Bag Size
-            if (keyName.includes("bag_size") || labelName.includes("bag size")) {
-                const bagSizeValue = typeof attributes.Bag_Size === "object"
-                    ? attributes.Bag_Size.value_id
-                    : attributes.Bag_Size || value;
-                if (!bagSizeValue) throw new Error(`Attribute "Bag Size" wajib diisi. Gunakan value_id dari getCategoryAttributes(${category_id})`);
-                productAttributes[attrId] = { value_id: Number(bagSizeValue) };
-                continue;
-            }
-
-            // Numeric default 1
-            let value = attributes[attr.name] || attributes[attr.label] || attributes[attrId] || "";
-            if (!value && attr.input_type === "numeric") value = "1";
-
-            // Text default nama produk
-            if (!value && attr.input_type === "text") value = product.nama_product;
-
-            productAttributes[attrId] = value;
+            // Text wajib default nama produk
+            productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
         }
 
-        // Pastikan title / name wajib ada (C004)
-        productAttributes['name'] = product.nama_product;
-        productAttributes['description'] = product.deskripsi_product || "Deskripsi belum tersedia";
+        // Pastikan title/deskripsi seperti dummy product
+        productAttributes.name = product.nama_product;
+        productAttributes.description = product.deskripsi_product || "Deskripsi belum tersedia";
+        productAttributes.short_description = product.deskripsi_product?.slice(0, 100) || "Short description";
 
-        // SKU
+        // 6️⃣ SKU
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -558,22 +539,22 @@ const createProductLazada = async (req, res) => {
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
             package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
+            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
         };
 
-        // Payload final
+        // 7️⃣ Payload final
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: category_id,
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: productAttributes,
-                    Skus: { Sku: [skuAttributes] }
-                }
-            }
+                    Skus: { Sku: [skuAttributes] },
+                },
+            },
         };
 
-        // Signature
+        // 8️⃣ Signature & Request
         const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
