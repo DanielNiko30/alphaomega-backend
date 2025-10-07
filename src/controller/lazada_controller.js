@@ -636,8 +636,7 @@ const createDummyProduct = async (req, res) => {
                         description:
                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
                         short_description: "Tote Bag Kanvas API Test.",
-                        Net_Weight: 500,
-                        unit_metric: "kg"
+                        Net_Weight: "500 g",
                     },
                     Skus: {
                         Sku: [
