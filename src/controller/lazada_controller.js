@@ -503,7 +503,7 @@ const createProductLazada = async (req, res) => {
             return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
         }
 
-        // 5️⃣ Mapping atribut mandatory lainnya
+        // 5️⃣ Mapping atribut mandatory
         const productAttributes = {};
         for (const attr of requiredAttributes) {
             const keyName = (attr.name || "").toLowerCase();
@@ -515,9 +515,14 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // Numeric wajib default 1
+            // Numeric wajib pakai ID dari options jika ada (Net_Weight)
             if (attr.input_type === "numeric") {
-                productAttributes[attr.name] = attributes[attr.name] || 1;
+                if (attr.options && attr.options.length > 0) {
+                    // ambil ID dari options atau pakai value yang dikirim
+                    productAttributes[attr.name] = attributes[attr.name] || attr.options[0].id;
+                } else {
+                    productAttributes[attr.name] = attributes[attr.name] || 1;
+                }
                 continue;
             }
 
@@ -525,7 +530,7 @@ const createProductLazada = async (req, res) => {
             productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
         }
 
-        // Pastikan title/deskripsi seperti dummy product
+        // Pastikan title/deskripsi
         productAttributes.name = product.nama_product;
         productAttributes.description = product.deskripsi_product || "Deskripsi belum tersedia";
         productAttributes.short_description = product.deskripsi_product?.slice(0, 100) || "Short description";
@@ -539,7 +544,7 @@ const createProductLazada = async (req, res) => {
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
             package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
+            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
         };
 
         // 7️⃣ Payload final
@@ -549,9 +554,9 @@ const createProductLazada = async (req, res) => {
                     PrimaryCategory: category_id,
                     Images: { Image: [uploadedImageUrl] },
                     Attributes: productAttributes,
-                    Skus: { Sku: [skuAttributes] },
-                },
-            },
+                    Skus: { Sku: [skuAttributes] }
+                }
+            }
         };
 
         // 8️⃣ Signature & Request
