@@ -455,7 +455,7 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
     }
 }
 
-// ✅ Controller create product
+// ✅ Controller create product Lazada (versi unit internal bebas)
 const createProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
@@ -514,21 +514,40 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
+            // NET_WEIGHT
             if (keyName === "net_weight") {
-                const weightGram = parseFloat(attributes.Net_Weight || 100);
-                // Cari opsi di required_attributes
+                let weight = parseFloat(attributes.Net_Weight || 100); // default 100 g
+
+                // Convert sesuai unit internal bebas
+                switch ((selected_unit || "").toLowerCase()) {
+                    case "kg":
+                        weight *= 1000; // kg -> g
+                        break;
+                    case "mg":
+                        weight /= 1000; // mg -> g
+                        break;
+                    case "rtg":
+                    case "pcs":
+                    default:
+                        // tetap sesuai angka body
+                        break;
+                }
+
+                // Cari option Lazada sesuai gram
                 let matchedOption = attr.options.find(o => {
                     let text = o.en_name.toLowerCase().replace(/\s/g, '').replace(',', '.');
                     let n = parseFloat(text.replace(/[^\d\.]/g, ''));
                     if (text.includes('kg')) n *= 1000;
-                    return n === weightGram;
+                    return n === weight;
                 });
+
+                // fallback ke "Others"
                 if (!matchedOption) {
-                    // fallback ke "Others"
                     matchedOption = attr.options.find(o => o.en_name.toLowerCase().includes('other'));
                     if (!matchedOption) throw new Error("Net_Weight tidak ada di Lazada options");
                 }
-                productAttributes[attr.name] = matchedOption.id; // <-- ID option yang dikirim ke Lazada
+
+                productAttributes[attr.name] = matchedOption.id;
                 continue;
             }
 
