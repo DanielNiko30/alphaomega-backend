@@ -479,7 +479,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // === 2️⃣ Ambil data produk dari DB ===
+        // === 2️⃣ Ambil produk & stok dari DB ===
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -489,123 +489,53 @@ const createProductLazada = async (req, res) => {
         const stokTerpilih = selected_unit
             ? product.stok.find((s) => s.satuan === selected_unit)
             : product.stok[0];
-        if (!stokTerpilih) throw new Error(`Stok untuk satuan '${selected_unit}' tidak ditemukan`);
+        if (!stokTerpilih)
+            throw new Error(`Stok untuk satuan '${selected_unit}' tidak ditemukan`);
 
         // === 3️⃣ Upload gambar ke Lazada ===
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // === 4️⃣ Ambil atribut mandatory kategori ===
-        const requiredRes = await axios.get("https://api.lazada.co.id/rest/category/attributes", {
-            params: { category_id, access_token: accessToken, app_key: apiKey },
-        });
-        const requiredAttributes = requiredRes.data.required_attributes || [];
+        // === 4️⃣ Siapkan data harga & berat ===
+        const hargaFinal =
+            stokTerpilih.harga_jual ?? stokTerpilih.harga_beli ?? 1000;
+        const beratFinal = attributes.Net_Weight || 500; // gram (default 500g)
 
-        // === 5️⃣ Build atribut produk ===
-        const productAttributes = {};
-
-        // === 5a️⃣ Tangani Brand ===
-        let brandData = { id: 4484, name: "No Brand" }; // default seperti createDummyProduct
-
-        try {
-            // Coba ambil semua brand dari kategori tersebut
-            const brandRes = await axios.get("https://api.lazada.co.id/rest/category/brands/get", {
-                params: {
-                    category_id,
-                    access_token: accessToken,
-                    app_key: apiKey,
-                },
-            });
-
-            const allBrands = brandRes?.data?.data || [];
-            const brandName = attributes.brand_name?.trim()?.toLowerCase();
-
-            const matchedBrand = allBrands.find(
-                (b) => b.name?.toLowerCase() === brandName || b.global_identifier?.toLowerCase() === brandName
-            );
-
-            if (matchedBrand) {
-                brandData = {
-                    id: matchedBrand.brand_id,
-                    name: matchedBrand.name,
-                };
-            } else if (attributes.brand_id && attributes.brand_name) {
-                // fallback kalau user sudah kirim brand manual tapi tidak cocok di kategori
-                brandData = {
-                    id: attributes.brand_id,
-                    name: attributes.brand_name,
-                };
-            }
-        } catch (err) {
-            console.warn("⚠️ Tidak bisa ambil brand per kategori, fallback ke No Brand:", err.message);
-        }
-
-        // ✅ Format pengiriman brand sama seperti createDummyProduct
-        productAttributes.brand = {
-            id: brandData.id,
-            name: brandData.name,
+        // === 5️⃣ Brand fix (gunakan ID resmi No Brand: 4484) ===
+        const brandData = {
+            id: 4484,
+            name: "No Brand",
         };
 
-        // === 5b️⃣ Isi atribut mandatory lainnya ===
-        for (const attr of requiredAttributes) {
-            if (attr.name === "brand") continue;
-
-            switch (attr.name) {
-                case "Net_Weight":
-                    productAttributes.Net_Weight = attributes.Net_Weight || 0;
-                    break;
-                case "package_height":
-                    productAttributes.package_height = attributes.package_height || 10;
-                    break;
-                case "package_width":
-                    productAttributes.package_width = attributes.package_width || 10;
-                    break;
-                case "package_length":
-                    productAttributes.package_length = attributes.package_length || 10;
-                    break;
-                case "package_weight":
-                    productAttributes.package_weight = attributes.package_weight || 0.5;
-                    break;
-                case "price":
-                    productAttributes.price =
-                        attributes.price || stokTerpilih.harga_jual || stokTerpilih.harga_beli || 1000;
-                    break;
-                case "SellerSku":
-                    productAttributes.SellerSku = attributes.SellerSku || `SKU-${uniqueSuffix}`;
-                    break;
-                default:
-                    if (attributes[attr.name] !== undefined) {
-                        productAttributes[attr.name] = attributes[attr.name];
-                    }
-                    break;
-            }
-        }
-
-        // === 5c️⃣ Tambahan opsional ===
-        if (attributes.short_description)
-            productAttributes.short_description = attributes.short_description;
-        if (product.deskripsi_product)
-            productAttributes.description = product.deskripsi_product;
-        productAttributes.name = product.nama_product;
-
-        // === 6️⃣ Build payload final ===
+        // === 6️⃣ Bangun payload produk ===
         const productObj = {
             Request: {
                 Product: {
                     PrimaryCategory: String(category_id),
-                    Images: { Image: [uploadedImageUrl] },
-                    Attributes: productAttributes,
+                    Images: {
+                        Image: [uploadedImageUrl],
+                    },
+                    Attributes: {
+                        name: product.nama_product,
+                        brand: brandData, // ✅ FIX: gunakan object {id, name}
+                        description:
+                            product.deskripsi_product || "Deskripsi belum tersedia.",
+                        short_description:
+                            attributes.short_description ||
+                            product.deskripsi_product ||
+                            "Produk unggulan toko kami.",
+                    },
                     Skus: {
                         Sku: [
                             {
-                                SellerSku: productAttributes.SellerSku,
+                                SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
                                 quantity: stokTerpilih.stok || 10,
-                                price: productAttributes.price,
-                                package_height: productAttributes.package_height,
-                                package_length: productAttributes.package_length,
-                                package_width: productAttributes.package_width,
-                                package_weight: productAttributes.package_weight,
-                                package_content: `${product.nama_product} - ${productAttributes.brand?.name || "No Brand"}`,
-                                Net_Weight: productAttributes.Net_Weight,
+                                price: hargaFinal,
+                                package_height: attributes.package_height || 10,
+                                package_length: attributes.package_length || 10,
+                                package_width: attributes.package_width || 10,
+                                package_weight: attributes.package_weight || 0.5,
+                                package_content: `${product.nama_product} - ${brandData.name}`,
+                                Net_Weight: beratFinal, // ✅ FIX: kirim sebagai angka langsung
                             },
                         ],
                     },
@@ -613,7 +543,7 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        // === 7️⃣ Generate signature Lazada ===
+        // === 7️⃣ Generate Signature ===
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -621,6 +551,7 @@ const createProductLazada = async (req, res) => {
             timestamp,
             v: "1.0",
         };
+
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
 
@@ -628,9 +559,10 @@ const createProductLazada = async (req, res) => {
             ...sysParams,
             sign,
         }).toString()}`;
+
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // === 8️⃣ Kirim request ke Lazada ===
+        // === 8️⃣ Kirim ke Lazada ===
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -639,7 +571,8 @@ const createProductLazada = async (req, res) => {
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            harga_digunakan: productAttributes.price,
+            harga_digunakan: hargaFinal,
+            berat_digunakan: beratFinal,
             brand_digunakan: brandData,
             payload_sent: productObj,
             lazada_response: response.data,
