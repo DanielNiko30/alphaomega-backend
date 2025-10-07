@@ -543,7 +543,7 @@ const createProductLazada = async (req, res) => {
       package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
       package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
       package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-      package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
+      package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
     };
 
     const productObj = {
@@ -649,7 +649,8 @@ const createDummyProduct = async (req, res) => {
                                 package_width: 30,
                                 package_weight: 0.2,
                                 package_content: "1x Tote Bag Wanita",
-                                Bag_Size: "58949", // Medium
+                                Net_Weight: 500,
+                                unit_metric: "5450" // Medium
                             },
                         ],
                     },
