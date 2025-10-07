@@ -487,37 +487,30 @@ const createProductLazada = async (req, res) => {
             : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // Upload gambar ke Lazada
+        // Upload gambar
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // Ambil atribut mandatory dari category Lazada
-        let requiredAttributes = [];
-        try {
-            const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
-            if (attrResp.data?.success && Array.isArray(attrResp.data.required_attributes)) {
-                requiredAttributes = attrResp.data.required_attributes;
-            } else {
-                return res.status(400).json({ success: false, message: "Format response atribut tidak sesuai", response_data: attrResp.data });
-            }
-        } catch (err) {
-            return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
-        }
+        // Ambil atribut mandatory Lazada
+        const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
+        if (!attrResp.data?.success || !Array.isArray(attrResp.data.required_attributes))
+            return res.status(400).json({ success: false, message: "Format response atribut tidak sesuai", response_data: attrResp.data });
+
+        const requiredAttributes = attrResp.data.required_attributes;
 
         // Mapping atribut mandatory
         const productAttributes = {};
         for (const attr of requiredAttributes) {
             const keyName = (attr.name || "").toLowerCase();
-            const labelName = (attr.label || "").toLowerCase();
 
-            // BRAND wajib string
-            if (keyName === "brand" || labelName.includes("brand")) {
+            // BRAND
+            if (keyName === "brand") {
                 productAttributes[attr.name] = attributes.brand || "No Brand";
                 continue;
             }
 
-            // Net_Weight pakai ID langsung dari Postman
+            // Net_Weight pakai ID Lazada
             if (keyName === "net_weight") {
-                productAttributes[attr.name] = attributes.Net_Weight; // langsung ID Lazada
+                productAttributes[attr.name] = attributes.Net_Weight; // HARUS string ID Lazada
                 continue;
             }
 
@@ -528,11 +521,11 @@ const createProductLazada = async (req, res) => {
                 continue;
             }
 
-            // Text
+            // Text / default
             productAttributes[attr.name] = attributes[attr.name] || product.nama_product;
         }
 
-        // Pastikan title/deskripsi
+        // Title/deskripsi
         productAttributes.name = product.nama_product;
         productAttributes.description = product.deskripsi_product || "Deskripsi belum tersedia";
         productAttributes.short_description = product.deskripsi_product?.slice(0, 100) || "Short description";
