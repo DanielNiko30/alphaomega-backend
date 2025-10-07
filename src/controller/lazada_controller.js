@@ -463,7 +463,7 @@ const createProductLazada = async (req, res) => {
 
         if (!category_id) return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
 
-        // 1️⃣ Ambil akun Lazada
+        // Ambil akun Lazada
         const account = await Lazada.findOne();
         if (!account) throw new Error("Tidak ada account Lazada di DB");
 
@@ -474,17 +474,22 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
-        // 2️⃣ Ambil data produk
-        const product = await Product.findOne({ where: { id_product }, include: [{ model: Stok, as: "stok" }] });
+        // Ambil data produk dari DB
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }]
+        });
         if (!product) throw new Error("Produk tidak ditemukan di database");
 
-        const stokTerpilih = selected_unit ? product.stok.find(s => s.satuan === selected_unit) : product.stok[0];
+        const stokTerpilih = selected_unit
+            ? product.stok.find(s => s.satuan === selected_unit)
+            : product.stok[0];
         if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
 
-        // 3️⃣ Upload gambar ke Lazada
+        // Upload gambar ke Lazada
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // 4️⃣ Ambil atribut mandatory dari category Lazada
+        // Ambil atribut mandatory dari category Lazada
         let requiredAttributes = [];
         try {
             const attrResp = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/category/attribute/${category_id}`);
@@ -497,48 +502,54 @@ const createProductLazada = async (req, res) => {
             return res.status(500).json({ success: false, message: "Gagal ambil category attributes", error: err.response?.data || err.message });
         }
 
-        // 5️⃣ Mapping atribut wajib sesuai category
+        // Mapping atribut wajib
         const productAttributes = {};
         for (const attr of requiredAttributes) {
             const attrId = attr.id;
             const keyName = (attr.name || "").toLowerCase();
             const labelName = (attr.label || "").toLowerCase();
 
-            // ✅ Skip brand karena kita set default
+            // Brand
             if (keyName === "brand" || labelName.includes("brand")) {
                 productAttributes[attrId] = attributes.brand || "No Brand";
                 continue;
             }
 
-            let value = attributes[attr.name] || attributes[attr.label] || attributes[attrId] || "";
-
-            // 🔹 Net Weight / Berat Bersih
+            // Net Weight / Berat Bersih
             if (keyName.includes("net_weight") || labelName.includes("berat bersih") || labelName.includes("net weight")) {
-                const netWeightValue = typeof attributes.Net_Weight === "object" ? attributes.Net_Weight.value_id : attributes.Net_Weight || value;
+                const netWeightValue = typeof attributes.Net_Weight === "object"
+                    ? attributes.Net_Weight.value_id
+                    : attributes.Net_Weight || value;
                 if (!netWeightValue) throw new Error(`Attribute "Berat Bersih / Net Weight" wajib diisi. Gunakan value_id dari getCategoryAttributes(${category_id})`);
                 productAttributes[attrId] = { value_id: Number(netWeightValue) };
                 continue;
             }
 
-            // 🔹 Bag Size
+            // Bag Size
             if (keyName.includes("bag_size") || labelName.includes("bag size")) {
-                const bagSizeValue = typeof attributes.Bag_Size === "object" ? attributes.Bag_Size.value_id : attributes.Bag_Size || value;
+                const bagSizeValue = typeof attributes.Bag_Size === "object"
+                    ? attributes.Bag_Size.value_id
+                    : attributes.Bag_Size || value;
                 if (!bagSizeValue) throw new Error(`Attribute "Bag Size" wajib diisi. Gunakan value_id dari getCategoryAttributes(${category_id})`);
                 productAttributes[attrId] = { value_id: Number(bagSizeValue) };
                 continue;
             }
 
-            // 🔹 Numeric default 1
+            // Numeric default 1
+            let value = attributes[attr.name] || attributes[attr.label] || attributes[attrId] || "";
             if (!value && attr.input_type === "numeric") value = "1";
 
-            // 🔹 Text default nama produk
+            // Text default nama produk
             if (!value && attr.input_type === "text") value = product.nama_product;
 
-            // Simpan value final
             productAttributes[attrId] = value;
         }
 
-        // 6️⃣ SKU
+        // Pastikan title / name wajib ada (C004)
+        productAttributes['name'] = product.nama_product;
+        productAttributes['description'] = product.deskripsi_product || "Deskripsi belum tersedia";
+
+        // SKU
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: stokTerpilih.stok,
@@ -550,10 +561,19 @@ const createProductLazada = async (req, res) => {
             package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`
         };
 
-        // 7️⃣ Payload final
-        const productObj = { Request: { Product: { PrimaryCategory: category_id, Images: { Image: [uploadedImageUrl] }, Attributes: productAttributes, Skus: { Sku: [skuAttributes] } } } };
+        // Payload final
+        const productObj = {
+            Request: {
+                Product: {
+                    PrimaryCategory: category_id,
+                    Images: { Image: [uploadedImageUrl] },
+                    Attributes: productAttributes,
+                    Skus: { Sku: [skuAttributes] }
+                }
+            }
+        };
 
-        // 8️⃣ Signing & Request
+        // Signature
         const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
