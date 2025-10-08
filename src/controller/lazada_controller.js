@@ -487,21 +487,21 @@ const createProductLazada = async (req, res) => {
             if (!stokTerpilih)
                 throw new Error(`Stok untuk satuan "${selected_unit}" tidak ditemukan`);
         } else {
-            // default ambil stok pertama
             if (!product.stok || product.stok.length === 0)
                 throw new Error("Produk tidak memiliki stok sama sekali");
             stokTerpilih = product.stok[0];
         }
 
+        // === Upload gambar ke Lazada ===
         const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-        // === PASTI PERSIS DUMMY UNTUK NET_WEIGHT ===
+        // === Data produk ===
         const productAttributes = {
             name: product.nama_product,
             brand: attributes.brand || "No Brand",
             description: product.deskripsi_product || "Deskripsi belum tersedia",
             short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
-            Net_Weight: attributes.Net_Weight || "500 g", // ← PENTING, string persis
+            Net_Weight: attributes.Net_Weight || "500 g", // Wajib string
         };
 
         const skuAttributes = {
@@ -526,21 +526,42 @@ const createProductLazada = async (req, res) => {
             },
         };
 
-        const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+        };
+
         const jsonBody = JSON.stringify(productObj);
         const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
+        // === Request ke Lazada ===
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
+
+        const lazadaResponse = response.data;
+        const itemId = lazadaResponse?.data?.item_id;
+
+        // === Kalau berhasil, simpan item_id ke stok ===
+        if (itemId) {
+            await Stok.update(
+                { id_product_lazada: itemId },
+                { where: { id_stok: stokTerpilih.id_stok } }
+            );
+        }
 
         res.json({
             success: true,
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
-            lazada_response: response.data,
+            item_id: itemId,
+            stok_updated: stokTerpilih.id_stok,
+            lazada_response: lazadaResponse,
         });
 
     } catch (err) {
