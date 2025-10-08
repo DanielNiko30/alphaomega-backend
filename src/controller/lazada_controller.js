@@ -771,8 +771,12 @@ const updateProductLazada = async (req, res) => {
             stokTerpilih = product.stok[0];
         }
 
+        // === Validasi id_product_lazada & sku_lazada ===
         if (!stokTerpilih.id_product_lazada)
             throw new Error("Produk ini belum punya id_product_lazada di stok");
+
+        if (!stokTerpilih.sku_lazada)
+            throw new Error("Produk ini belum punya sku_lazada di stok (sku_id wajib untuk update)");
 
         // === Upload gambar kalau diminta ===
         let uploadedImageUrl = null;
@@ -789,7 +793,9 @@ const updateProductLazada = async (req, res) => {
             Net_Weight: attributes.Net_Weight || "500 g",
         };
 
+        // === Gunakan sku_id dari DB ===
         const skuAttributes = {
+            SkuId: stokTerpilih.sku_lazada, // ← WAJIB dari DB
             SellerSku: attributes.SellerSku || stokTerpilih.id_stok.toString(),
             quantity: String(stokTerpilih.stok),
             price: String(stokTerpilih.harga),
