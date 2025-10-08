@@ -458,92 +458,99 @@ async function uploadImageToLazadaFromDB(product, accessToken) {
 }
 
 const createProductLazada = async (req, res) => {
-  try {
-    const { id_product } = req.params;
-    const { category_id, selected_unit, attributes = {} } = req.body;
+    try {
+        const { id_product } = req.params;
+        const { category_id, selected_unit, attributes = {} } = req.body;
 
-    if (!category_id)
-      return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
+        if (!category_id)
+            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
 
-    const account = await Lazada.findOne();
-    if (!account) throw new Error("Tidak ada account Lazada di DB");
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
 
-    const accessToken = account.access_token.trim();
-    const apiKey = process.env.LAZADA_APP_KEY.trim();
-    const appSecret = process.env.LAZADA_APP_SECRET.trim();
-    const apiPath = "/product/create";
-    const timestamp = Date.now().toString();
-    const uniqueSuffix = Date.now().toString().slice(-6);
+        const accessToken = account.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const apiPath = "/product/create";
+        const timestamp = Date.now().toString();
+        const uniqueSuffix = Date.now().toString().slice(-6);
 
-    const product = await Product.findOne({
-      where: { id_product },
-      include: [{ model: Stok, as: "stok" }],
-    });
-    if (!product) throw new Error("Produk tidak ditemukan di database");
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
+        if (!product) throw new Error("Produk tidak ditemukan di database");
 
-    const stokTerpilih = selected_unit
-      ? product.stok.find(s => s.satuan === selected_unit)
-      : product.stok[0];
-    if (!stokTerpilih) throw new Error("Stok untuk satuan tersebut tidak ditemukan");
+        let stokTerpilih;
+        if (selected_unit) {
+            stokTerpilih = product.stok.find(s => s.satuan === selected_unit);
+            if (!stokTerpilih)
+                throw new Error(`Stok untuk satuan "${selected_unit}" tidak ditemukan`);
+        } else {
+            // default ambil stok pertama
+            if (!product.stok || product.stok.length === 0)
+                throw new Error("Produk tidak memiliki stok sama sekali");
+            stokTerpilih = product.stok[0];
+        }
 
-    const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
+        const uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
 
-    // === PASTI PERSIS DUMMY UNTUK NET_WEIGHT ===
-    const productAttributes = {
-      name: product.nama_product,
-      brand: attributes.brand || "No Brand",
-      description: product.deskripsi_product || "Deskripsi belum tersedia",
-      short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
-      Net_Weight: attributes.Net_Weight || "500 g", // ← PENTING, string persis
-    };
+        // === PASTI PERSIS DUMMY UNTUK NET_WEIGHT ===
+        const productAttributes = {
+            name: product.nama_product,
+            brand: attributes.brand || "No Brand",
+            description: product.deskripsi_product || "Deskripsi belum tersedia",
+            short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
+            Net_Weight: attributes.Net_Weight || "500 g", // ← PENTING, string persis
+        };
 
-    const skuAttributes = {
-      SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
-      quantity: String(stokTerpilih.stok),
-      price: String(stokTerpilih.harga_jual || 1000),
-      package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
-      package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
-      package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
-      package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
-      package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
-    };
+        const skuAttributes = {
+            SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
+            quantity: String(stokTerpilih.stok),
+            price: String(stokTerpilih.harga || 1000),
+            package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
+            package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
+            package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
+            package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
+            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
+        };
 
-    const productObj = {
-      Request: {
-        Product: {
-          PrimaryCategory: category_id,
-          Images: { Image: [uploadedImageUrl] },
-          Attributes: productAttributes,
-          Skus: { Sku: [skuAttributes] },
-        },
-      },
-    };
+        const productObj = {
+            Request: {
+                Product: {
+                    PrimaryCategory: category_id,
+                    Images: { Image: [uploadedImageUrl] },
+                    Attributes: productAttributes,
+                    Skus: { Sku: [skuAttributes] },
+                },
+            },
+        };
 
-    const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
-    const jsonBody = JSON.stringify(productObj);
-    const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
-    const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-    const bodyForRequest = new URLSearchParams({ payload: jsonBody });
+        const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
+        const jsonBody = JSON.stringify(productObj);
+        const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-    const response = await axios.post(url, bodyForRequest, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
+        const response = await axios.post(url, bodyForRequest, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
 
-    res.json({
-      success: true,
-      message: "Produk berhasil ditambahkan ke Lazada.",
-      image_used: uploadedImageUrl,
-      lazada_response: response.data,
-    });
+        res.json({
+            success: true,
+            message: "Produk berhasil ditambahkan ke Lazada.",
+            image_used: uploadedImageUrl,
+            lazada_response: response.data,
+        });
 
-  } catch (err) {
-    console.error("❌ Lazada Create Product Error:", err);
-    res.status(500).json({
-      success: false,
-      error: err.response?.data || err.message,
-      message: "Gagal membuat produk di Lazada.",
-    });
-  }
+    } catch (err) {
+        console.error("❌ Lazada Create Product Error:", err);
+        res.status(500).json({
+            success: false,
+            error: err.response?.data || err.message,
+            message: "Gagal membuat produk di Lazada.",
+        });
+    }
 };
 
 const createDummyProduct = async (req, res) => {
