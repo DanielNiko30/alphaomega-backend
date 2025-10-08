@@ -731,48 +731,118 @@ const getProductItemLazada = async (req, res) => {
 const updateProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
-        const { brand, seller_sku, price, quantity, selected_unit } = req.body;
+        const { category_id, selected_unit, attributes = {}, update_image = false } = req.body;
 
-        let lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token) return res.status(400).json({ error: "Lazada token not found" });
+        if (!category_id)
+            return res.status(400).json({ success: false, message: "category_id wajib dikirim di body" });
 
-        const now = Math.floor(Date.now() / 1000);
-        if (lazadaData.expires_in + lazadaData.last_updated - now < 60) {
-            lazadaData.access_token = await refreshToken();
-        }
-        const access_token = lazadaData.access_token;
+        // === Ambil akun Lazada ===
+        const account = await Lazada.findOne();
+        if (!account) throw new Error("Tidak ada account Lazada di DB");
 
-        const product = await Product.findOne({ where: { id_product }, include: [{ model: Stok, as: "stok" }] });
-        if (!product) return res.status(404).json({ error: "Produk tidak ditemukan" });
-
-        const stokTerpilih = selected_unit ? product.stok.find(s => s.satuan === selected_unit) : product.stok[0];
-        if (!stokTerpilih?.id_product_lazada) return res.status(400).json({ error: "Produk ini belum punya id_product_lazada" });
-
-        const payload = `
-<Request>
-  <Product>
-    <Skus>
-      <Sku>
-        <SellerSku>${seller_sku || stokTerpilih.id_stok}</SellerSku>
-        <quantity>${quantity || stokTerpilih.stok}</quantity>
-        <price>${price || stokTerpilih.harga}</price>
-      </Sku>
-    </Skus>
-  </Product>
-</Request>`.trim();
-
+        const accessToken = account.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const apiPath = "/product/update";
-        const timestamp = String(Date.now());
-        const params = { app_key: process.env.LAZADA_APP_KEY, sign_method: "sha256", access_token, timestamp };
-        const sign = generateSign(apiPath, params, process.env.LAZADA_APP_SECRET, payload);
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...params, sign })}`;
+        const timestamp = Date.now().toString();
 
-        const updateResponse = await axios.post(url, `payload=${encodeURIComponent(payload)}`, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        // === Ambil produk dari DB lokal ===
+        const product = await Product.findOne({
+            where: { id_product },
+            include: [{ model: Stok, as: "stok" }],
+        });
+        if (!product) throw new Error("Produk tidak ditemukan di database");
 
-        return res.status(200).json({ success: true, message: "Produk berhasil diupdate di Lazada", lazada_response: updateResponse.data });
+        // === Tentukan stok yang dipilih ===
+        let stokTerpilih;
+        if (selected_unit) {
+            stokTerpilih = product.stok.find(s => s.satuan === selected_unit);
+            if (!stokTerpilih)
+                throw new Error(`Stok untuk satuan "${selected_unit}" tidak ditemukan`);
+        } else {
+            if (!product.stok || product.stok.length === 0)
+                throw new Error("Produk tidak memiliki stok sama sekali");
+            stokTerpilih = product.stok[0];
+        }
+
+        if (!stokTerpilih.id_product_lazada)
+            throw new Error("Produk ini belum punya id_product_lazada di stok");
+
+        // === Upload gambar kalau diminta ===
+        let uploadedImageUrl = null;
+        if (update_image) {
+            uploadedImageUrl = await uploadImageToLazadaFromDB(product, accessToken);
+        }
+
+        // === Ambil data produk dari DB + gabungkan dengan input body ===
+        const productAttributes = {
+            name: product.nama_product,
+            brand: attributes.brand || "No Brand",
+            description: product.deskripsi_product || "Deskripsi belum tersedia",
+            short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
+            Net_Weight: attributes.Net_Weight || "500 g",
+        };
+
+        const skuAttributes = {
+            SellerSku: attributes.SellerSku || stokTerpilih.id_stok.toString(),
+            quantity: String(stokTerpilih.stok),
+            price: String(stokTerpilih.harga),
+            package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
+            package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
+            package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
+            package_weight: String(attributes.package_weight || stokTerpilih.berat || 0.5),
+            package_content: `${product.nama_product} - ${attributes.brand || "No Brand"}`,
+        };
+
+        // === Buat struktur payload untuk update ===
+        const productObj = {
+            Request: {
+                Product: {
+                    PrimaryCategory: category_id,
+                    ItemId: stokTerpilih.id_product_lazada,
+                    Images: uploadedImageUrl ? { Image: [uploadedImageUrl] } : undefined,
+                    Attributes: productAttributes,
+                    Skus: { Sku: [skuAttributes] },
+                },
+            },
+        };
+
+        // === Generate signature & URL ===
+        const sysParams = { app_key: apiKey, access_token: accessToken, sign_method: "sha256", timestamp, v: "1.0" };
+        const jsonBody = JSON.stringify(productObj);
+        const sign = generateSign(apiPath, { ...sysParams, payload: jsonBody }, appSecret);
+        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const bodyForRequest = new URLSearchParams({ payload: jsonBody });
+
+        // === Kirim request ke Lazada ===
+        const response = await axios.post(url, bodyForRequest, {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+
+        // === Update data lokal (harga, stok, gambar kalau diubah) ===
+        await Stok.update(
+            {
+                harga: stokTerpilih.harga,
+                stok: stokTerpilih.stok,
+                ...(uploadedImageUrl ? { last_lazada_image: uploadedImageUrl } : {}),
+            },
+            { where: { id_stok: stokTerpilih.id_stok } }
+        );
+
+        res.json({
+            success: true,
+            message: "Produk berhasil diupdate ke Lazada.",
+            lazada_response: response.data,
+            image_used: uploadedImageUrl || "Gambar lama digunakan",
+        });
+
     } catch (err) {
-        console.error("❌ Lazada Update Product Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal update produk di Lazada." });
+        console.error("❌ Lazada Update Product Error:", err);
+        res.status(500).json({
+            success: false,
+            error: err.response?.data || err.message,
+            message: "Gagal update produk di Lazada.",
+        });
     }
 };
 
