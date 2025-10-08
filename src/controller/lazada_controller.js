@@ -475,6 +475,7 @@ const createProductLazada = async (req, res) => {
         const timestamp = Date.now().toString();
         const uniqueSuffix = Date.now().toString().slice(-6);
 
+        // === Ambil data produk dan stok ===
         const product = await Product.findOne({
             where: { id_product },
             include: [{ model: Stok, as: "stok" }],
@@ -501,7 +502,7 @@ const createProductLazada = async (req, res) => {
             brand: attributes.brand || "No Brand",
             description: product.deskripsi_product || "Deskripsi belum tersedia",
             short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
-            Net_Weight: attributes.Net_Weight || "500 g", // Wajib string
+            Net_Weight: attributes.Net_Weight || "500 g", // wajib string
         };
 
         const skuAttributes = {
@@ -539,18 +540,22 @@ const createProductLazada = async (req, res) => {
         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
 
-        // === Request ke Lazada ===
+        // === Kirim request ke Lazada ===
         const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
         const lazadaResponse = response.data;
-        const itemId = lazadaResponse?.data?.item_id;
+        const itemId = lazadaResponse?.data?.item_id || null;
+        const skuId = lazadaResponse?.data?.sku_list?.[0]?.sku_id || null; // ⬅ ambil sku_id
 
-        // === Kalau berhasil, simpan item_id ke stok ===
-        if (itemId) {
+        // === Kalau berhasil, simpan item_id dan sku_id ke stok ===
+        if (itemId || skuId) {
             await Stok.update(
-                { id_product_lazada: itemId },
+                {
+                    id_product_lazada: itemId || stokTerpilih.id_product_lazada,
+                    sku_lazada: skuId || null,
+                },
                 { where: { id_stok: stokTerpilih.id_stok } }
             );
         }
@@ -560,6 +565,7 @@ const createProductLazada = async (req, res) => {
             message: "Produk berhasil ditambahkan ke Lazada.",
             image_used: uploadedImageUrl,
             item_id: itemId,
+            sku_id: skuId,
             stok_updated: stokTerpilih.id_stok,
             lazada_response: lazadaResponse,
         });

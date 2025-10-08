@@ -21,6 +21,10 @@ const Stok = db.define(
             type: DataTypes.BIGINT,
             allowNull: true
         },
+        sku_lazada: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
         satuan: {
             type: DataTypes.STRING(50),
             allowNull: false,
