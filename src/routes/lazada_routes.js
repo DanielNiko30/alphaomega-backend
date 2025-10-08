@@ -9,23 +9,22 @@ const {
     getCategoryTree,
     getBrands,
     getProducts,
-    createDummyProduct,
     getCategoryAttributes,
     getAllCategoryAttributes,
-    checkNoBrand
+    getProductItemLazada
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
 router.get('/callback', lazadaCallback);
 router.post('/refresh-token', refreshToken);
 router.post('/create-product/:id_product', createProductLazada);
-router.post('/create-product', createDummyProduct);
+// router.post('/create-product', createDummyProduct);
 router.put('/update-product/:id_product', updateProductLazada);
 router.get("/categories", getCategoryTree);
 router.get("/category/attribute/:category_id", getCategoryAttributes);
 router.get("/brands", getBrands);
 router.get("/products", getProducts);
 router.get("/category/attributes/:category_id?", getAllCategoryAttributes);
-router.get("/check-no-brand", checkNoBrand);
+router.get("/product/item", getProductItemLazada);
 
 module.exports = router;
