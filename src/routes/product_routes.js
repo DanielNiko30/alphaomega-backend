@@ -12,6 +12,7 @@ router.delete("/stok/:id", ProductController.deleteStok);
 
 
 router.get("/", ProductController.getAllProducts);
+router.get('/with-stok', ProductController.getAllProductWithStok);
 router.get("/search/:name", ProductController.getProductByName);
 router.get("/latest/:productId?", ProductController.getLatestProduct);
 router.get("/:id", ProductController.getProductById);

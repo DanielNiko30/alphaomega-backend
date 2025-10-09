@@ -628,8 +628,63 @@ const ProductController = {
                 error: error.message
             });
         }
-    }
+    },
 
+    getAllProductWithStok: async (req, res) => {
+        try {
+            const products = await Product.findAll({
+                include: [
+                    {
+                        model: Stok,
+                        as: 'stok',
+                        attributes: ['id_stok', 'satuan', 'harga', 'stok'],
+                    },
+                    {
+                        model: Kategori,
+                        as: 'kategori',
+                        attributes: ['nama_kategori'],
+                    },
+                ],
+                order: [['nama_product', 'ASC']],
+            });
+
+            if (!products || products.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Belum ada data produk di database",
+                });
+            }
+
+            const result = products.map((p) => ({
+                id_product: p.id_product,
+                nama_product: p.nama_product,
+                deskripsi_product: p.deskripsi_product,
+                product_kategori: p.kategori ? p.kategori.nama_kategori : "-",
+                gambar_product: p.gambar_product
+                    ? `data:image/jpeg;base64,${p.gambar_product.toString("base64")}`
+                    : null,
+                stok_list: (p.stok || []).map((s) => ({
+                    id_stok: s.id_stok,
+                    satuan: s.satuan,
+                    harga: s.harga,
+                    stok: s.stok,
+                })),
+            }));
+
+            return res.status(200).json({
+                success: true,
+                count: result.length,
+                data: result,
+            });
+        } catch (error) {
+            console.error("❌ Error getAllProductWithStok:", error);
+            return res.status(500).json({
+                success: false,
+                message: "Terjadi kesalahan pada server",
+                error: error.message,
+            });
+        }
+    },
 };
 
 module.exports = ProductController;
