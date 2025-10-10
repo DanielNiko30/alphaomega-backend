@@ -380,7 +380,6 @@ const TransJualController = {
         }
     },
 
-
     getLunasTransactions: async (req, res) => {
         try {
             const transaksiLunas = await HTransJual.findAll({

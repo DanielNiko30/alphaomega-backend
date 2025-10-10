@@ -6,15 +6,12 @@ const { getDB } = require('./config/sequelize');
 
 const app = express();
 
-// =================== MIDDLEWARE ===================
-// ✅ Fix CORS
 app.use(cors({
   origin: '*', // atau ['http://localhost:50726'] jika ingin spesifik
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ✅ Untuk menangani preflight request OPTIONS
 app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
@@ -23,11 +20,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // =================== CRON JOB ===================
 require("./cron/refreshShopeeToken");
 require("./cron/refreshLazadaToken");
-
-// =================== ROOT ROUTE ===================
-app.get('/', (req, res) => {
-  res.send('✅ Server Express berjalan dengan baik! Akses /api/health untuk cek database.');
-});
 
 // =================== SHOPEE LOGIN URL ===================
 app.get('/api/shopee/generate-login-url', (req, res) => {

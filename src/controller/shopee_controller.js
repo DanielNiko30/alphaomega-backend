@@ -47,9 +47,6 @@ function postJSON(url, body) {
     });
 }
 
-/* =============================
-    Helper: GET Request ke Shopee
-============================= */
 function getJSON(url) {
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(url);
@@ -77,17 +74,11 @@ function getJSON(url) {
     });
 }
 
-/* =============================
-    Helper: Generate Signature Shopee
-============================= */
 function generateSign(path, timestamp, access_token, shop_id) {
     const baseString = `${PARTNER_ID}${path}${timestamp}${access_token}${shop_id}`;
     return crypto.createHmac("sha256", PARTNER_KEY).update(baseString).digest("hex");
 }
 
-/* =============================
-    1. Callback Auth Shopee
-============================= */
 const shopeeCallback = async (req, res) => {
     try {
         const { code, shop_id, state } = req.query;
@@ -148,9 +139,6 @@ const shopeeCallback = async (req, res) => {
     }
 };
 
-/* =============================
-    2. Get Product List dari Shopee
-============================= */
 const getShopeeItemList = async (req, res) => {
     try {
         const shopeeData = await Shopee.findOne();
@@ -1352,11 +1340,6 @@ const setShopeePickup = async (req, res) => {
     }
 };
 
-
-/**
- * === 2. SET DROPOFF ===
- * Digunakan jika seller mengantar barang langsung ke SPX / Dropoff point
- */
 const setShopeeDropoff = async (req, res) => {
     try {
         const { order_sn } = req.body;

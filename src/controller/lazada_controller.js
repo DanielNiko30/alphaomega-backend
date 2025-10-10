@@ -731,9 +731,6 @@ const getProductItemLazada = async (req, res) => {
     }
 };
 
-/**
- * Update Product Lazada
- */
 const updateProductLazada = async (req, res) => {
     try {
         const { id_product } = req.params;
@@ -858,9 +855,6 @@ const updateProductLazada = async (req, res) => {
     }
 };
 
-/**
- * Get Category Tree
- */
 const getCategoryTree = async (req, res) => {
     try {
         const lazadaData = await Lazada.findOne();
@@ -883,9 +877,6 @@ const getCategoryTree = async (req, res) => {
     }
 };
 
-/**
- * Get Brands
- */
 const getBrands = async (req, res) => {
     try {
         const lazadaData = await Lazada.findOne();
@@ -908,7 +899,6 @@ const getBrands = async (req, res) => {
         return res.status(500).json({ error: err.response?.data || err.message });
     }
 };
-
 
 module.exports = {
     generateLoginUrl,

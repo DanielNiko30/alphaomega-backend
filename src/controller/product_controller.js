@@ -400,6 +400,55 @@ const ProductController = {
         }
     },
 
+    updateKategori: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { nama_kategori } = req.body;
+
+            // Validasi input
+            if (!nama_kategori || nama_kategori.trim() === "") {
+                return res.status(400).json({ message: "Nama kategori tidak boleh kosong." });
+            }
+
+            // Cek apakah kategori ada
+            const existingKategori = await Kategori.findByPk(id);
+            if (!existingKategori) {
+                return res.status(404).json({ message: "Kategori tidak ditemukan." });
+            }
+
+            // Cek apakah ada kategori lain dengan nama yang sama
+            const duplicate = await Kategori.findOne({
+                where: {
+                    nama_kategori,
+                    id_kategori: { [Op.ne]: id }
+                }
+            });
+            if (duplicate) {
+                return res.status(400).json({ message: "Nama kategori sudah digunakan oleh kategori lain." });
+            }
+
+            // Update kategori
+            await Kategori.update(
+                { nama_kategori },
+                { where: { id_kategori: id } }
+            );
+
+            // Ambil data terbaru
+            const updated = await Kategori.findByPk(id);
+
+            return res.status(200).json({
+                message: "Kategori berhasil diperbarui",
+                data: updated
+            });
+        } catch (error) {
+            console.error("❌ Gagal update kategori:", error);
+            return res.status(500).json({
+                message: "Gagal memperbarui kategori",
+                error: error.message
+            });
+        }
+    },
+
     getAllStok: async (req, res) => {
         try {
             const stokList = await Stok.findAll();

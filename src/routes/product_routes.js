@@ -4,6 +4,7 @@ const upload = require("../middleware/upload");
 const router = express.Router();
 
 router.get("/kategori", ProductController.getAllKategori);
+router.put("/kategori/:id", ProductController.updateKategori);
 
 router.get("/stok", ProductController.getAllStok);
 router.get("/stok/:id", ProductController.getStokById);
