@@ -50,12 +50,15 @@ async function generateStokId() {
 const ProductController = {
     getAllProducts: async (req, res) => {
         try {
-            const products = await Product.findAll();
+            const products = await Product.findAll({
+                where: { aktif: true }, // ✅ hanya ambil yang aktif
+            });
+
             const productsWithBase64 = products.map(product => ({
                 ...product.toJSON(),
                 gambar_product: product.gambar_product
-                    ? `data:image/png;base64,${product.gambar_product.toString('base64')}`
-                    : null
+                    ? `data:image/png;base64,${product.gambar_product.toString("base64")}`
+                    : null,
             }));
 
             res.json(productsWithBase64);
@@ -350,11 +353,15 @@ const ProductController = {
     deleteProduct: async (req, res) => {
         try {
             const { id } = req.params;
-            const product = await Product.findByPk(id);
-            if (!product) return res.status(404).json({ message: "Product not found" });
 
-            await product.destroy();
-            res.json({ message: "Product deleted successfully" });
+            const product = await Product.findByPk(id);
+            if (!product)
+                return res.status(404).json({ message: "Product not found" });
+
+            // ✅ Soft delete — ubah aktif menjadi false
+            await product.update({ aktif: false });
+
+            res.json({ message: "Product deactivated successfully" });
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
@@ -451,7 +458,9 @@ const ProductController = {
 
     getAllStok: async (req, res) => {
         try {
-            const stokList = await Stok.findAll();
+            const stokList = await Stok.findAll({
+                where: { aktif: true }, // ✅ hanya stok aktif
+            });
             res.json(stokList);
         } catch (error) {
             res.status(500).json({ message: error.message });
@@ -460,8 +469,16 @@ const ProductController = {
 
     getStokById: async (req, res) => {
         try {
-            const stok = await Stok.findByPk(req.params.id);
-            if (!stok) return res.status(404).json({ message: "Stok tidak ditemukan" });
+            const stok = await Stok.findOne({
+                where: {
+                    id_stok: req.params.id,
+                    aktif: true, // ✅ hanya ambil stok yang masih aktif
+                },
+            });
+
+            if (!stok)
+                return res.status(404).json({ message: "Stok tidak ditemukan atau nonaktif" });
+
             res.json(stok);
         } catch (error) {
             res.status(500).json({ message: error.message });
@@ -682,19 +699,22 @@ const ProductController = {
     getAllProductWithStok: async (req, res) => {
         try {
             const products = await Product.findAll({
+                where: { aktif: true }, // ✅ hanya ambil produk aktif
                 include: [
                     {
                         model: Stok,
-                        as: 'stok',
-                        attributes: ['id_stok', 'satuan', 'harga', 'stok'],
+                        as: "stok",
+                        attributes: ["id_stok", "satuan", "harga", "stok"],
+                        where: { aktif: true }, // ✅ hanya ambil stok aktif
+                        required: false, // biar produk tetap muncul walau stok kosong
                     },
                     {
                         model: Kategori,
-                        as: 'kategori',
-                        attributes: ['nama_kategori'],
+                        as: "kategori",
+                        attributes: ["nama_kategori"],
                     },
                 ],
-                order: [['nama_product', 'ASC']],
+                order: [["nama_product", "ASC"]],
             });
 
             if (!products || products.length === 0) {
