@@ -499,9 +499,20 @@ const ProductController = {
 
     deleteStok: async (req, res) => {
         try {
-            const deleted = await Stok.destroy({ where: { id_stok: req.params.id } });
-            res.json({ message: "Stok berhasil dihapus" });
+            const { id } = req.params;
+            const stok = await Stok.findByPk(id);
+
+            if (!stok) {
+                return res.status(404).json({ message: "Stok tidak ditemukan" });
+            }
+
+            // Ubah status aktif jadi false
+            stok.aktif = false;
+            await stok.save();
+
+            res.json({ message: "Stok berhasil dinonaktifkan (aktif = false)" });
         } catch (error) {
+            console.error("❌ Error deleteStok:", error);
             res.status(500).json({ message: error.message });
         }
     },

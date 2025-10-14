@@ -28,6 +28,11 @@ const Product = db.define(
       type: DataTypes.STRING(100),
       allowNull: true,
     },
+    aktif: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+
   },
   {
     tableName: "product",

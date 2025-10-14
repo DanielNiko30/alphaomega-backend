@@ -37,6 +37,10 @@ const Stok = db.define(
             type: DataTypes.INTEGER,
             allowNull: false,
         },
+        aktif: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+        },
     },
     {
         tableName: "stok",
