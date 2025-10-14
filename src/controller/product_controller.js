@@ -31,6 +31,7 @@ let stokCounter = null;
 
 async function generateStokId() {
     if (stokCounter === null) {
+
         const lastStok = await Stok.findOne({
             order: [['id_stok', 'DESC']]
         });
@@ -234,7 +235,7 @@ const ProductController = {
         try {
             let { product_kategori, nama_product, deskripsi_product, stok_list } = req.body;
 
-            // Parsing stok_list agar selalu jadi array of objects
+            // Parsing stok_list agar selalu array of objects
             if (!Array.isArray(stok_list)) {
                 if (typeof stok_list === "string") {
                     try {
@@ -248,21 +249,19 @@ const ProductController = {
             }
 
             // Validasi setiap item stok_list
-            stok_list = stok_list.map(item => {
-                return {
-                    satuan: item.satuan ?? "",
-                    stok: parseInt(item.jumlah) || 0,
-                    harga: parseInt(item.harga) || 0
-                };
-            });
+            stok_list = stok_list.map(item => ({
+                satuan: item.satuan ?? "",
+                stok: parseInt(item.jumlah) || 0,
+                harga: parseInt(item.harga) || 0
+            }));
 
-            // Pastikan kategori ada di database
+            // Pastikan kategori ada
             const kategori = await Kategori.findOne({ where: { id_kategori: product_kategori } });
             if (!kategori) {
                 return res.status(400).json({ message: "Kategori tidak ditemukan!" });
             }
 
-            // Pastikan produk ada di database
+            // Pastikan produk ada
             const product = await Product.findOne({ where: { id_product: req.params.id } });
             if (!product) {
                 return res.status(404).json({ message: "Produk tidak ditemukan!" });
@@ -291,12 +290,14 @@ const ProductController = {
                 stokMap[item.satuan] = { id: item.id_stok, stok: item.stok, harga: item.harga };
             });
 
-            // Update atau create stok baru
+            // Update stok lama / create stok baru
             for (let stokItem of stok_list) {
                 const { satuan, harga, stok } = stokItem;
                 if (stokMap[satuan]) {
+                    // Update stok lama
                     await Stok.update({ stok, harga }, { where: { id_stok: stokMap[satuan].id } });
                 } else {
+                    // Buat stok baru dengan ID unik
                     const id_stok = await generateStokId();
                     await Stok.create({
                         id_stok,
@@ -320,8 +321,8 @@ const ProductController = {
                             "satuan",
                             "stok",
                             "harga",
-                            "id_product_shopee", // ✅ Tambahkan Shopee ID
-                            "id_product_lazada"  // ✅ Tambahkan Lazada ID
+                            "id_product_shopee",
+                            "id_product_lazada"
                         ]
                     }
                 ]
@@ -339,8 +340,8 @@ const ProductController = {
                     satuan: item.satuan,
                     jumlah: item.stok,
                     harga: item.harga,
-                    idProductShopee: item.id_product_shopee, // ✅ ikut dikirim ke Flutter
-                    idProductLazada: item.id_product_lazada  // ✅ ikut dikirim ke Flutter
+                    idProductShopee: item.id_product_shopee,
+                    idProductLazada: item.id_product_lazada
                 })),
                 kategori: kategori.nama_kategori
             });
