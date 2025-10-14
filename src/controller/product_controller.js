@@ -27,6 +27,7 @@ async function generateKategoriId() {
 }
 
 const { Op } = require("sequelize");
+let stokCounter = null;
 
 async function generateStokId() {
     if (stokCounter === null) {
