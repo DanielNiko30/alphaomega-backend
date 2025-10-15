@@ -1,7 +1,7 @@
 const { Op, Sequelize } = require("sequelize");
 const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
-const { Product } = require("../model/product_modell");
+const { Product } = require("../model/product_model");
 
 const LaporanController = {
     // =====================================
