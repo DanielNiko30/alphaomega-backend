@@ -1441,8 +1441,12 @@ const setShopeeDropoff = async (req, res) => {
         }
 
         const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/ship_order";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // === Ambil detail order dari Shopee DULU ===
+        // === Ambil detail order dari Shopee ===
         const orderDetailUrl = `${process.env.BASE_URL}/api/shopee/order-detail?order_sn_list=${order_sn}`;
         const orderDetailResponse = await axios.get(orderDetailUrl);
         const orderData = orderDetailResponse.data?.data?.order_list?.[0];
@@ -1456,14 +1460,13 @@ const setShopeeDropoff = async (req, res) => {
 
         const { buyer_username, total_amount, item_list } = orderData;
 
-        // === Simpan ke Database (HTrans + DTrans) ===
+        // === Simpan ke Database ===
         const id_htrans_jual = await generateHTransJualId();
 
         try {
-            // HTrans
-            const newHTrans = await HTransJual.create({
+            const newTrans = await HTransJual.create({
                 id_htrans_jual,
-                id_user: null,
+                id_user: null, // bisa disesuaikan kalau kamu punya mapping user shopee
                 nama_pembeli: buyer_username,
                 tanggal: new Date(),
                 total_harga: total_amount,
@@ -1472,38 +1475,46 @@ const setShopeeDropoff = async (req, res) => {
                 status: "Selesai",
             });
 
-            // DTrans per item
             for (const item of item_list) {
+                // Cari stok berdasarkan id_product_shopee
                 const stok = await Stok.findOne({
                     where: { id_product_shopee: item.item_id },
                 });
+
+                if (!stok) {
+                    throw new Error(
+                        `Stok untuk item_id ${item.item_id} tidak ditemukan`
+                    );
+                }
 
                 const id_dtrans_jual = await generateDTransJualId();
 
                 await DTransJual.create({
                     id_dtrans_jual,
-                    id_htrans_jual: newHTrans.id_htrans_jual,
-                    id_produk: stok ? stok.id_product_stok : "UNKNOWN",
-                    satuan: stok ? stok.satuan : "PCS",
+                    id_htrans_jual,
+                    id_produk: stok.id_product_stok,
+                    satuan: stok.satuan,
                     jumlah_barang: item.model_quantity_purchased,
                     harga_satuan: item.model_discounted_price,
                     subtotal:
-                        item.model_quantity_purchased * item.model_discounted_price,
+                        item.model_quantity_purchased *
+                        item.model_discounted_price,
                 });
 
-                // Kurangi stok hanya jika satuan cocok dan stok ditemukan
-                if (stok) {
-                    const newStokValue = stok.stok - item.model_quantity_purchased;
-                    await stok.update({ stok: newStokValue });
-                    console.log(
-                        `📉 Update stok ${stok.satuan}: ${stok.stok} -> ${newStokValue}`
+                // Kurangi stok
+                const stokBaru = stok.stok - item.model_quantity_purchased;
+                if (stokBaru < 0) {
+                    throw new Error(
+                        `Stok tidak mencukupi untuk produk ${stok.id_product_stok}`
                     );
                 }
+
+                await stok.update({ stok: stokBaru });
             }
 
             console.log("✅ Order Shopee berhasil disimpan ke database.");
         } catch (dbErr) {
-            console.error("❌ Gagal menyimpan ke DB:", dbErr);
+            console.error("❌ Gagal menyimpan ke DB:", dbErr.message);
             return res.status(500).json({
                 success: false,
                 message:
@@ -1512,15 +1523,10 @@ const setShopeeDropoff = async (req, res) => {
             });
         }
 
-        // === Setelah DB sukses baru lanjut DROP OFF ke Shopee ===
-        const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/logistics/ship_order";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-
+        // === Setelah semua sukses baru lanjut DROP OFF ke Shopee ===
         const payload = {
             order_sn,
-            dropoff: { branch_id: null },
+            dropoff: { branch_id: null }, // untuk SPX Hemat
         };
 
         const shipResponse = await axios.post(url, payload, {
@@ -1531,15 +1537,15 @@ const setShopeeDropoff = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message:
-                    shipResponse.data.message || "Gagal mengatur dropoff order di Shopee",
+                    shipResponse.data.message ||
+                    "Gagal mengatur dropoff order di Shopee",
                 shopee_response: shipResponse.data,
             });
         }
 
-        // === Jika semua berhasil ===
         return res.json({
             success: true,
-            message: "Order Shopee berhasil disimpan & dropoff dikonfirmasi",
+            message: "Dropoff berhasil & order disimpan ke database",
             data: {
                 sumber_penjualan: "Shopee",
                 total_bayar: total_amount,
@@ -1547,7 +1553,7 @@ const setShopeeDropoff = async (req, res) => {
             },
         });
     } catch (err) {
-        console.error("❌ Error setShopeeDropoff:", err.response?.data || err);
+        console.error("❌ Error setShopeeDropoff:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal mengatur dropoff order",
