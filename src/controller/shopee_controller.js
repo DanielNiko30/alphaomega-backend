@@ -1065,14 +1065,15 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
         const params = new URLSearchParams({
             partner_id: PARTNER_ID,
-            timestamp: timestamp,
-            access_token: access_token,
-            shop_id: shop_id,
-            sign: sign,
+            timestamp,
+            access_token,
+            shop_id,
+            sign,
             order_status: "READY_TO_SHIP",
-            page_size: 100, // maksimal per request
-            time_from,
-            time_to,
+            page_size: 100,
+            time_range_field: "create_time", // wajib
+            time_from: 0, // mulai dari epoch
+            time_to: timestamp, // sampai sekarang
         });
 
         const url = `${BASE_URL}${path}?${params.toString()}`;
