@@ -9,15 +9,13 @@ const sharp = require("sharp");
 const qs = require("qs");
 const { Builder } = require("xml2js");
 /**
- * Fungsi untuk menghasilkan tanda tangan (signature) API Lazada.
- * Menggunakan HMAC SHA256 dengan App Secret sebagai kunci.
-* @param {string} apiPath - Path API (e.g., "/product/create")
- * @param {Object<string, string>} allParams - Semua parameter (sysParams + payload dengan nilai MENTAH JSON)
- * @param {string} appSecret - App Secret Lazada (kunci untuk HMAC)
- * @returns {string} Signature dalam format Hex Uppercase
- * @param {number} weightBody - Berat dari body, misal 500
- * @param {Array} options - Array options Lazada dari category attribute
- * @returns {string} - ID option Lazada
+* @param {string} apiPath
+ * @param {Object<string, string>} allParams
+ * @param {string} appSecret
+ * @returns {string}
+ * @param {number} weightBody
+ * @param {Array} options
+ * @returns {string}
  */
 function generateSign(apiPath, allParams, appSecret) {
     // 1. Urutkan SEMUA parameter (System + Payload) secara ASCII.
@@ -46,13 +44,10 @@ function generateSign(apiPath, allParams, appSecret) {
 
 
 /**
- * Controller untuk membuat dummy product
  * @param {*} req 
  * @param {*} res 
  */
-/**
- * Generate Login URL Lazada
- */
+
 const generateLoginUrl = (req, res) => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
@@ -65,9 +60,7 @@ const generateLoginUrl = (req, res) => {
         return res.status(500).json({ error: 'Gagal generate login URL' });
     }
 };
-/**
- * Callback setelah login Lazada
- */
+
 const lazadaCallback = async (req, res) => {
     try {
         const { code, state } = req.query;
@@ -110,9 +103,6 @@ const lazadaCallback = async (req, res) => {
     }
 };
 
-/**
- * Refresh Access Token Lazada
- */
 const refreshToken = async () => {
     const CLIENT_ID = process.env.LAZADA_APP_KEY;
     const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
@@ -148,9 +138,6 @@ const refreshToken = async () => {
     return tokenData.access_token;
 };
 
-/**
- * Get Products
- */
 const getProducts = async (req, res) => {
     try {
         const lazadaData = await Lazada.findOne();
@@ -400,7 +387,6 @@ const getCategoryAttributes = async (req, res) => {
     }
 };
 
-// --- Fungsi Upload Gambar ke Lazada ---
 async function uploadImageToLazadaFromDB(product, accessToken) {
     if (!product || !product.gambar_product) {
         throw new Error("Produk tidak ditemukan atau tidak memiliki gambar.");
