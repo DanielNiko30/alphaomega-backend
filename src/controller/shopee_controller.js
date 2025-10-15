@@ -36,6 +36,33 @@ async function generateDTransJualId() {
     return newId;
 }
 
+async function generateInvoiceNumber() {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+    const prefix = `INV/${dateStr}/`;
+
+    const lastInvoice = await HTransJual.findOne({
+        where: {
+            nomor_invoice: {
+                [Op.like]: `${prefix}%`
+            }
+        },
+        order: [["nomor_invoice", "DESC"]],
+    });
+
+    let nextNumber = 1;
+
+    if (lastInvoice) {
+        const match = lastInvoice.nomor_invoice.match(/INV\/\d{8}\/(\d+)/);
+        if (match) {
+            nextNumber = parseInt(match[1], 10) + 1;
+        }
+    }
+
+    const newInvoice = `${prefix}${nextNumber.toString().padStart(6, "0")}`;
+    return newInvoice;
+}
+
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
