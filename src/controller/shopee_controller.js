@@ -1135,7 +1135,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         p.nama_product,
                         p.gambar_product
                     FROM stok s
-                    JOIN product p ON p.id_product = s.id_product
+                    JOIN product p ON p.id_product = s.id_product_stok
                     WHERE s.id_product_shopee = :itemId
                     LIMIT 1
                     `,
