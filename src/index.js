@@ -55,6 +55,7 @@ app.use('/api/supplier', require('./routes/supplier_routes'));
 app.use('/api/auth', require('./routes/auth_routes'));
 app.use('/api/transaksiBeli', require('./routes/trans_beli_routes'));
 app.use('/api/transaksiJual', require('./routes/trans_jual_routes'));
+app.use('/api/laporan', require('./routes/laporan_routes'));
 
 // =================== SOCKET.IO ===================
 const server = http.createServer(app);
