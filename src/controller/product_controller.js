@@ -522,25 +522,36 @@ const ProductController = {
     getSatuanByProductId: async (req, res) => {
         try {
             const { id } = req.params;
+
+            // Ambil stok yang aktif = true untuk produk tertentu
             const stokList = await Stok.findAll({
-                where: { id_product_stok: id }
+                where: {
+                    id_product_stok: id,
+                    aktif: true, // ✅ hanya stok aktif
+                },
             });
 
             if (!stokList || stokList.length === 0) {
-                return res.status(404).json({ message: "Tidak ada satuan untuk produk ini" });
+                return res.status(404).json({
+                    message: "Tidak ada satuan aktif untuk produk ini",
+                });
             }
 
-            const satuanList = stokList.map(s => ({
+            const satuanList = stokList.map((s) => ({
                 id_stok: s.id_stok,
                 satuan: s.satuan,
                 jumlah: s.stok,
-                harga: s.harga
+                harga: s.harga,
+                aktif: s.aktif, // boleh ikut ditampilkan agar frontend tahu statusnya
             }));
 
-            res.json(satuanList);
+            res.status(200).json(satuanList);
         } catch (error) {
             console.error("Error mengambil satuan:", error);
-            res.status(500).json({ message: "Gagal mengambil satuan", error: error.message });
+            res.status(500).json({
+                message: "Gagal mengambil satuan",
+                error: error.message,
+            });
         }
     },
 
