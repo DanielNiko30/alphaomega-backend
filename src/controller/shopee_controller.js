@@ -1432,34 +1432,39 @@ const setShopeeDropoff = async (req, res) => {
             });
         }
 
-        // === CEK TOKEN ===
+        // === CEK TOKEN SHOPEE ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
                 success: false,
-                message: "Shopee token not found. Please authorize first.",
+                message: "Shopee token tidak ditemukan. Silakan authorize ulang.",
             });
         }
 
         const { shop_id, access_token } = shopeeData;
-
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/logistics/ship_order";
+
+        // === SIGNATURE ===
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
+        // === URL SESUAI DOC ===
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // === PAYLOAD UNTUK DROPOFF ===
+        console.log("🛰️ Final URL Shopee:", url);
+
+        // === PAYLOAD SESUAI DOKUMENTASI ===
         const payload = {
-            order_sn,
+            order_sn: order_sn,
             dropoff: {
-                branch_id: null, // SPX Hemat memang tidak pakai branch_id
+                branch_id: 0, // sebagian besar SPX Hemat tidak perlu branch id tapi tetap dikirim
+                sender_real_name: "Toko Alpha Omega", // isi nama toko kamu
             },
         };
 
-        console.log("📦 Final Payload Ship Order (Dropoff):", JSON.stringify(payload, null, 2));
+        console.log("📦 Payload Ship Order:", JSON.stringify(payload, null, 2));
 
-        // === AMBIL DETAIL ORDER DARI SHOPEE ===
+        // === AMBIL DETAIL ORDER DARI API LOKAL ===
         const orderDetailUrl = `${process.env.BASE_URL}/api/shopee/order-detail?order_sn_list=${order_sn}`;
         const orderDetailResponse = await axios.get(orderDetailUrl);
         const orderData = orderDetailResponse.data?.data?.order_list?.[0];
@@ -1473,14 +1478,14 @@ const setShopeeDropoff = async (req, res) => {
 
         const { buyer_username, total_amount, item_list } = orderData;
 
-        // === SIMPAN KE DATABASE (HTrans + DTrans) ===
+        // === SIMPAN TRANSAKSI KE DATABASE ===
         const id_htrans_jual = await generateHTransJualId();
 
         try {
-            const newHTrans = await HTransJual.create({
+            await HTransJual.create({
                 id_htrans_jual,
-                id_user: "USR001", // bisa disesuaikan, sementara static
-                id_user_penjual: "USR001", // bisa diganti user toko
+                id_user: "USR001",
+                id_user_penjual: "USR001",
                 nama_pembeli: buyer_username,
                 tanggal: new Date(),
                 total_harga: total_amount,
@@ -1491,7 +1496,7 @@ const setShopeeDropoff = async (req, res) => {
 
             for (const item of item_list) {
                 const stok = await Stok.findOne({
-                    where: { id_product_shopee: item.item_id },
+                    where: { id_product_shopee: String(item.item_id) },
                 });
 
                 const id_dtrans_jual = await generateDTransJualId();
@@ -1514,22 +1519,22 @@ const setShopeeDropoff = async (req, res) => {
                 }
             }
 
-            console.log("✅ Data order Shopee berhasil disimpan ke DB.");
+            console.log("✅ Transaksi Shopee berhasil disimpan ke DB.");
         } catch (dbErr) {
-            console.error("❌ Gagal menyimpan ke DB:", dbErr);
+            console.error("❌ Gagal simpan ke DB:", dbErr);
             return res.status(500).json({
                 success: false,
-                message: "Gagal menyimpan transaksi ke database, dropoff Shopee dibatalkan.",
+                message: "Gagal menyimpan transaksi ke database",
                 error: dbErr.message,
             });
         }
 
-        // === JIKA DB SUKSES, LANJUT KE DROPOFF ===
+        // === LANJUTKAN KE SHOPEE API ===
         const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
         });
 
-        console.log("✅ Response Shopee Ship Order (Dropoff):", JSON.stringify(response.data, null, 2));
+        console.log("✅ Shopee Ship Order Response:", JSON.stringify(response.data, null, 2));
 
         if (response.data.error) {
             return res.status(400).json({
@@ -1540,12 +1545,10 @@ const setShopeeDropoff = async (req, res) => {
         }
 
         const result = response.data.response?.result_list?.[0] || {};
-        const pkgNumber = result.package_number || null;
-
         return res.json({
             success: true,
             message: "Dropoff order berhasil & transaksi disimpan ke database",
-            package_number: pkgNumber,
+            package_number: result.package_number || null,
             data: response.data.response,
         });
     } catch (err) {
@@ -1557,6 +1560,7 @@ const setShopeeDropoff = async (req, res) => {
         });
     }
 };
+
 
 const createShippingDocumentJob = async (req, res) => {
     try {
