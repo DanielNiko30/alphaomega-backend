@@ -1060,20 +1060,20 @@ const getShopeeOrdersWithItems = async (req, res) => {
         const BASE_URL = "https://partner.shopeemobile.com";
 
         // Bisa set time_from ke epoch lama supaya semua order muncul
-        const time_from = 0; // mulai dari 1970
-        const time_to = timestamp; // sampai sekarang
+        const now = Math.floor(Date.now() / 1000);
+        const twoDaysAgo = now - 2 * 24 * 60 * 60; // 2 hari ke belakang
 
         const params = new URLSearchParams({
             partner_id: PARTNER_ID,
-            timestamp,
+            timestamp: now,
             access_token,
             shop_id,
             sign,
             order_status: "READY_TO_SHIP",
             page_size: 100,
-            time_range_field: "create_time", // wajib
-            time_from: 0, // mulai dari epoch
-            time_to: timestamp, // sampai sekarang
+            time_range_field: "create_time",
+            time_from: twoDaysAgo,
+            time_to: now,
         });
 
         const url = `${BASE_URL}${path}?${params.toString()}`;
