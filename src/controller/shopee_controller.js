@@ -1610,8 +1610,8 @@ const setShopeeDropoff = async (req, res) => {
         const nomor_invoice = await generateInvoiceNumber();
         await HTransJual.create({
             id_htrans_jual,
-            id_user: null,
-            id_user_penjual: null,
+            id_user: "USR001",
+            id_user_penjual: "USR001",
             nama_pembeli: order.buyer_username,
             tanggal: new Date(),
             total_harga: Math.floor(order.total_amount),
