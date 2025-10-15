@@ -7,12 +7,34 @@ const { Product } = require("../model/product_model");
 const { Stok } = require("../model/stok_model");
 const { Shopee } = require("../model/shopee_model");
 const { getDB } = require("../config/sequelize");
+const { HTransJual } = require("../model/htrans_jual_model");
+const { DTransJual } = require("../model/dtrans_jual_model");
 
 const db = getDB();
 
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
+
+async function generateHTransJualId() {
+    const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
+    let newId = "HTJ000001";
+    if (last) {
+        const num = parseInt(last.id_htrans_jual.replace("HTJ", ""), 10);
+        newId = `HTJ${String(num + 1).padStart(6, "0")}`;
+    }
+    return newId;
+}
+
+async function generateDTransJualId() {
+    const last = await DTransJual.findOne({ order: [["id_dtrans_jual", "DESC"]] });
+    let newId = "DTJ000001";
+    if (last) {
+        const num = parseInt(last.id_dtrans_jual.replace("DTJ", ""), 10);
+        newId = `DTJ${String(num + 1).padStart(6, "0")}`;
+    }
+    return newId;
+}
 
 function postJSON(url, body) {
     return new Promise((resolve, reject) => {
@@ -1274,7 +1296,7 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        // === CEK TOKEN ===
+        // === AMBIL TOKEN SHOPEE ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -1285,50 +1307,96 @@ const setShopeePickup = async (req, res) => {
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
-
         const path = "/api/v2/logistics/ship_order";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // === FINAL PAYLOAD ===
+        // === PAYLOAD KE SHOPEE ===
         const payload = {
             order_sn,
-            pickup: {
-                address_id,
-            },
+            pickup: { address_id },
         };
-
         if (package_number) payload.package_number = package_number;
         if (pickup_time_id) payload.pickup.pickup_time_id = pickup_time_id;
 
-        console.log("📦 Payload Ship Order (Pickup):", JSON.stringify(payload, null, 2));
-
-        // === CALL SHOPEE API ===
-        const response = await axios.post(url, payload, {
+        // === CALL API SHOPEE ===
+        const shipResponse = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
         });
 
-        console.log("✅ Response Shopee Ship Order (Pickup):", JSON.stringify(response.data, null, 2));
-
-        // Jika Shopee balikan error
-        if (response.data.error) {
+        if (shipResponse.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message || "Gagal mengatur pickup order",
-                shopee_response: response.data,
+                message: shipResponse.data.message || "Gagal mengatur pickup order",
+                shopee_response: shipResponse.data,
             });
         }
 
-        // === CEK package_number ===
-        const result = response.data.response?.result_list?.[0] || {};
-        const pkgNumber = result.package_number || null;
+        // === AMBIL DETAIL ORDER ===
+        const orderDetailUrl = `${process.env.BASE_URL}/api/shopee/order-detail?order_sn_list=${order_sn}`;
+        const orderDetailResponse = await axios.get(orderDetailUrl);
+        const orderData = orderDetailResponse.data?.data?.order_list?.[0];
+
+        if (!orderData) {
+            return res.status(400).json({
+                success: false,
+                message: "Gagal mendapatkan detail order dari Shopee",
+            });
+        }
+
+        const buyer_username = orderData.buyer_username;
+        const total_amount = orderData.total_amount;
+        const item_list = orderData.item_list || [];
+
+        // === SIMPAN KE DB (Transaksi Jual) ===
+        const id_htrans_jual = await generateHTransJualId();
+
+        const newTrans = await HTransJual.create({
+            id_htrans_jual,
+            id_user: orderData?.buyer_user_id || null,
+            nama_pembeli: buyer_username,
+            tanggal: new Date(),
+            total_harga: total_amount,
+            metode_pembayaran: "Shopee",
+            nomor_invoice: `INV${Date.now()}`,
+            status: "Selesai",
+        });
+
+        // === SIMPAN DETAIL BARANG ===
+        for (const item of item_list) {
+            const id_dtrans_jual = await generateDTransJualId();
+
+            // CARI STOK PRODUK YANG SESUAI SKU / MODEL ID
+            const stok = await Stok.findOne({ where: { sku: item.item_sku } });
+
+            await DTransJual.create({
+                id_dtrans_jual,
+                id_htrans_jual,
+                id_produk: stok?.id_product_stok || "UNKNOWN",
+                satuan: item.model_name || "PCS",
+                jumlah_barang: item.model_quantity_purchased,
+                harga_satuan: item.model_discounted_price,
+                subtotal: item.model_quantity_purchased * item.model_discounted_price,
+            });
+
+            // UPDATE STOK PRODUK
+            if (stok) {
+                await stok.update({
+                    stok: stok.stok - item.model_quantity_purchased,
+                });
+            }
+        }
 
         return res.json({
             success: true,
-            message: "Pickup order berhasil diatur",
-            package_number: pkgNumber,
-            data: response.data.response,
+            message: "Pickup berhasil & order disimpan ke database",
+            data: {
+                sumber_penjualan: "Shopee",
+                id_transaksi: id_htrans_jual,
+                total_bayar: total_amount,
+                jumlah_item: item_list.length,
+            },
         });
     } catch (err) {
         console.error("❌ Error setShopeePickup:", err.response?.data || err.message);
