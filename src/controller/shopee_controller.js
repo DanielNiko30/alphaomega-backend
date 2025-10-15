@@ -1001,16 +1001,18 @@ const getShopeeOrdersWithItems = async (req, res) => {
                 // Cek produk di DB lokal berdasarkan id_product_shopee
                 const stok = await db.query(
                     `
-                    SELECT 
-                        s.id_product_stok,
-                        s.id_product_shopee,
-                        p.nama_product,
-                        p.gambar_product
-                    FROM stok s
-                    JOIN product p ON p.id_product = s.id_product_stok
-                    WHERE s.id_product_shopee = :itemId
-                    LIMIT 1
-                    `,
+                        SELECT 
+                            s.id_product_stok,
+                            s.id_product_shopee,
+                            s.id_product,
+                            s.satuan,
+                            p.nama_product,
+                            p.gambar_product
+                        FROM stok s
+                        JOIN product p ON p.id_product = s.id_product
+                        WHERE s.id_product_shopee = :itemId
+                        LIMIT 1
+                        `,
                     {
                         replacements: { itemId: String(item.item_id) },
                         type: QueryTypes.SELECT,
