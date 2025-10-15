@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
+const { Product } = require("./product_model"); // ⬅️ WAJIB DITAMBAHKAN
 
 const db = getDB();
 
@@ -40,5 +41,10 @@ const DTransJual = db.define(
     timestamps: false,
   }
 );
+
+DTransJual.belongsTo(Product, {
+  foreignKey: "id_produk",
+  as: "produk",
+});
 
 module.exports = { DTransJual };
