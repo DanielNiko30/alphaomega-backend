@@ -1286,9 +1286,8 @@ const getShippingParameter = async (req, res) => {
 
 const setShopeePickup = async (req, res) => {
     try {
-        const { order_sn, package_number, address_id, pickup_time_id } = req.body;
+        const { order_sn, address_id, package_number, pickup_time_id } = req.body;
 
-        // === VALIDASI ===
         if (!order_sn || !address_id) {
             return res.status(400).json({
                 success: false,
@@ -1296,7 +1295,7 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        // === AMBIL TOKEN SHOPEE ===
+        // === Ambil token Shopee ===
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({
@@ -1306,34 +1305,8 @@ const setShopeePickup = async (req, res) => {
         }
 
         const { shop_id, access_token } = shopeeData;
-        const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/logistics/ship_order";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-
-        // === PAYLOAD KE SHOPEE ===
-        const payload = {
-            order_sn,
-            pickup: { address_id },
-        };
-        if (package_number) payload.package_number = package_number;
-        if (pickup_time_id) payload.pickup.pickup_time_id = pickup_time_id;
-
-        // === CALL API SHOPEE ===
-        const shipResponse = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" },
-        });
-
-        if (shipResponse.data.error) {
-            return res.status(400).json({
-                success: false,
-                message: shipResponse.data.message || "Gagal mengatur pickup order",
-                shopee_response: shipResponse.data,
-            });
-        }
-
-        // === AMBIL DETAIL ORDER ===
+        // === Ambil detail order dari Shopee dulu ===
         const orderDetailUrl = `${process.env.BASE_URL}/api/shopee/order-detail?order_sn_list=${order_sn}`;
         const orderDetailResponse = await axios.get(orderDetailUrl);
         const orderData = orderDetailResponse.data?.data?.order_list?.[0];
@@ -1345,52 +1318,91 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        const buyer_username = orderData.buyer_username;
-        const total_amount = orderData.total_amount;
-        const item_list = orderData.item_list || [];
+        const { buyer_username, total_amount, item_list } = orderData;
 
-        // === SIMPAN KE DB (Transaksi Jual) ===
+        // === Simpan ke Database (HTrans + DTrans) ===
         const id_htrans_jual = await generateHTransJualId();
 
-        const newTrans = await HTransJual.create({
-            id_htrans_jual,
-            id_user: orderData?.buyer_user_id || null,
-            nama_pembeli: buyer_username,
-            tanggal: new Date(),
-            total_harga: total_amount,
-            metode_pembayaran: "Shopee",
-            nomor_invoice: `INV${Date.now()}`,
-            status: "Selesai",
-        });
-
-        // === SIMPAN DETAIL BARANG ===
-        for (const item of item_list) {
-            const id_dtrans_jual = await generateDTransJualId();
-
-            // CARI STOK PRODUK YANG SESUAI SKU / MODEL ID
-            const stok = await Stok.findOne({ where: { sku: item.item_sku } });
-
-            await DTransJual.create({
-                id_dtrans_jual,
+        try {
+            const newTrans = await HTransJual.create({
                 id_htrans_jual,
-                id_produk: stok?.id_product_stok || "UNKNOWN",
-                satuan: item.model_name || "PCS",
-                jumlah_barang: item.model_quantity_purchased,
-                harga_satuan: item.model_discounted_price,
-                subtotal: item.model_quantity_purchased * item.model_discounted_price,
+                id_user: orderData?.buyer_user_id || null,
+                nama_pembeli: buyer_username,
+                tanggal: new Date(),
+                total_harga: total_amount,
+                metode_pembayaran: "Shopee",
+                nomor_invoice: `INV${Date.now()}`,
+                status: "Selesai",
             });
 
-            // UPDATE STOK PRODUK
-            if (stok) {
-                await stok.update({
-                    stok: stok.stok - item.model_quantity_purchased,
+            for (const item of item_list) {
+                const stok = await Stok.findOne({
+                    where: { id_product_shopee: item.item_id },
                 });
+
+                const id_dtrans_jual = await generateDTransJualId();
+
+                await DTransJual.create({
+                    id_dtrans_jual,
+                    id_htrans_jual,
+                    id_produk: stok ? stok.id_product_stok : "UNKNOWN",
+                    satuan: stok ? stok.satuan : "PCS",
+                    jumlah_barang: item.model_quantity_purchased,
+                    harga_satuan: item.model_discounted_price,
+                    subtotal:
+                        item.model_quantity_purchased * item.model_discounted_price,
+                });
+
+                // Kurangi stok
+                if (stok) {
+                    await stok.update({
+                        stok: stok.stok - item.model_quantity_purchased,
+                    });
+                }
             }
+
+            console.log("✅ Order Shopee berhasil disimpan ke database.");
+        } catch (dbErr) {
+            console.error("❌ Gagal menyimpan ke DB:", dbErr);
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Gagal menyimpan data order ke database. Pickup Shopee dibatalkan.",
+                error: dbErr.message,
+            });
+        }
+
+        // === Setelah DB sukses baru lanjut PICKUP ke Shopee ===
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/ship_order";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const payload = {
+            order_sn,
+            pickup: { address_id },
+        };
+        if (package_number) payload.package_number = package_number;
+        if (pickup_time_id) payload.pickup.pickup_time_id = pickup_time_id;
+
+        console.log("📦 Payload Pickup ke Shopee:", payload);
+
+        const shipResponse = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        if (shipResponse.data.error) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    shipResponse.data.message || "Gagal mengatur pickup order di Shopee",
+                shopee_response: shipResponse.data,
+            });
         }
 
         return res.json({
             success: true,
-            message: "Pickup berhasil & order disimpan ke database",
+            message: "Order Shopee berhasil disimpan & pickup dikonfirmasi",
             data: {
                 sumber_penjualan: "Shopee",
                 id_transaksi: id_htrans_jual,
