@@ -998,21 +998,21 @@ const getShopeeOrdersWithItems = async (req, res) => {
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                // Cek produk di DB lokal berdasarkan id_product_shopee
+                // === Cek produk di DB lokal berdasarkan id_product_shopee ===
                 const stok = await db.query(
                     `
-                        SELECT 
-                            s.id_product_stok,
-                            s.id_product_shopee,
-                            s.id_product,
-                            s.satuan,
-                            p.nama_product,
-                            p.gambar_product
-                        FROM stok s
-                        JOIN product p ON p.id_product = s.id_product
-                        WHERE s.id_product_shopee = :itemId
-                        LIMIT 1
-                        `,
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_shopee,
+                        s.id_product,
+                        s.satuan,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
                     {
                         replacements: { itemId: String(item.item_id) },
                         type: QueryTypes.SELECT,
@@ -1026,6 +1026,9 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
                     items.push({
                         item_id: item.item_id,
+                        id_product: stok[0].id_product,
+                        id_product_stok: stok[0].id_product_stok,
+                        satuan: stok[0].satuan,
                         name: stok[0].nama_product,
                         image_url: gambarBase64,
                         variation_name: item.model_name,
@@ -1034,7 +1037,7 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         from_db: true,
                     });
                 } else {
-                    // Fallback ke Shopee API jika tidak ada di DB lokal
+                    // === Fallback ke Shopee API jika tidak ada di DB lokal ===
                     try {
                         const productInfoResp = await axios.post(
                             `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
@@ -1045,6 +1048,9 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
                         items.push({
                             item_id: item.item_id,
+                            id_product: null,
+                            id_product_stok: null,
+                            satuan: item.model_name,
                             name: productInfo?.name || "Produk Tidak Diketahui",
                             image_url: productInfo?.image || null,
                             variation_name: item.model_name,
@@ -1056,6 +1062,9 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         console.error("❌ Fallback gagal:", err.message);
                         items.push({
                             item_id: item.item_id,
+                            id_product: null,
+                            id_product_stok: null,
+                            satuan: item.model_name,
                             name: "Produk Tidak Diketahui",
                             image_url: null,
                             variation_name: item.model_name,
