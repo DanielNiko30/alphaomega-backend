@@ -1160,8 +1160,8 @@ const getShopeeOrdersWithItems = async (req, res) => {
                         from_db: true,
                         id_product_stok: local.id_product_stok,
                         satuan: local.satuan,
-                        nama_product: local.nama_product,
-                        gambar_product: gambarBase64,
+                        namet: local.nama_product,
+                        image_url: gambarBase64,
                     });
                 } else {
                     items.push({
