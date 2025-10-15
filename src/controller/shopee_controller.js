@@ -1042,114 +1042,127 @@ const searchShopeeProductByName = async (req, res) => {
 
 const getShopeeOrdersWithItems = async (req, res) => {
     try {
-        const orderListResp = await axios.get(
-            "https://tokalphaomegaploso.my.id/api/shopee/orders?page_size=20&order_status=READY_TO_SHIP"
-        );
-
-        const orderList = orderListResp.data?.data?.order_list || [];
-        if (orderList.length === 0) {
-            return res.json({
-                success: true,
-                message: "Tidak ada order Shopee yang ditemukan",
-                data: [],
-            });
-        }
-
         const finalOrders = [];
+        const now = Math.floor(Date.now() / 1000);
+        const daysPerChunk = 30; // ambil per 30 hari
+        const secondsPerChunk = daysPerChunk * 24 * 60 * 60;
 
-        for (const order of orderList) {
-            const orderDetailResp = await axios.get(
-                `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
+        // Mulai ambil 90 hari ke belakang (atau sesuaikan)
+        let startTime = now - 90 * 24 * 60 * 60;
+
+        while (startTime < now) {
+            const endTime = Math.min(startTime + secondsPerChunk, now);
+
+            // Ambil order list dari API (replace sesuai endpoint asli Anda)
+            const orderListResp = await axios.get(
+                `https://tokalphaomegaploso.my.id/api/shopee/orders?order_status=READY_TO_SHIP&time_from=${startTime}&time_to=${endTime}&page_size=50`
             );
 
-            const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
-            if (!orderDetail?.item_list) continue;
+            const orderList = orderListResp.data?.data?.order_list || [];
+            if (orderList.length === 0) {
+                startTime = endTime + 1;
+                continue;
+            }
 
-            const items = [];
+            for (const order of orderList) {
+                // Ambil detail order
+                const orderDetailResp = await axios.get(
+                    `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
+                );
 
-            for (const item of orderDetail.item_list) {
-                // Cek produk di DB lokal berdasarkan id_product_shopee
-                const stok = await db.query(
-                    `
+                const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
+                if (!orderDetail?.item_list) continue;
+
+                const items = [];
+
+                for (const item of orderDetail.item_list) {
+                    // Cek DB lokal
+                    const stok = await db.query(
+                        `
                         SELECT 
                             s.id_product_stok,
                             s.id_product_shopee,
+                            s.satuan,
                             p.nama_product,
                             p.gambar_product
                         FROM stok s
-                        JOIN product p ON p.id_product = s.id_product_stok
+                        JOIN product p ON p.id_product = s.id_product
                         WHERE s.id_product_shopee = :itemId
                         LIMIT 1
-                    `,
-                    {
-                        replacements: { itemId: String(item.item_id) },
-                        type: QueryTypes.SELECT,
-                    }
-                );
+                        `,
+                        {
+                            replacements: { itemId: String(item.item_id) },
+                            type: QueryTypes.SELECT,
+                        }
+                    );
 
-                if (stok.length > 0) {
-                    const gambarBase64 = stok[0].gambar_product
-                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
-                        : null;
-
-                    items.push({
-                        item_id: item.item_id,
-                        name: stok[0].nama_product,
-                        image_url: gambarBase64,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: true,
-                    });
-                } else {
-                    // Fallback ke Shopee API jika tidak ada di DB lokal
-                    try {
-                        const productInfoResp = await axios.post(
-                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                            { satuan: item.model_name }
-                        );
-
-                        const productInfo = productInfoResp.data?.data;
+                    if (stok.length > 0) {
+                        const gambarBase64 = stok[0].gambar_product
+                            ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                            : null;
 
                         items.push({
                             item_id: item.item_id,
-                            name: productInfo?.name || "Produk Tidak Diketahui",
-                            image_url: productInfo?.image || null,
+                            name: stok[0].nama_product,
+                            image_url: gambarBase64,
                             variation_name: item.model_name,
                             quantity: item.model_quantity_purchased,
                             price: item.model_discounted_price,
-                            from_db: false,
+                            from_db: true,
+                            id_product_stok: stok[0].id_product_stok,
+                            satuan: stok[0].satuan,
                         });
-                    } catch (err) {
-                        console.error("❌ Fallback gagal:", err.message);
-                        items.push({
-                            item_id: item.item_id,
-                            name: "Produk Tidak Diketahui",
-                            image_url: null,
-                            variation_name: item.model_name,
-                            quantity: item.model_quantity_purchased,
-                            price: item.model_discounted_price,
-                            from_db: false,
-                        });
+                    } else {
+                        // fallback API
+                        try {
+                            const productInfoResp = await axios.post(
+                                `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
+                                { satuan: item.model_name }
+                            );
+                            const productInfo = productInfoResp.data?.data;
+
+                            items.push({
+                                item_id: item.item_id,
+                                name: productInfo?.name || "Produk Tidak Diketahui",
+                                image_url: productInfo?.image || null,
+                                variation_name: item.model_name,
+                                quantity: item.model_quantity_purchased,
+                                price: item.model_discounted_price,
+                                from_db: false,
+                            });
+                        } catch (err) {
+                            console.error("❌ Fallback gagal:", err.message);
+                            items.push({
+                                item_id: item.item_id,
+                                name: "Produk Tidak Diketahui",
+                                image_url: null,
+                                variation_name: item.model_name,
+                                quantity: item.model_quantity_purchased,
+                                price: item.model_discounted_price,
+                                from_db: false,
+                            });
+                        }
                     }
                 }
+
+                finalOrders.push({
+                    order_sn: order.order_sn,
+                    buyer_username: order.buyer_username,
+                    status: order.order_status,
+                    total_amount: order.total_amount,
+                    shipping_method: order.package_list?.[0]?.shipping_carrier || "",
+                    create_time: order.create_time,
+                    items: [items[0]],
+                    full_items: items,
+                });
             }
 
-            finalOrders.push({
-                order_sn: order.order_sn,
-                buyer_username: order.buyer_username,
-                status: order.order_status,
-                total_amount: order.total_amount,
-                shipping_method: order.package_list?.[0]?.shipping_carrier || "",
-                create_time: order.create_time,
-                items: [items[0]],
-                full_items: items,
-            });
+            startTime = endTime + 1;
         }
 
         return res.json({
             success: true,
-            message: "Berhasil mengambil data order Shopee",
+            message: "Berhasil mengambil semua order READY_TO_SHIP + data lokal",
             data: finalOrders,
         });
     } catch (err) {
