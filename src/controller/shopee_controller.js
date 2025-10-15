@@ -1529,7 +1529,7 @@ const setShopeePickup = async (req, res) => {
     }
 };
 
-const setShopeeDropoffWithTransaction = async (req, res) => {
+const setShopeeDropoff = async (req, res) => {
     try {
         const { order_sn } = req.body;
 
