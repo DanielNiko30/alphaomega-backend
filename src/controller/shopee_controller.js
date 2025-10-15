@@ -1460,7 +1460,8 @@ const setShopeeDropoff = async (req, res) => {
         const id_htrans_jual = await generateHTransJualId();
 
         try {
-            const newTrans = await HTransJual.create({
+            // HTrans
+            const newHTrans = await HTransJual.create({
                 id_htrans_jual,
                 id_user: null,
                 nama_pembeli: buyer_username,
@@ -1471,6 +1472,7 @@ const setShopeeDropoff = async (req, res) => {
                 status: "Selesai",
             });
 
+            // DTrans per item
             for (const item of item_list) {
                 const stok = await Stok.findOne({
                     where: { id_product_shopee: item.item_id },
@@ -1480,7 +1482,7 @@ const setShopeeDropoff = async (req, res) => {
 
                 await DTransJual.create({
                     id_dtrans_jual,
-                    id_htrans_jual,
+                    id_htrans_jual: newHTrans.id_htrans_jual,
                     id_produk: stok ? stok.id_product_stok : "UNKNOWN",
                     satuan: stok ? stok.satuan : "PCS",
                     jumlah_barang: item.model_quantity_purchased,
@@ -1489,10 +1491,13 @@ const setShopeeDropoff = async (req, res) => {
                         item.model_quantity_purchased * item.model_discounted_price,
                 });
 
+                // Kurangi stok hanya jika satuan cocok dan stok ditemukan
                 if (stok) {
-                    await stok.update({
-                        stok: stok.stok - item.model_quantity_purchased,
-                    });
+                    const newStokValue = stok.stok - item.model_quantity_purchased;
+                    await stok.update({ stok: newStokValue });
+                    console.log(
+                        `📉 Update stok ${stok.satuan}: ${stok.stok} -> ${newStokValue}`
+                    );
                 }
             }
 
@@ -1531,6 +1536,7 @@ const setShopeeDropoff = async (req, res) => {
             });
         }
 
+        // === Jika semua berhasil ===
         return res.json({
             success: true,
             message: "Order Shopee berhasil disimpan & dropoff dikonfirmasi",
