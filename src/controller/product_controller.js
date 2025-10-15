@@ -78,7 +78,10 @@ const ProductController = {
                     {
                         model: Stok,
                         as: "stok",
-                        where: { id_product_stok: id },
+                        where: {
+                            id_product_stok: id,
+                            aktif: true, // ✅ hanya ambil stok aktif
+                        },
                         required: false,
                     },
                 ],
@@ -92,28 +95,32 @@ const ProductController = {
                 ? `data:image/png;base64,${product.gambar_product.toString("base64")}`
                 : null;
 
-            const stok = product.stok.length > 0
+            const stok = product.stok?.length > 0
                 ? product.stok.map((item) => ({
                     id_stok: item.id_stok,
                     satuan: item.satuan,
                     jumlah: item.stok,
                     harga: item.harga,
-                    id_product_shopee: item.id_product_shopee,  // ✅ wajib
-                    id_product_lazada: item.id_product_lazada,  // ✅ wajib
+                    id_product_shopee: item.id_product_shopee,
+                    id_product_lazada: item.id_product_lazada,
+                    aktif: item.aktif, // ✅ boleh ikut ditampilkan agar frontend tahu status
                 }))
                 : [];
 
-            res.json({
+            res.status(200).json({
                 ...product.toJSON(),
                 gambar_product,
                 stok,
             });
 
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            console.error("Error getProductById:", error);
+            res.status(500).json({
+                message: "Gagal mengambil data produk",
+                error: error.message,
+            });
         }
     },
-
 
     createProduct: async (req, res) => {
         try {
