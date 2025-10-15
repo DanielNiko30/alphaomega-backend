@@ -884,7 +884,6 @@ const getOrderDetail = async (req, res) => {
                     `
           SELECT 
             s.id_product_stok,
-            s.id_product,
             s.id_product_shopee,
             s.satuan,
             p.nama_product,
@@ -916,7 +915,6 @@ const getOrderDetail = async (req, res) => {
 
                         // Data tambahan dari DB lokal
                         id_product_stok: local.id_product_stok,
-                        id_product: local.id_product,
                         satuan: local.satuan,
                         nama_product: local.nama_product,
                         gambar_product: gambarBase64,
