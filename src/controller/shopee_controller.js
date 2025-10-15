@@ -9,6 +9,8 @@ const { Shopee } = require("../model/shopee_model");
 const { getDB } = require("../config/sequelize");
 const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
+const { Op } = require("sequelize");
+
 
 const db = getDB();
 
