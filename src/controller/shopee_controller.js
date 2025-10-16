@@ -791,7 +791,7 @@ const getShopeeShippedOrders = async (req, res) => {
             time_range_field = "create_time",
             page_size = 20,
             cursor = "",
-            order_status = "SHIPPED" // 🔹 khusus shipped
+            order_status = "PROCESSED" // 🔹 khusus shipped
         } = req.query;
 
         // Hitung timestamp hari ini (awal dan akhir)
