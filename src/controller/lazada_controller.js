@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { Lazada } = require('../model/lazada_model');
 const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
-const { db } = require("../config/sequelize");
+const { getDB } = require("../config/sequelize");
 const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const FormData = require("form-data");
@@ -20,6 +20,9 @@ const { Builder } = require("xml2js");
  * @param {Array} options
  * @returns {string}
  */
+
+const db = getDB();
+
 function generateSign(apiPath, allParams, appSecret) {
     // 1. Urutkan SEMUA parameter (System + Payload) secara ASCII.
     const sortedKeys = Object.keys(allParams).sort();
