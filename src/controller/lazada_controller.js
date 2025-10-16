@@ -886,6 +886,136 @@ const getBrands = async (req, res) => {
     }
 };
 
+const getFullOrderDetailLazada = async (req, res) => {
+    try {
+        const { order_id } = req.query;
+        if (!order_id)
+            return res.status(400).json({
+                success: false,
+                message: "Parameter 'order_id' wajib dikirim di query",
+            });
+
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const accessToken = process.env.LAZADA_ACCESS_TOKEN.trim();
+
+        const timestamp = Date.now().toString();
+
+        // ========= 🔹 STEP 1: GET ORDER DETAIL =========
+        const apiPathOrder = "/order/get";
+        const paramsOrder = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+            order_id,
+        };
+        const signOrder = generateSign(apiPathOrder, paramsOrder, appSecret);
+        const urlOrder = `https://api.lazada.co.id/rest${apiPathOrder}?${new URLSearchParams({
+            ...paramsOrder,
+            sign: signOrder,
+        }).toString()}`;
+
+        const orderResponse = await axios.get(urlOrder);
+        const orderData = orderResponse.data?.data || {};
+
+        // ========= 🔹 STEP 2: GET ORDER ITEMS =========
+        const apiPathItems = "/order/items/get";
+        const paramsItems = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp: Date.now().toString(),
+            v: "1.0",
+            order_id,
+        };
+        const signItems = generateSign(apiPathItems, paramsItems, appSecret);
+        const urlItems = `https://api.lazada.co.id/rest${apiPathItems}?${new URLSearchParams({
+            ...paramsItems,
+            sign: signItems,
+        }).toString()}`;
+
+        const itemsResponse = await axios.get(urlItems);
+        const itemsData = itemsResponse.data?.data || [];
+
+        // ========= ✅ GABUNGKAN SEMUA DATA =========
+        res.json({
+            success: true,
+            message: "Berhasil ambil detail pesanan + item produk dari Lazada",
+            data: {
+                order: orderData,
+                items: itemsData,
+            },
+        });
+    } catch (err) {
+        console.error("❌ Lazada GetFullOrderDetail Error:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            error: err.response?.data || err.message,
+            message: "Gagal mengambil detail lengkap pesanan dari Lazada",
+        });
+    }
+};
+
+const getLazadaOrders = async (req, res) => {
+    try {
+        const {
+            created_after,
+            created_before,
+            status,
+            limit = 20,
+            offset = 0,
+            sort_by = "created_at",
+            sort_direction = "DESC",
+        } = req.query;
+
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const accessToken = process.env.LAZADA_ACCESS_TOKEN.trim();
+        const baseUrl = "https://api.lazada.co.id/rest";
+
+        const apiPath = "/orders/get";
+        const params = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp: Date.now().toString(),
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+        };
+
+        if (created_after) params.created_after = created_after;
+        if (created_before) params.created_before = created_before;
+        if (status) params.status = status;
+
+        const sign = generateSign(apiPath, params, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({
+            ...params,
+            sign,
+        }).toString()}`;
+
+        const response = await axios.get(url);
+        const orders = response.data?.data?.orders || [];
+
+        res.json({
+            success: true,
+            message: "Berhasil mengambil daftar pesanan dari Lazada",
+            count: orders.length,
+            data: orders,
+        });
+    } catch (err) {
+        console.error("❌ Error Get Lazada Orders:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            message: "Gagal mengambil daftar pesanan Lazada",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
@@ -897,5 +1027,7 @@ module.exports = {
     getProducts,
     getCategoryAttributes,
     getAllCategoryAttributes,
-    getProductItemLazada
+    getProductItemLazada,
+    getFullOrderDetailLazada,
+    getLazadaOrders
 };

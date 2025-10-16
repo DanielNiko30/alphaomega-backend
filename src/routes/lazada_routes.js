@@ -11,7 +11,9 @@ const {
     getProducts,
     getCategoryAttributes,
     getAllCategoryAttributes,
-    getProductItemLazada
+    getProductItemLazada,
+    getFullOrderDetailLazada,
+    getLazadaOrders
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -26,5 +28,7 @@ router.get("/brands", getBrands);
 router.get("/products", getProducts);
 router.get("/category/attributes/:category_id?", getAllCategoryAttributes);
 router.get("/product/item", getProductItemLazada);
+router.get("/order/detail", getFullOrderDetailLazada);
+router.get("/orders", getLazadaOrders);
 
 module.exports = router;
