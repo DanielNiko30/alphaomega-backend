@@ -1512,6 +1512,7 @@ const setShopeePickup = async (req, res) => {
             total_harga: Math.floor(order.total_amount),
             metode_pembayaran: "Shopee",
             nomor_invoice,
+            package_number: order.package_number,
             status: "Pending",
         });
 
@@ -1622,6 +1623,7 @@ const setShopeeDropoff = async (req, res) => {
             total_harga: Math.floor(order.total_amount),
             metode_pembayaran: "Shopee",
             nomor_invoice,
+            package_number: order.package_number,
             status: "Pending",
         });
 
