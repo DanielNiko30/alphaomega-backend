@@ -6,8 +6,10 @@ const { Product } = require('../model/product_model');
 const { Stok } = require('../model/stok_model');
 const FormData = require("form-data");
 const sharp = require("sharp");
-const qs = require("qs");
-const { Builder } = require("xml2js");
+const { QueryTypes } = require("sequelize");
+const { getDB } = require("../config/sequelize");
+const { HTransJual } = require("../model/htrans_jual_model");
+const { DTransJual } = require("../model/dtrans_jual_model");
 /**
 * @param {string} apiPath
  * @param {Object<string, string>} allParams
@@ -979,7 +981,7 @@ const getLazadaOrders = async (req, res) => {
                         p.nama_product,
                         p.gambar_product
                     FROM stok s
-                    JOIN product p ON p.id_product = s.id_product
+                    JOIN product p ON p.id_product = s.id_product_stok
                     WHERE s.id_product_lazada = :itemId
                     LIMIT 1
                     `,
