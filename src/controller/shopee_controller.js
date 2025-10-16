@@ -1468,19 +1468,18 @@ const setShopeePickup = async (req, res) => {
         });
 
         if (!detailResp.data.success) {
-            return res
-                .status(400)
-                .json({ success: false, message: detailResp.data.message });
+            return res.status(400).json({
+                success: false,
+                message: detailResp.data.message || "Gagal mengambil detail order dari Shopee",
+            });
         }
 
         const order = detailResp.data.data?.[0];
         if (!order) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Order tidak ditemukan" });
+            return res.status(404).json({ success: false, message: "Order tidak ditemukan" });
         }
 
-        // 2️⃣ Map item ke DB lokal & cek stok
+        // 2️⃣ Cek stok & siapkan item transaksi
         const itemsForTransaction = [];
         const stokTidakCukup = [];
 
@@ -1495,6 +1494,7 @@ const setShopeePickup = async (req, res) => {
             const stock = await Stok.findOne({
                 where: { id_product_stok: item.id_product_stok, satuan: item.satuan },
             });
+
             const jumlahKurangi = item.quantity;
 
             if (!stock || stock.stok < jumlahKurangi) {
@@ -1523,7 +1523,7 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
-        // 3️⃣ Buat transaksi jual
+        // 3️⃣ Buat transaksi jual (sementara package_number = null)
         const id_htrans_jual = await generateHTransJualId();
         const nomor_invoice = await generateInvoiceNumber();
 
@@ -1537,10 +1537,11 @@ const setShopeePickup = async (req, res) => {
             metode_pembayaran: "Shopee",
             nomor_invoice,
             order_sn: order.order_sn,
-            package_number: null, // ⬅️ diset null dulu
+            package_number: null, // ⬅️ di-update setelah dapat dari Shopee
             status: "Pending",
         });
 
+        // 4️⃣ Insert detail transaksi & update stok
         for (const item of itemsForTransaction) {
             const id_dtrans_jual = await generateDTransJualId();
             await DTransJual.create({
@@ -1559,13 +1560,14 @@ const setShopeePickup = async (req, res) => {
             await stock.update({ stok: stock.stok - item.jumlah_barang });
         }
 
-        // 4️⃣ Panggil Shopee Pickup
+        // 5️⃣ Panggil Shopee API ship_order (pickup)
         const shopeeData = await Shopee.findOne();
         const { shop_id, access_token } = shopeeData;
 
         const timestamp = Math.floor(Date.now() / 1000);
         const pathShip = "/api/v2/logistics/ship_order";
         const signShip = generateSign(pathShip, timestamp, access_token, shop_id);
+
         const urlShip = `https://partner.shopeemobile.com${pathShip}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signShip}`;
 
         const payloadShip = {
@@ -1588,10 +1590,13 @@ const setShopeePickup = async (req, res) => {
             });
         }
 
+        // 🔍 Ambil package_number dari response (jika ada)
         const pkgNumber =
-            shipResp.data.response?.result_list?.[0]?.package_number || package_number || null;
+            shipResp.data.response?.result_list?.[0]?.package_number ||
+            package_number ||
+            null;
 
-        // ✅ Update package_number ke DB setelah dapat dari Shopee
+        // ✅ Update package_number ke HTransJual jika berhasil dapat
         if (pkgNumber) {
             await HTransJual.update(
                 { package_number: pkgNumber },
@@ -1599,7 +1604,7 @@ const setShopeePickup = async (req, res) => {
             );
         }
 
-        // ✅ Kirim respons sukses
+        // ✅ Return hasil sukses
         return res.json({
             success: true,
             message: "Pickup berhasil dan transaksi jual dibuat",
@@ -1607,6 +1612,7 @@ const setShopeePickup = async (req, res) => {
             id_htrans_jual,
             package_number: pkgNumber,
             jumlah_item: itemsForTransaction.length,
+            shopee_response: shipResp.data,
         });
 
     } catch (err) {
@@ -1627,7 +1633,10 @@ const setShopeeDropoff = async (req, res) => {
             return res.status(400).json({ success: false, message: "Field 'order_sn' wajib diisi" });
         }
 
-        // 1️⃣ Ambil detail order dari endpoint kamu
+        // 🔍 1️⃣ Cek apakah order sudah pernah dibuat sebelumnya (misal setelah pickup)
+        const existingOrder = await HTransJual.findOne({ where: { order_sn } });
+
+        // 2️⃣ Ambil detail order dari endpoint kamu
         const detailUrl = `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order_sn}`;
         const detailResp = await axios.get(detailUrl, { headers: { "Content-Type": "application/json" } });
 
@@ -1640,88 +1649,100 @@ const setShopeeDropoff = async (req, res) => {
             return res.status(400).json({ success: false, message: "Order tidak ditemukan" });
         }
 
-        // 2️⃣ Cek stok dan siapkan detail transaksi
+        // 🧮 3️⃣ Cek stok & siapkan detail transaksi (kalau belum ada di DB)
         const itemsForTransaction = [];
         const stokTidakCukup = [];
 
-        for (const item of order.items) {
-            if (!item.from_db) {
+        if (!existingOrder) {
+            for (const item of order.items) {
+                if (!item.from_db) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Item ${item.item_id} tidak ditemukan di DB lokal`
+                    });
+                }
+
+                const stock = await Stok.findOne({
+                    where: { id_product_stok: item.id_product_stok, satuan: item.satuan }
+                });
+
+                const jumlahKurangi = item.quantity;
+
+                if (!stock || stock.stok < jumlahKurangi) {
+                    stokTidakCukup.push({
+                        id_produk: item.id_product_stok,
+                        satuan: item.satuan,
+                        stok_tersedia: stock ? stock.stok : 0,
+                        jumlah_diminta: jumlahKurangi
+                    });
+                } else {
+                    itemsForTransaction.push({
+                        id_produk: item.id_product_stok,
+                        satuan: item.satuan,
+                        jumlah_barang: jumlahKurangi,
+                        harga_satuan: item.price,
+                        subtotal: jumlahKurangi * item.price,
+                    });
+                }
+            }
+
+            if (stokTidakCukup.length) {
                 return res.status(400).json({
                     success: false,
-                    message: `Item ${item.item_id} tidak ditemukan di DB lokal`
-                });
-            }
-
-            const stock = await Stok.findOne({
-                where: { id_product_stok: item.id_product_stok, satuan: item.satuan }
-            });
-
-            const jumlahKurangi = item.quantity;
-
-            if (!stock || stock.stok < jumlahKurangi) {
-                stokTidakCukup.push({
-                    id_produk: item.id_product_stok,
-                    satuan: item.satuan,
-                    stok_tersedia: stock ? stock.stok : 0,
-                    jumlah_diminta: jumlahKurangi
-                });
-            } else {
-                itemsForTransaction.push({
-                    id_produk: item.id_product_stok,
-                    satuan: item.satuan,
-                    jumlah_barang: jumlahKurangi,
-                    harga_satuan: item.price,
-                    subtotal: jumlahKurangi * item.price,
+                    message: "Stok tidak cukup",
+                    stok_tidak_cukup: stokTidakCukup
                 });
             }
         }
 
-        if (stokTidakCukup.length) {
-            return res.status(400).json({
-                success: false,
-                message: "Stok tidak cukup",
-                stok_tidak_cukup: stokTidakCukup
-            });
-        }
+        // 🧾 4️⃣ Buat transaksi jual baru kalau belum ada
+        let id_htrans_jual, nomor_invoice, package_number;
 
-        // 3️⃣ Buat transaksi jual
-        const id_htrans_jual = await generateHTransJualId();
-        const nomor_invoice = await generateInvoiceNumber();
+        if (!existingOrder) {
+            id_htrans_jual = await generateHTransJualId();
+            nomor_invoice = await generateInvoiceNumber();
 
-        await HTransJual.create({
-            id_htrans_jual,
-            id_user: "USR001",
-            id_user_penjual: "USR001",
-            nama_pembeli: order.buyer_username,
-            tanggal: new Date(),
-            total_harga: Math.floor(order.total_amount),
-            metode_pembayaran: "Shopee",
-            nomor_invoice,
-            order_sn: order.order_sn,
-            package_number: null, // ❌ belum ada di sini
-            status: "Pending",
-        });
-
-        for (const item of itemsForTransaction) {
-            const id_dtrans_jual = await generateDTransJualId();
-            await DTransJual.create({
-                id_dtrans_jual,
+            const createdOrder = await HTransJual.create({
                 id_htrans_jual,
-                id_produk: item.id_produk,
-                satuan: item.satuan,
-                jumlah_barang: item.jumlah_barang,
-                harga_satuan: item.harga_satuan,
-                subtotal: item.subtotal,
+                id_user: "USR001",
+                id_user_penjual: "USR001",
+                nama_pembeli: order.buyer_username,
+                tanggal: new Date(),
+                total_harga: Math.floor(order.total_amount),
+                metode_pembayaran: "Shopee",
+                nomor_invoice,
+                order_sn: order.order_sn,
+                package_number: null, // akan diupdate nanti
+                status: "Pending",
             });
 
-            // Kurangi stok
-            const stock = await Stok.findOne({
-                where: { id_product_stok: item.id_produk, satuan: item.satuan }
-            });
-            await stock.update({ stok: stock.stok - item.jumlah_barang });
+            // Simpan item dan kurangi stok
+            for (const item of itemsForTransaction) {
+                const id_dtrans_jual = await generateDTransJualId();
+                await DTransJual.create({
+                    id_dtrans_jual,
+                    id_htrans_jual,
+                    id_produk: item.id_produk,
+                    satuan: item.satuan,
+                    jumlah_barang: item.jumlah_barang,
+                    harga_satuan: item.harga_satuan,
+                    subtotal: item.subtotal,
+                });
+
+                const stock = await Stok.findOne({
+                    where: { id_product_stok: item.id_produk, satuan: item.satuan }
+                });
+                await stock.update({ stok: stock.stok - item.jumlah_barang });
+            }
+
+            package_number = null;
+        } else {
+            id_htrans_jual = existingOrder.id_htrans_jual;
+            nomor_invoice = existingOrder.nomor_invoice;
+            package_number = existingOrder.package_number; // 🟢 ambil dari transaksi pickup sebelumnya
         }
 
-        // 4️⃣ Panggil API Shopee Dropoff
+        // 🚚 5️⃣ Panggil Shopee Dropoff
         const shopeeData = await Shopee.findOne();
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
@@ -1729,10 +1750,8 @@ const setShopeeDropoff = async (req, res) => {
         const signShip = generateSign(pathShip, timestamp, access_token, shop_id);
         const urlShip = `https://partner.shopeemobile.com${pathShip}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signShip}`;
 
-        const payloadShip = {
-            order_sn,
-            dropoff: { branch_id: null }
-        };
+        const payloadShip = { order_sn, dropoff: { branch_id: null } };
+        if (package_number) payloadShip.package_number = package_number;
 
         const shipResp = await axios.post(urlShip, payloadShip, {
             headers: { "Content-Type": "application/json" }
@@ -1746,23 +1765,35 @@ const setShopeeDropoff = async (req, res) => {
             });
         }
 
-        const pkgNumber = shipResp.data.response?.result_list?.[0]?.package_number || null;
+        // 🧩 6️⃣ Kalau belum ada package_number, ambil dari get_package_list
+        if (!package_number) {
+            const pathPkg = "/api/v2/order/get_package_list";
+            const timestamp2 = Math.floor(Date.now() / 1000);
+            const signPkg = generateSign(pathPkg, timestamp2, access_token, shop_id);
+            const urlPkg = `https://partner.shopeemobile.com${pathPkg}?partner_id=${PARTNER_ID}&timestamp=${timestamp2}&access_token=${access_token}&shop_id=${shop_id}&sign=${signPkg}&order_sn_list=${order_sn}`;
 
-        // ✅ Update package_number ke DB setelah dapat dari Shopee
-        if (pkgNumber) {
-            await HTransJual.update(
-                { package_number: pkgNumber },
-                { where: { id_htrans_jual } }
-            );
+            const pkgResp = await axios.get(urlPkg, {
+                headers: { "Content-Type": "application/json" }
+            });
+
+            package_number =
+                pkgResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number || null;
+
+            if (package_number) {
+                await HTransJual.update(
+                    { package_number },
+                    { where: { order_sn } }
+                );
+            }
         }
 
-        // ✅ Kirim respons sukses
+        // 🎯 7️⃣ Sukses
         return res.json({
             success: true,
-            message: "Dropoff berhasil dan transaksi jual dibuat",
+            message: "Dropoff berhasil dan transaksi jual tersimpan",
             invoice: nomor_invoice,
             id_htrans_jual,
-            package_number: pkgNumber,
+            package_number,
         });
 
     } catch (err) {
