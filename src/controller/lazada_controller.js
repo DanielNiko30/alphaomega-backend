@@ -1066,7 +1066,7 @@ const getLazadaOrdersWithItems = async (req, res) => {
             limit: 50,
             offset: 0,
             created_after: "2024-01-01T00:00:00+08:00",
-            status: "ready_to_ship", // ✅ ambil yang siap dikirim
+            status: "pending", // ✅ ambil yang siap dikirim
         };
 
         const sign = generateSign(apiPath, params, appSecret);
