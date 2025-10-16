@@ -785,28 +785,26 @@ const getShopeeOrders = async (req, res) => {
     }
 };
 
-const getShopeeShippedOrders = async (req, res) => {
+const getShopeeShippedOrdersDetail = async (req, res) => {
     try {
-        const {
-            time_range_field = "create_time",
-            page_size = 20,
-            cursor = "",
-            order_status = "PROCESSED" // 🔹 khusus shipped
-        } = req.query;
+        // Hitung timestamp untuk kemarin + hari ini
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
 
-        // Hitung timestamp hari ini (awal dan akhir)
-        const now = new Date();
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 hari sebelumnya
+        const time_from = Math.floor(yesterday.setHours(0, 0, 0, 0) / 1000);
+        const time_to = Math.floor(today.setHours(23, 59, 59, 999) / 1000);
 
-        const time_from = Math.floor(oneWeekAgo.getTime() / 1000);
-        const time_to = Math.floor(now.getTime() / 1000);
-
-        const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        // Ambil token Shopee
+        const shop = await Shopee.findOne();
+        if (!shop?.access_token || !shop?.shop_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token atau shop_id tidak ditemukan di database",
+            });
         }
 
-        const { shop_id, access_token } = shopeeData;
+        const { shop_id, access_token } = shop;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_list";
         const sign = generateSign(path, timestamp, access_token, shop_id);
@@ -817,27 +815,101 @@ const getShopeeShippedOrders = async (req, res) => {
             access_token,
             shop_id,
             sign,
-            time_range_field,
+            time_range_field: "create_time",
             time_from,
             time_to,
-            page_size,
-            cursor,
-            order_status // tetap SHIPPED
-        }).toString();
+            order_status: "PROCESSED", // hanya shipped
+            page_size: 50,
+            cursor: 0
+        });
 
-        const url = `https://partner.shopeemobile.com${path}?${params}`;
-
+        const url = `https://partner.shopeemobile.com${path}?${params.toString()}`;
         const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
 
         if (response.data.error) {
             return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
         }
 
-        return res.json({ success: true, data: response.data.response });
+        const orderList = response.data.response?.order_list || [];
 
-    } catch (err) {
-        console.error("❌ Shopee Get Shipped Orders Error:", err.response?.data || err.message);
-        return res.status(500).json({ success: false, message: "Gagal mengambil pesanan Shopee (Shipped)", error: err.response?.data || err.message });
+        // Gabungkan dengan data lokal
+        const combinedOrders = [];
+        for (const order of orderList) {
+            const items = [];
+
+            for (const item of order.item_list || []) {
+                const stok = await db.query(
+                    `
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_shopee,
+                        s.satuan,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
+                    {
+                        replacements: { itemId: String(item.item_id) },
+                        type: db.QueryTypes.SELECT,
+                    }
+                );
+
+                if (stok.length > 0) {
+                    const local = stok[0];
+                    const gambarBase64 = local.gambar_product
+                        ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
+                        : null;
+
+                    items.push({
+                        item_id: item.item_id,
+                        item_name: item.item_name,
+                        variation_name: item.model_name,
+                        quantity: item.model_quantity_purchased,
+                        price: item.model_discounted_price,
+                        from_db: true,
+                        id_product_stok: local.id_product_stok,
+                        satuan: local.satuan,
+                        nama_product: local.nama_product,
+                        gambar_product: gambarBase64,
+                    });
+                } else {
+                    items.push({
+                        item_id: item.item_id,
+                        item_name: item.item_name,
+                        variation_name: item.model_name,
+                        quantity: item.model_quantity_purchased,
+                        price: item.model_discounted_price,
+                        from_db: false,
+                    });
+                }
+            }
+
+            combinedOrders.push({
+                order_sn: order.order_sn,
+                buyer_username: order.buyer_username,
+                total_amount: order.total_amount,
+                status: order.order_status,
+                recipient_address: order.recipient_address,
+                items: items,
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Berhasil mengambil shipped orders Shopee + data lokal",
+            data: combinedOrders,
+        });
+
+    } catch (error) {
+        console.error("❌ Error getShopeeShippedOrdersDetail:", error.response?.data || error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil shipped orders Shopee",
+            error: error.response?.data || error.message,
+        });
     }
 };
 
