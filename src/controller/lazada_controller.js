@@ -888,67 +888,88 @@ const getBrands = async (req, res) => {
 
 const getLazadaOrders = async (req, res) => {
     try {
-        const lazadaAcc = await Lazada.findOne();
-        if (!lazadaAcc?.access_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Access token Lazada tidak ditemukan di database",
-            });
+        const {
+            created_after,
+            created_before,
+            status = "ready_to_ship", // default langsung ready_to_ship
+            limit = 20,
+            offset = 0,
+            sort_by = "created_at",
+            sort_direction = "DESC",
+        } = req.query;
+
+        // 🔹 Ambil token dari DB
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan di DB" });
         }
 
-        const access_token = lazadaAcc.access_token;
-        const now = Math.floor(Date.now() / 1000);
-        const twoDaysAgo = now - 2 * 24 * 60 * 60;
+        const accessToken = lazadaData.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
 
-        // 1️⃣ Ambil daftar order READY_TO_SHIP
         const apiPath = "/orders/get";
+        const baseUrl = "https://api.lazada.co.id/rest";
+        const timestamp = Date.now().toString();
+
+        // 🔸 Minimal created_after wajib
         const params = {
-            app_key: APP_KEY,
-            timestamp: Date.now(),
-            access_token,
-            status: "ready_to_ship",
-            created_after: new Date(twoDaysAgo * 1000).toISOString(),
-            created_before: new Date().toISOString(),
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            created_after: created_after || "2022-01-01T00:00:00+08:00",
         };
-        const sign = generateLazadaSign(apiPath, params);
-        params.sign = sign;
 
-        const { data: orderListResp } = await axios.get(`${LAZADA_API_URL}${apiPath}`, { params });
-        const orders = orderListResp.data?.orders || [];
+        if (created_before) params.created_before = created_before;
+        if (status) params.status = status;
 
+        const sign = generateSign(apiPath, params, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...params, sign }).toString()}`;
+
+        // 🔁 Panggil API Lazada
+        const response = await axios.get(url);
+        const orders = response.data?.data?.orders || [];
+
+        // Kalau kosong langsung balikin
         if (!orders.length) {
             return res.json({
                 success: true,
-                message: "Tidak ada order READY_TO_SHIP di Lazada",
+                message: "Tidak ada order READY_TO_SHIP dari Lazada",
                 count: 0,
                 data: [],
             });
         }
 
-        const finalOrders = [];
+        // 🔍 Merge dengan data lokal (stok + produk)
+        const mergedOrders = [];
 
-        // 2️⃣ Ambil detail item untuk setiap order
         for (const order of orders) {
-            const orderId = order.order_id;
+            // Ambil detail item per order
             const itemPath = "/order/items/get";
             const itemParams = {
-                app_key: APP_KEY,
-                timestamp: Date.now(),
-                access_token,
-                order_id: orderId,
+                app_key: apiKey,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp: Date.now().toString(),
+                v: "1.0",
+                order_id: order.order_id,
             };
-            const itemSign = generateLazadaSign(itemPath, itemParams);
-            itemParams.sign = itemSign;
+            const itemSign = generateSign(itemPath, itemParams, appSecret);
+            const itemUrl = `${baseUrl}${itemPath}?${new URLSearchParams({ ...itemParams, sign: itemSign }).toString()}`;
 
-            const { data: itemResp } = await axios.get(`${LAZADA_API_URL}${itemPath}`, {
-                params: itemParams,
-            });
+            const itemResp = await axios.get(itemUrl);
+            const items = itemResp.data?.data?.items || [];
 
-            const items = itemResp.data?.items || [];
-            const mappedItems = [];
+            const mergedItems = [];
 
             for (const item of items) {
-                // Cek stok lokal
+                // cek ke DB lokal berdasarkan id_product_lazada
                 const stok = await db.query(
                     `
                     SELECT 
@@ -974,7 +995,7 @@ const getLazadaOrders = async (req, res) => {
                         ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
                         : null;
 
-                    mappedItems.push({
+                    mergedItems.push({
                         item_id: item.item_id,
                         name: item.name,
                         sku: item.sku,
@@ -987,7 +1008,7 @@ const getLazadaOrders = async (req, res) => {
                         image_url: gambarBase64,
                     });
                 } else {
-                    mappedItems.push({
+                    mergedItems.push({
                         item_id: item.item_id,
                         name: item.name,
                         sku: item.sku,
@@ -998,28 +1019,28 @@ const getLazadaOrders = async (req, res) => {
                 }
             }
 
-            finalOrders.push({
+            mergedOrders.push({
                 order_id: order.order_id,
                 order_number: order.order_number,
                 customer_first_name: order.customer_first_name,
                 created_at: order.created_at,
-                total_amount: order.price,
                 status: order.status,
-                items: mappedItems,
+                price: order.price,
+                items: mergedItems,
             });
         }
 
         return res.json({
             success: true,
-            message: "Berhasil mengambil semua order READY_TO_SHIP dari Lazada + data lokal",
-            count: finalOrders.length,
-            data: finalOrders,
+            message: "Berhasil mengambil daftar pesanan Lazada + data lokal",
+            count: mergedOrders.length,
+            data: mergedOrders,
         });
     } catch (err) {
-        console.error("❌ Error getLazadaOrdersWithItems:", err.response?.data || err.message);
-        return res.status(500).json({
+        console.error("❌ Error Get Lazada Orders:", err.response?.data || err.message);
+        res.status(500).json({
             success: false,
-            message: "Gagal mengambil data order Lazada",
+            message: "Gagal mengambil daftar pesanan dari Lazada",
             error: err.response?.data || err.message,
         });
     }
