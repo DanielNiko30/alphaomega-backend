@@ -40,6 +40,10 @@ const HTransJual = db.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
+    order_sn: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
     package_number: {
       type: DataTypes.STRING(100),
       allowNull: true,

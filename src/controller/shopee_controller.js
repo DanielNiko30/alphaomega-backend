@@ -1512,6 +1512,7 @@ const setShopeePickup = async (req, res) => {
             total_harga: Math.floor(order.total_amount),
             metode_pembayaran: "Shopee",
             nomor_invoice,
+            order_sn: order.order_sn,
             package_number: order.package_number,
             status: "Pending",
         });
@@ -1623,6 +1624,7 @@ const setShopeeDropoff = async (req, res) => {
             total_harga: Math.floor(order.total_amount),
             metode_pembayaran: "Shopee",
             nomor_invoice,
+            order_sn: order.order_sn,
             package_number: order.package_number,
             status: "Pending",
         });
@@ -1675,8 +1677,35 @@ const setShopeeDropoff = async (req, res) => {
 
 const createShippingDocumentJob = async (req, res) => {
     try {
-        const { order_sn, package_number } = req.body;
+        const { order_sn } = req.body;
 
+        if (!order_sn) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' wajib diisi",
+            });
+        }
+
+        // 🔍 Cari data transaksi lokal berdasarkan order_sn
+        const htrans = await HTransJual.findOne({ where: { order_sn } });
+
+        if (!htrans) {
+            return res.status(404).json({
+                success: false,
+                message: `Order dengan order_sn ${order_sn} tidak ditemukan di database`,
+            });
+        }
+
+        if (!htrans.package_number) {
+            return res.status(400).json({
+                success: false,
+                message: `Transaksi dengan order_sn ${order_sn} belum memiliki package_number`,
+            });
+        }
+
+        const package_number = htrans.package_number;
+
+        // 🔑 Ambil kredensial Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const partner_id = process.env.SHOPEE_PARTNER_ID;
         const shop_id = process.env.SHOPEE_SHOP_ID;
@@ -1686,10 +1715,11 @@ const createShippingDocumentJob = async (req, res) => {
         const path = "/api/v2/logistics/create_shipping_document_job";
         const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
         const sign = crypto
-            .createHmac('sha256', partner_key)
+            .createHmac("sha256", partner_key)
             .update(baseString)
-            .digest('hex');
+            .digest("hex");
 
+        // 🚀 Panggil API Shopee
         const response = await axios.post(
             `https://partner.shopeemobile.com${path}`,
             {
@@ -1697,9 +1727,9 @@ const createShippingDocumentJob = async (req, res) => {
                 order_list: [
                     {
                         order_sn,
-                        package_number
-                    }
-                ]
+                        package_number,
+                    },
+                ],
             },
             {
                 params: {
@@ -1707,21 +1737,26 @@ const createShippingDocumentJob = async (req, res) => {
                     timestamp,
                     access_token,
                     shop_id,
-                    sign
-                }
+                    sign,
+                },
+                headers: { "Content-Type": "application/json" },
             }
         );
 
-        res.json({
+        // ✅ Berhasil
+        return res.json({
             success: true,
-            data: response.data
+            message: "Shipping document berhasil dibuat",
+            order_sn,
+            package_number,
+            data: response.data,
         });
     } catch (error) {
-        console.error("Error create shipping document:", error.response?.data || error.message);
-        res.status(500).json({
+        console.error("❌ Error create shipping document:", error.response?.data || error.message);
+        return res.status(500).json({
             success: false,
             message: "Gagal membuat shipping document",
-            error: error.response?.data || error.message
+            error: error.response?.data || error.message,
         });
     }
 };
