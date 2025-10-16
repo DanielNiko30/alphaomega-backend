@@ -785,7 +785,7 @@ const getShopeeOrders = async (req, res) => {
     }
 };
 
-const getShopeeShippedOrdersDetail = async (req, res) => {
+const getShopeeShippedOrders = async (req, res) => {
     try {
         // Hitung timestamp untuk kemarin + hari ini
         const today = new Date();
@@ -796,15 +796,15 @@ const getShopeeShippedOrdersDetail = async (req, res) => {
         const time_to = Math.floor(today.setHours(23, 59, 59, 999) / 1000);
 
         // Ambil token Shopee
-        const shop = await Shopee.findOne();
-        if (!shop?.access_token || !shop?.shop_id) {
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
             return res.status(400).json({
                 success: false,
                 message: "Shopee token atau shop_id tidak ditemukan di database",
             });
         }
 
-        const { shop_id, access_token } = shop;
+        const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_list";
         const sign = generateSign(path, timestamp, access_token, shop_id);
@@ -818,100 +818,38 @@ const getShopeeShippedOrdersDetail = async (req, res) => {
             time_range_field: "create_time",
             time_from,
             time_to,
-            order_status: "PROCESSED", // hanya shipped
             page_size: 50,
-            cursor: 0
-        });
+            cursor: 0,
+            order_status: "PROCESSED", // hanya shipped
+        }).toString();
 
-        const url = `https://partner.shopeemobile.com${path}?${params.toString()}`;
+        const url = `https://partner.shopeemobile.com${path}?${params}`;
         const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
 
         if (response.data.error) {
-            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
-        }
-
-        const orderList = response.data.response?.order_list || [];
-
-        // Gabungkan dengan data lokal
-        const combinedOrders = [];
-        for (const order of orderList) {
-            const items = [];
-
-            for (const item of order.item_list || []) {
-                const stok = await db.query(
-                    `
-                    SELECT 
-                        s.id_product_stok,
-                        s.id_product_shopee,
-                        s.satuan,
-                        p.nama_product,
-                        p.gambar_product
-                    FROM stok s
-                    JOIN product p ON p.id_product = s.id_product_stok
-                    WHERE s.id_product_shopee = :itemId
-                    LIMIT 1
-                    `,
-                    {
-                        replacements: { itemId: String(item.item_id) },
-                        type: db.QueryTypes.SELECT,
-                    }
-                );
-
-                if (stok.length > 0) {
-                    const local = stok[0];
-                    const gambarBase64 = local.gambar_product
-                        ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
-                        : null;
-
-                    items.push({
-                        item_id: item.item_id,
-                        item_name: item.item_name,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: true,
-                        id_product_stok: local.id_product_stok,
-                        satuan: local.satuan,
-                        nama_product: local.nama_product,
-                        gambar_product: gambarBase64,
-                    });
-                } else {
-                    items.push({
-                        item_id: item.item_id,
-                        item_name: item.item_name,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: false,
-                    });
-                }
-            }
-
-            combinedOrders.push({
-                order_sn: order.order_sn,
-                buyer_username: order.buyer_username,
-                total_amount: order.total_amount,
-                status: order.order_status,
-                recipient_address: order.recipient_address,
-                items: items,
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data,
             });
         }
 
         return res.json({
             success: true,
-            message: "Berhasil mengambil shipped orders Shopee + data lokal",
-            data: combinedOrders,
+            message: "Berhasil mengambil shipped orders Shopee",
+            data: response.data.response,
         });
 
-    } catch (error) {
-        console.error("❌ Error getShopeeShippedOrdersDetail:", error.response?.data || error.message);
+    } catch (err) {
+        console.error("❌ Error getShopeeShippedOrders:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal mengambil shipped orders Shopee",
-            error: error.response?.data || error.message,
+            error: err.response?.data || err.message,
         });
     }
 };
+
 
 const getOrderDetail = async (req, res) => {
     try {
@@ -1304,16 +1242,59 @@ const getShopeeOrdersWithItems = async (req, res) => {
 
 const getShopeeShippedOrdersWithItems = async (req, res) => {
     try {
-        // 1️⃣ Ambil list order shipped dari Shopee
-        const orderListResp = await axios.get(
-            "https://tokalphaomegaploso.my.id/api/shopee/orders/shipped?page_size=20&order_status=SHIPPED"
-        );
+        // Ambil token Shopee
+        const shop = await Shopee.findOne();
+        if (!shop?.access_token || !shop?.shop_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token atau shop_id tidak ditemukan di database",
+            });
+        }
 
-        const orderList = orderListResp.data?.data?.order_list || [];
+        const { shop_id, access_token } = shop;
+
+        const BASE_URL = "https://partner.shopeemobile.com";
+        const timestamp = Math.floor(Date.now() / 1000);
+
+        // Hitung 2 hari terakhir
+        const now = Math.floor(Date.now() / 1000);
+        const twoDaysAgo = now - 2 * 24 * 60 * 60;
+
+        // Ambil order PROCESSED (shipped)
+        const path = "/api/v2/order/get_order_list";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp,
+            access_token,
+            shop_id,
+            sign,
+            order_status: "PROCESSED",
+            page_size: 100,
+            time_range_field: "create_time",
+            time_from: twoDaysAgo,
+            time_to: now,
+        });
+
+        const url = `${BASE_URL}${path}?${params.toString()}`;
+        const orderListResp = await axios.get(url, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        if (orderListResp.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: orderListResp.data.message || "Shopee API Error",
+                shopee_response: orderListResp.data,
+            });
+        }
+
+        const orderList = orderListResp.data.response?.order_list || [];
         if (orderList.length === 0) {
             return res.json({
                 success: true,
-                message: "Tidak ada order Shopee yang telah dikirim",
+                message: "Tidak ada order SHIPPED",
                 data: [],
             });
         }
@@ -1321,30 +1302,41 @@ const getShopeeShippedOrdersWithItems = async (req, res) => {
         const finalOrders = [];
 
         for (const order of orderList) {
-            // 2️⃣ Ambil detail order
-            const orderDetailResp = await axios.get(
-                `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order.order_sn}`
-            );
+            // Ambil detail order
+            const detailPath = "/api/v2/order/get_order_detail";
+            const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
+            const detailParams = new URLSearchParams({
+                partner_id: PARTNER_ID,
+                timestamp,
+                access_token,
+                shop_id,
+                sign: detailSign,
+                order_sn_list: order.order_sn,
+                response_optional_fields: "buyer_username,item_list,total_amount,recipient_address,package_list",
+            });
 
-            const orderDetail = orderDetailResp.data?.data?.order_list?.[0];
+            const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
+            const orderDetailResp = await axios.get(detailUrl, { headers: { "Content-Type": "application/json" } });
+            const orderDetail = orderDetailResp.data.response?.order_list?.[0];
             if (!orderDetail?.item_list) continue;
 
             const items = [];
 
             for (const item of orderDetail.item_list) {
-                // 3️⃣ Cek DB lokal
+                // Cek DB lokal
                 const stok = await db.query(
                     `
-          SELECT 
-              s.id_product_stok,
-              s.id_product_shopee,
-              p.nama_product,
-              p.gambar_product
-          FROM stok s
-          JOIN product p ON p.id_product = s.id_product_stok
-          WHERE s.id_product_shopee = :itemId
-          LIMIT 1
-          `,
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_shopee,
+                        s.satuan,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_shopee = :itemId
+                    LIMIT 1
+                    `,
                     {
                         replacements: { itemId: String(item.item_id) },
                         type: QueryTypes.SELECT,
@@ -1352,93 +1344,57 @@ const getShopeeShippedOrdersWithItems = async (req, res) => {
                 );
 
                 if (stok.length > 0) {
-                    const gambarBase64 = stok[0].gambar_product
-                        ? `data:image/png;base64,${Buffer.from(stok[0].gambar_product).toString("base64")}`
+                    const local = stok[0];
+                    const gambarBase64 = local.gambar_product
+                        ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
                         : null;
 
                     items.push({
                         item_id: item.item_id,
-                        name: stok[0].nama_product,
-                        image_url: gambarBase64,
+                        item_name: item.item_name,
                         variation_name: item.model_name,
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
                         from_db: true,
+                        id_product_stok: local.id_product_stok,
+                        satuan: local.satuan,
+                        nama_product: local.nama_product,
+                        image_url: gambarBase64,
                     });
                 } else {
-                    // 4️⃣ Fallback ke Shopee API jika tidak ada di DB
-                    try {
-                        const productInfoResp = await axios.post(
-                            `https://tokalphaomegaploso.my.id/api/shopee/product/item-info/${item.item_id}`,
-                            { satuan: item.model_name }
-                        );
-
-                        const productInfo = productInfoResp.data?.data;
-
-                        items.push({
-                            item_id: item.item_id,
-                            name: productInfo?.name || "Produk Tidak Diketahui",
-                            image_url: productInfo?.image || null,
-                            variation_name: item.model_name,
-                            quantity: item.model_quantity_purchased,
-                            price: item.model_discounted_price,
-                            from_db: false,
-                        });
-                    } catch (err) {
-                        console.error("❌ Fallback gagal:", err.message);
-                        items.push({
-                            item_id: item.item_id,
-                            name: "Produk Tidak Diketahui",
-                            image_url: null,
-                            variation_name: item.model_name,
-                            quantity: item.model_quantity_purchased,
-                            price: item.model_discounted_price,
-                            from_db: false,
-                        });
-                    }
+                    items.push({
+                        item_id: item.item_id,
+                        item_name: item.item_name,
+                        variation_name: item.model_name,
+                        quantity: item.model_quantity_purchased,
+                        price: item.model_discounted_price,
+                        from_db: false,
+                    });
                 }
             }
 
-            // 5️⃣ Cek status pickup (asumsi ada field di DB atau API)
-            const pickupStatusResp = await db.query(
-                `
-        SELECT picked_up
-        FROM pickup_orders
-        WHERE order_sn = :orderSn
-        LIMIT 1
-        `,
-                {
-                    replacements: { orderSn: order.order_sn },
-                    type: QueryTypes.SELECT,
-                }
-            );
-
-            const pickedUp = pickupStatusResp.length > 0 ? pickupStatusResp[0].picked_up : false;
-
-            // Hanya masukkan order yang sudah dijadwalkan pickup tapi belum diambil kurir
-            if (!pickedUp) {
-                finalOrders.push({
-                    order_sn: order.order_sn,
-                    booking_sn: order.booking_sn || "",
-                    shipping_method: order.package_list?.[0]?.shipping_carrier || "",
-                    status: order.order_status || "SHIPPED",
-                    picked_up: pickedUp, // true/false
-                    items: [items[0]], // first item
-                    full_items: items, // semua items
-                });
-            }
+            finalOrders.push({
+                order_sn: order.order_sn,
+                buyer_username: order.buyer_username,
+                total_amount: order.total_amount,
+                status: order.order_status,
+                recipient_address: order.recipient_address,
+                items: [items[0]],
+                full_items: items,
+            });
         }
 
         return res.json({
             success: true,
-            message: "Berhasil mengambil data order Shopee shipped",
+            message: "Berhasil mengambil semua order SHIPPED + data lokal",
             data: finalOrders,
         });
+
     } catch (err) {
         console.error("❌ Error getShopeeShippedOrdersWithItems:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: "Gagal mengambil data order Shopee shipped",
+            message: "Gagal mengambil data order SHIPPED",
             error: err.response?.data || err.message,
         });
     }
