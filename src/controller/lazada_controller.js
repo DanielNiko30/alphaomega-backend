@@ -891,7 +891,7 @@ const getLazadaOrders = async (req, res) => {
         const {
             created_after,
             created_before,
-            status = "dropshipping", // default langsung ready_to_ship
+            status = "pending",
             limit = 20,
             offset = 0,
             sort_by = "created_at",
