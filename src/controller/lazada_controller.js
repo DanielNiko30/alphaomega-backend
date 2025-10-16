@@ -886,7 +886,7 @@ const getBrands = async (req, res) => {
     }
 };
 
-const getLazadaOrdersWithItems = async (req, res) => {
+const getLazadaOrders = async (req, res) => {
     try {
         const lazadaAcc = await Lazada.findOne();
         if (!lazadaAcc?.access_token) {
