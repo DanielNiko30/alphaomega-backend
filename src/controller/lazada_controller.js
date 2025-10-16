@@ -894,10 +894,15 @@ const getFullOrderDetailLazada = async (req, res) => {
                 success: false,
                 message: "Parameter 'order_id' wajib dikirim di query",
             });
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ error: "Token Lazada not found" });
+        }
+
+        const accessToken = lazadaData.access_token;
 
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
-        const accessToken = process.env.LAZADA_ACCESS_TOKEN.trim();
 
         const timestamp = Date.now().toString();
 
@@ -970,9 +975,14 @@ const getLazadaOrders = async (req, res) => {
             sort_direction = "DESC",
         } = req.query;
 
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ error: "Token Lazada not found" });
+        }
+
+        const accessToken = lazadaData.access_token;
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
-        const accessToken = process.env.LAZADA_ACCESS_TOKEN.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
 
         const apiPath = "/orders/get";
