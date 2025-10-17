@@ -1817,7 +1817,6 @@ const createShopeeResi = async (req, res) => {
         if (!shop?.access_token) {
             return res.status(400).json({ success: false, message: "Shopee token belum tersedia" });
         }
-
         const { shop_id, access_token } = shop;
         const BASE_URL = "https://partner.shopeemobile.com";
         const results = [];
@@ -1826,21 +1825,26 @@ const createShopeeResi = async (req, res) => {
             const timestamp = Math.floor(Date.now() / 1000);
 
             // 1️⃣ Ambil detail order
-            const detailPath = "/api/v2/order/get_order_detail";
-            const detailParamsObj = {
+            const detailParams = new URLSearchParams();
+            detailParams.append("partner_id", PARTNER_ID.toString());
+            detailParams.append("timestamp", timestamp.toString());
+            detailParams.append("access_token", access_token);
+            detailParams.append("shop_id", shop_id.toString());
+            detailParams.append("order_sn_list", order_sn);
+            detailParams.append("response_optional_fields", "item_list,package_list");
+
+            const detailSign = generateSign("/api/v2/order/get_order_detail", timestamp, access_token, shop_id, {
                 partner_id: PARTNER_ID.toString(),
                 timestamp: timestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
                 order_sn_list: order_sn,
-                response_optional_fields: "item_list,package_list",
-            };
-            const detailSign = generateSign(detailPath, timestamp, access_token, shop_id, detailParamsObj);
-            const detailParams = new URLSearchParams({ ...detailParamsObj, sign: detailSign });
-            console.log("Detail URL:", `${BASE_URL}${detailPath}?${detailParams.toString()}`); // log untuk debug
+                response_optional_fields: "item_list,package_list"
+            });
+            detailParams.append("sign", detailSign);
 
-            const detailResp = await axios.get(`${BASE_URL}${detailPath}?${detailParams.toString()}`, { validateStatus: () => true });
-            const orderDetail = detailResp.data?.response?.order_list?.[0] || null;
+            const detailResp = await axios.get(`${BASE_URL}/api/v2/order/get_order_detail?${detailParams.toString()}`, { validateStatus: () => true });
+            const orderDetail = detailResp.data?.response?.order_list?.[0];
 
             if (!orderDetail) {
                 results.push({ order_sn, success: false, message: "Order tidak ditemukan", raw_response: detailResp.data });
@@ -1853,25 +1857,29 @@ const createShopeeResi = async (req, res) => {
                 continue;
             }
 
-            const unpackaged_sku_requests = itemList.map(i => ({
-                order_sn,
-                sku: i.sku,
-                quantity: i.quantity
-            }));
+            // 2️⃣ Buat unpackaged_sku_requests
+            const unpackaged_sku_requests = itemList.map(i => ({ order_sn, sku: i.sku, quantity: i.quantity }));
 
-            // 2️⃣ Buat shipping document job
-            const jobPath = "/api/v2/logistics/create_shipping_document_job";
-            const jobParamsObj = {
+            // 3️⃣ Buat shipping document job
+            const jobParams = new URLSearchParams();
+            jobParams.append("partner_id", PARTNER_ID.toString());
+            jobParams.append("timestamp", timestamp.toString());
+            jobParams.append("access_token", access_token);
+            jobParams.append("shop_id", shop_id.toString());
+            jobParams.append("order_sn_list", JSON.stringify([order_sn]));
+            jobParams.append("unpackaged_sku_requests", JSON.stringify(unpackaged_sku_requests));
+
+            const jobSign = generateSign("/api/v2/logistics/create_shipping_document_job", timestamp, access_token, shop_id, {
                 partner_id: PARTNER_ID.toString(),
                 timestamp: timestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
                 order_sn_list: JSON.stringify([order_sn]),
                 unpackaged_sku_requests: JSON.stringify(unpackaged_sku_requests)
-            };
-            const jobSign = generateSign(jobPath, timestamp, access_token, shop_id, jobParamsObj);
-            const jobParams = new URLSearchParams({ ...jobParamsObj, sign: jobSign });
-            const jobResp = await axios.post(`${BASE_URL}${jobPath}`, jobParams.toString(), {
+            });
+            jobParams.append("sign", jobSign);
+
+            const jobResp = await axios.post(`${BASE_URL}/api/v2/logistics/create_shipping_document_job`, jobParams.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 validateStatus: () => true
             });
@@ -1883,21 +1891,28 @@ const createShopeeResi = async (req, res) => {
 
             const job_id = jobResp.data.response.job_id;
 
-            // 3️⃣ Tunggu status job READY
+            // 4️⃣ Tunggu status job READY
             const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
             let statusResp, retries = 0;
             do {
                 await new Promise(r => setTimeout(r, 1000));
                 const statusTimestamp = Math.floor(Date.now() / 1000);
-                const statusParamsObj = {
+                const statusParams = new URLSearchParams();
+                statusParams.append("partner_id", PARTNER_ID.toString());
+                statusParams.append("timestamp", statusTimestamp.toString());
+                statusParams.append("access_token", access_token);
+                statusParams.append("shop_id", shop_id.toString());
+                statusParams.append("job_id", job_id);
+
+                const statusSign = generateSign(statusPath, statusTimestamp, access_token, shop_id, {
                     partner_id: PARTNER_ID.toString(),
                     timestamp: statusTimestamp.toString(),
                     access_token,
                     shop_id: shop_id.toString(),
                     job_id
-                };
-                const statusSign = generateSign(statusPath, statusTimestamp, access_token, shop_id, statusParamsObj);
-                const statusParams = new URLSearchParams({ ...statusParamsObj, sign: statusSign });
+                });
+                statusParams.append("sign", statusSign);
+
                 statusResp = await axios.get(`${BASE_URL}${statusPath}?${statusParams.toString()}`, { validateStatus: () => true });
                 retries++;
             } while (statusResp.data?.response?.status !== "READY" && retries < 10);
@@ -1907,34 +1922,41 @@ const createShopeeResi = async (req, res) => {
                 continue;
             }
 
-            // 4️⃣ Download resi PDF (base64)
+            // 5️⃣ Download PDF base64
             const downloadPath = "/api/v2/logistics/download_shipping_document_job";
             const downloadTimestamp = Math.floor(Date.now() / 1000);
-            const downloadParamsObj = {
+            const downloadParams = new URLSearchParams();
+            downloadParams.append("partner_id", PARTNER_ID.toString());
+            downloadParams.append("timestamp", downloadTimestamp.toString());
+            downloadParams.append("access_token", access_token);
+            downloadParams.append("shop_id", shop_id.toString());
+            downloadParams.append("job_id", job_id);
+
+            const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id, {
                 partner_id: PARTNER_ID.toString(),
                 timestamp: downloadTimestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
                 job_id
-            };
-            const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id, downloadParamsObj);
-            const downloadParams = new URLSearchParams({ ...downloadParamsObj, sign: downloadSign });
+            });
+            downloadParams.append("sign", downloadSign);
+
             const downloadResp = await axios.get(`${BASE_URL}${downloadPath}?${downloadParams.toString()}`, { validateStatus: () => true });
 
             if (downloadResp.data.error) {
                 results.push({ order_sn, success: false, message: downloadResp.data.message, raw_response: downloadResp.data });
             } else {
-                results.push({ order_sn, success: true, label_base64: downloadResp.data.response.file, raw_response: downloadResp.data });
+                results.push({ order_sn, success: true, label_base64: downloadResp.data.response.file });
             }
         }
 
         return res.json({ success: true, message: "Berhasil ambil resi Shopee", data: results });
-
     } catch (error) {
         console.error("❌ Error createShopeeResi:", error.response?.data || error.message);
         return res.status(500).json({ success: false, message: "Gagal ambil resi", error: error.response?.data || error.message });
     }
 };
+
 
 module.exports = {
     shopeeCallback,
