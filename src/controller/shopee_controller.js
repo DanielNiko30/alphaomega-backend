@@ -1814,16 +1814,14 @@ const createShippingDocumentJob = async (req, res) => {
             });
         }
 
-        // Ambil data transaksi lokal
+        // Ambil transaksi lokal
         const htrans = await HTransJual.findOne({ where: { order_sn } });
-
         if (!htrans) {
             return res.status(404).json({
                 success: false,
-                message: `Order dengan order_sn ${order_sn} tidak ditemukan di database`,
+                message: `Order dengan order_sn ${order_sn} tidak ditemukan`,
             });
         }
-
         if (!htrans.package_number) {
             return res.status(400).json({
                 success: false,
@@ -1833,20 +1831,25 @@ const createShippingDocumentJob = async (req, res) => {
 
         const package_number = htrans.package_number;
 
-        // Kredensial Shopee
-        const timestamp = Math.floor(Date.now() / 1000);
-        const partner_id = process.env.SHOPEE_PARTNER_ID;
-        const shop_id = process.env.SHOPEE_SHOP_ID;
+        // Ambil shop_id & access_token dari DB
+        const shopee = await Shopee.findOne();
+        if (!shopee) {
+            return res.status(400).json({ success: false, message: "Shopee credentials not found" });
+        }
+        const shop_id = Number(shopee.shop_id); // ⬅️ konversi ke integer
+        const access_token = shopee.access_token;
+        const partner_id = Number(process.env.SHOPEE_PARTNER_ID);
         const partner_key = process.env.SHOPEE_PARTNER_KEY;
-        const access_token = process.env.SHOPEE_ACCESS_TOKEN;
+        const timestamp = Math.floor(Date.now() / 1000);
 
+        // Generate signature
         const path = "/api/v2/logistics/create_shipping_document_job";
         const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
         const sign = crypto.createHmac("sha256", partner_key).update(baseString).digest("hex");
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-        // Body request sesuai dokumentasi terbaru
+        // Body request terbaru
         const body = {
             shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
             unpackaged_sku_requests: [
@@ -1857,6 +1860,7 @@ const createShippingDocumentJob = async (req, res) => {
             ]
         };
 
+        // Request ke Shopee
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true,
@@ -1877,6 +1881,7 @@ const createShippingDocumentJob = async (req, res) => {
             package_number,
             data: response.data,
         });
+
     } catch (error) {
         console.error("❌ Error create shipping document:", error.response?.data || error.message);
         return res.status(500).json({
