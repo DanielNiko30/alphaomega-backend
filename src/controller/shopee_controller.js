@@ -1831,7 +1831,7 @@ const createShopeeResi = async (req, res) => {
         for (const order_sn of order_sn_list) {
             const timestamp = Math.floor(Date.now() / 1000);
 
-            // 1️⃣ Ambil detail order untuk package_number
+            // 1️⃣ Ambil detail order untuk dapatkan package_number
             const detailPath = "/api/v2/order/get_order_detail";
             const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
             const detailParams = new URLSearchParams({
@@ -1856,10 +1856,11 @@ const createShopeeResi = async (req, res) => {
 
             // 2️⃣ Buat shipping document job
             const jobPath = "/api/v2/logistics/create_shipping_document_job";
-            const jobSign = generateSign(jobPath, timestamp, access_token, shop_id);
+            const jobTimestamp = Math.floor(Date.now() / 1000);
+            const jobSign = generateSign(jobPath, jobTimestamp, access_token, shop_id);
             const jobParams = new URLSearchParams({
                 partner_id: PARTNER_ID,
-                timestamp,
+                timestamp: jobTimestamp,
                 access_token,
                 shop_id,
                 sign: jobSign,
@@ -1878,15 +1879,16 @@ const createShopeeResi = async (req, res) => {
 
             const job_id = jobResp.data.response.job_id;
 
-            // 3️⃣ Cek status job sampai READY (retry max 10x)
+            // 3️⃣ Cek status job sampai READY (maks 10x retry)
             const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
-            let statusResp, retries = 0;
+            let retries = 0, statusResp;
             do {
-                await new Promise(r => setTimeout(r, 1000));
-                const statusSign = generateSign(statusPath, Math.floor(Date.now() / 1000), access_token, shop_id);
+                await new Promise(r => setTimeout(r, 1000)); // delay 1 detik
+                const statusTimestamp = Math.floor(Date.now() / 1000);
+                const statusSign = generateSign(statusPath, statusTimestamp, access_token, shop_id);
                 const statusParams = new URLSearchParams({
                     partner_id: PARTNER_ID,
-                    timestamp: Math.floor(Date.now() / 1000),
+                    timestamp: statusTimestamp,
                     access_token,
                     shop_id,
                     sign: statusSign,
@@ -1903,10 +1905,11 @@ const createShopeeResi = async (req, res) => {
 
             // 4️⃣ Download shipping document (PDF base64)
             const downloadPath = "/api/v2/logistics/download_shipping_document_job";
-            const downloadSign = generateSign(downloadPath, Math.floor(Date.now() / 1000), access_token, shop_id);
+            const downloadTimestamp = Math.floor(Date.now() / 1000);
+            const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id);
             const downloadParams = new URLSearchParams({
                 partner_id: PARTNER_ID,
-                timestamp: Math.floor(Date.now() / 1000),
+                timestamp: downloadTimestamp,
                 access_token,
                 shop_id,
                 sign: downloadSign,
@@ -1921,7 +1924,7 @@ const createShopeeResi = async (req, res) => {
                     order_sn,
                     package_number,
                     success: true,
-                    label_base64: downloadResp.data.response.file, // bisa langsung preview / download di frontend
+                    label_base64: downloadResp.data.response.file, // bisa langsung preview atau download di frontend
                 });
             }
         }
@@ -1937,7 +1940,6 @@ const createShopeeResi = async (req, res) => {
         });
     }
 };
-
 
 module.exports = {
     shopeeCallback,
