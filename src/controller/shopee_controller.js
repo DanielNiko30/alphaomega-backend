@@ -852,67 +852,67 @@ const getShopeeShippedOrders = async (req, res) => {
 
 
 const getOrderDetail = async (req, res) => {
-    try {
-        const { order_sn_list } = req.query;
+  try {
+    const { order_sn_list } = req.query;
 
-        if (!order_sn_list) {
-            return res.status(400).json({
-                success: false,
-                message: "order_sn_list wajib dikirim. Pisahkan dengan koma jika lebih dari satu",
-            });
-        }
+    if (!order_sn_list) {
+      return res.status(400).json({
+        success: false,
+        message: "order_sn_list wajib dikirim. Pisahkan dengan koma jika lebih dari satu",
+      });
+    }
 
-        const shop = await Shopee.findOne();
-        if (!shop?.access_token || !shop?.shop_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Shopee token atau shop_id tidak ditemukan di database",
-            });
-        }
+    const shop = await Shopee.findOne();
+    if (!shop?.access_token || !shop?.shop_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Shopee token atau shop_id tidak ditemukan di database",
+      });
+    }
 
-        const { shop_id, access_token } = shop;
-        const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/order/get_order_detail";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
+    const { shop_id, access_token } = shop;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = "/api/v2/order/get_order_detail";
+    const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const BASE_URL = "https://partner.shopeemobile.com";
-        const params = new URLSearchParams({
-            partner_id: PARTNER_ID,
-            timestamp: timestamp,
-            access_token: access_token,
-            shop_id: shop_id,
-            sign: sign,
-            order_sn_list: order_sn_list,
-            response_optional_fields:
-                "buyer_username,item_list,total_amount,recipient_address,package_list,pickup_done_time",
-        });
+    const BASE_URL = "https://partner.shopeemobile.com";
+    const params = new URLSearchParams({
+      partner_id: PARTNER_ID,
+      timestamp: timestamp,
+      access_token: access_token,
+      shop_id: shop_id,
+      sign: sign,
+      order_sn_list: order_sn_list,
+      response_optional_fields:
+        "buyer_username,item_list,total_amount,recipient_address,package_list,pickup_done_time,booking_sn,advance_package",
+    });
 
-        const finalUrl = `${BASE_URL}${path}?${params.toString()}`;
-        console.log("🔹 FINAL Shopee URL:", finalUrl);
+    const finalUrl = `${BASE_URL}${path}?${params.toString()}`;
+    console.log("🔹 FINAL Shopee URL:", finalUrl);
 
-        const response = await axios.get(finalUrl, {
-            headers: { "Content-Type": "application/json" },
-            validateStatus: () => true,
-        });
+    const response = await axios.get(finalUrl, {
+      headers: { "Content-Type": "application/json" },
+      validateStatus: () => true,
+    });
 
-        if (response.data.error) {
-            return res.status(400).json({
-                success: false,
-                message: response.data.message || "Shopee API Error",
-                shopee_response: response.data,
-            });
-        }
+    if (response.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: response.data.message || "Shopee API Error",
+        shopee_response: response.data,
+      });
+    }
 
-        const orderDetail = response.data.response;
-        const orderList = orderDetail?.order_list || [];
-        const combinedOrders = [];
+    const orderDetail = response.data.response;
+    const orderList = orderDetail?.order_list || [];
+    const combinedOrders = [];
 
-        for (const order of orderList) {
-            const items = [];
+    for (const order of orderList) {
+      const items = [];
 
-            for (const item of order.item_list || []) {
-                const stok = await db.query(
-                    `
+      for (const item of order.item_list || []) {
+        const stok = await db.query(
+          `
           SELECT 
             s.id_product_stok,
             s.id_product_shopee,
@@ -924,77 +924,77 @@ const getOrderDetail = async (req, res) => {
           WHERE s.id_product_shopee = :itemId
           LIMIT 1
         `,
-                    {
-                        replacements: { itemId: String(item.item_id) },
-                        type: db.QueryTypes.SELECT,
-                    }
-                );
+          {
+            replacements: { itemId: String(item.item_id) },
+            type: db.QueryTypes.SELECT,
+          }
+        );
 
-                if (stok.length > 0) {
-                    const local = stok[0];
-                    const gambarBase64 = local.gambar_product
-                        ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
-                        : null;
+        if (stok.length > 0) {
+          const local = stok[0];
+          const gambarBase64 = local.gambar_product
+            ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
+            : null;
 
-                    items.push({
-                        item_id: item.item_id,
-                        item_name: item.item_name,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: true,
-                        id_product_stok: local.id_product_stok,
-                        satuan: local.satuan,
-                        nama_product: local.nama_product,
-                        gambar_product: gambarBase64,
-                    });
-                } else {
-                    items.push({
-                        item_id: item.item_id,
-                        item_name: item.item_name,
-                        variation_name: item.model_name,
-                        quantity: item.model_quantity_purchased,
-                        price: item.model_discounted_price,
-                        from_db: false,
-                    });
-                }
-            }
-
-            // Ambil package_number, booking_sn, advance_package, dll
-            const packages = (order.package_list || []).map(pkg => ({
-                package_number: pkg.package_number,
-                booking_sn: pkg.booking_sn,
-                advance_package: pkg.advance_package,
-                logistics_status: pkg.logistics_status,
-                shipping_carrier: pkg.shipping_carrier,
-                allow_self_design_awb: pkg.allow_self_design_awb,
-            }));
-
-            combinedOrders.push({
-                order_sn: order.order_sn,
-                buyer_username: order.buyer_username,
-                total_amount: order.total_amount,
-                status: order.order_status,
-                pickup_done_time: order.pickup_done_time || null,
-                recipient_address: order.recipient_address,
-                items: items,
-                packages: packages,
-            });
+          items.push({
+            item_id: item.item_id,
+            item_name: item.item_name,
+            variation_name: item.model_name,
+            quantity: item.model_quantity_purchased,
+            price: item.model_discounted_price,
+            from_db: true,
+            id_product_stok: local.id_product_stok,
+            satuan: local.satuan,
+            nama_product: local.nama_product,
+            gambar_product: gambarBase64,
+          });
+        } else {
+          items.push({
+            item_id: item.item_id,
+            item_name: item.item_name,
+            variation_name: item.model_name,
+            quantity: item.model_quantity_purchased,
+            price: item.model_discounted_price,
+            from_db: false,
+          });
         }
+      }
 
-        return res.json({
-            success: true,
-            message: "Berhasil mengambil detail order Shopee + data lokal (lengkap) termasuk package_number & booking_sn",
-            data: combinedOrders,
-        });
-    } catch (error) {
-        console.error("❌ Error getOrderDetail:", error.response?.data || error.message);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal mengambil detail order",
-            error: error.response?.data || error.message,
-        });
+      // Ambil package_number, booking_sn, advance_package, dll
+      const packages = (order.package_list || []).map(pkg => ({
+        package_number: pkg.package_number,
+        booking_sn: pkg.booking_sn || null, // ✅ Tambah booking_sn
+        advance_package: pkg.advance_package || false,
+        logistics_status: pkg.logistics_status,
+        shipping_carrier: pkg.shipping_carrier,
+        allow_self_design_awb: pkg.allow_self_design_awb,
+      }));
+
+      combinedOrders.push({
+        order_sn: order.order_sn,
+        buyer_username: order.buyer_username,
+        total_amount: order.total_amount,
+        status: order.order_status,
+        pickup_done_time: order.pickup_done_time || null,
+        recipient_address: order.recipient_address,
+        items: items,
+        packages: packages,
+      });
     }
+
+    return res.json({
+      success: true,
+      message: "Berhasil mengambil detail order Shopee + data lokal termasuk package_number & booking_sn",
+      data: combinedOrders,
+    });
+  } catch (error) {
+    console.error("❌ Error getOrderDetail:", error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mengambil detail order",
+      error: error.response?.data || error.message,
+    });
+  }
 };
 
 const searchShopeeProductByName = async (req, res) => {
