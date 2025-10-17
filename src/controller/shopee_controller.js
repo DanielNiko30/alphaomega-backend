@@ -855,7 +855,6 @@ const getOrderDetail = async (req, res) => {
     try {
         const { order_sn_list } = req.query;
 
-        // Validasi input
         if (!order_sn_list) {
             return res.status(400).json({
                 success: false,
@@ -863,7 +862,6 @@ const getOrderDetail = async (req, res) => {
             });
         }
 
-        // Ambil token Shopee
         const shop = await Shopee.findOne();
         if (!shop?.access_token || !shop?.shop_id) {
             return res.status(400).json({
@@ -873,8 +871,6 @@ const getOrderDetail = async (req, res) => {
         }
 
         const { shop_id, access_token } = shop;
-
-        // Generate sign Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_detail";
         const sign = generateSign(path, timestamp, access_token, shop_id);
@@ -894,13 +890,11 @@ const getOrderDetail = async (req, res) => {
         const finalUrl = `${BASE_URL}${path}?${params.toString()}`;
         console.log("🔹 FINAL Shopee URL:", finalUrl);
 
-        // Request ke Shopee API
         const response = await axios.get(finalUrl, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true,
         });
 
-        // Kalau Shopee error
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
@@ -911,8 +905,6 @@ const getOrderDetail = async (req, res) => {
 
         const orderDetail = response.data.response;
         const orderList = orderDetail?.order_list || [];
-
-        // === Gabungkan dengan data lokal ===
         const combinedOrders = [];
 
         for (const order of orderList) {
@@ -951,15 +943,12 @@ const getOrderDetail = async (req, res) => {
                         quantity: item.model_quantity_purchased,
                         price: item.model_discounted_price,
                         from_db: true,
-
-                        // Data tambahan dari DB lokal
                         id_product_stok: local.id_product_stok,
                         satuan: local.satuan,
                         nama_product: local.nama_product,
                         gambar_product: gambarBase64,
                     });
                 } else {
-                    // Fallback jika tidak ada di DB lokal
                     items.push({
                         item_id: item.item_id,
                         item_name: item.item_name,
@@ -971,6 +960,14 @@ const getOrderDetail = async (req, res) => {
                 }
             }
 
+            // Ambil package_number dari package_list
+            const packages = (order.package_list || []).map(pkg => ({
+                package_number: pkg.package_number,
+                logistics_status: pkg.logistics_status,
+                shipping_carrier: pkg.shipping_carrier,
+                allow_self_design_awb: pkg.allow_self_design_awb,
+            }));
+
             combinedOrders.push({
                 order_sn: order.order_sn,
                 buyer_username: order.buyer_username,
@@ -978,13 +975,13 @@ const getOrderDetail = async (req, res) => {
                 status: order.order_status,
                 recipient_address: order.recipient_address,
                 items: items,
+                packages: packages, // ✅ Tambahan
             });
         }
 
-        // === Return response ===
         return res.json({
             success: true,
-            message: "Berhasil mengambil detail order Shopee + data lokal (lengkap)",
+            message: "Berhasil mengambil detail order Shopee + data lokal (lengkap) termasuk package_number",
             data: combinedOrders,
         });
     } catch (error) {
