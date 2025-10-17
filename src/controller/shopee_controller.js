@@ -1814,13 +1814,13 @@ const createShippingDocumentJob = async (req, res) => {
             });
         }
 
-        // 🔍 Cari data transaksi lokal berdasarkan order_sn
+        // 🔍 Cari data transaksi lokal
         const htrans = await HTransJual.findOne({ where: { order_sn } });
 
         if (!htrans) {
             return res.status(404).json({
                 success: false,
-                message: `Order dengan order_sn ${order_sn} tidak ditemukan di database`,
+                message: `Order dengan order_sn ${order_sn} tidak ditemukan`,
             });
         }
 
@@ -1833,7 +1833,7 @@ const createShippingDocumentJob = async (req, res) => {
 
         const package_number = htrans.package_number;
 
-        // 🔑 Ambil kredensial Shopee
+        // 🔑 Shopee credentials
         const timestamp = Math.floor(Date.now() / 1000);
         const partner_id = process.env.SHOPEE_PARTNER_ID;
         const shop_id = process.env.SHOPEE_SHOP_ID;
@@ -1842,36 +1842,43 @@ const createShippingDocumentJob = async (req, res) => {
 
         const path = "/api/v2/logistics/create_shipping_document_job";
         const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
-        const sign = crypto
-            .createHmac("sha256", partner_key)
-            .update(baseString)
-            .digest("hex");
+        const sign = crypto.createHmac("sha256", partner_key).update(baseString).digest("hex");
 
-        // 🚀 Panggil API Shopee
-        const response = await axios.post(
-            `https://partner.shopeemobile.com${path}`,
-            {
-                shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
-                order_list: [
-                    {
-                        order_sn,
-                        package_number,
-                    },
-                ],
-            },
-            {
-                params: {
-                    partner_id,
-                    timestamp,
-                    access_token,
-                    shop_id,
-                    sign,
+        // 🚀 Build query string manually
+        const query = new URLSearchParams({
+            partner_id,
+            shop_id,
+            timestamp,
+            access_token,
+            sign,
+        }).toString();
+
+        const url = `https://partner.shopeemobile.com${path}?${query}`;
+
+        // POST body
+        const body = {
+            shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
+            order_list: [
+                {
+                    order_sn,
+                    package_number,
                 },
-                headers: { "Content-Type": "application/json" },
-            }
-        );
+            ],
+        };
 
-        // ✅ Berhasil
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/json" },
+            validateStatus: () => true,
+        });
+
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message || "Shopee API Error",
+                data: response.data,
+            });
+        }
+
         return res.json({
             success: true,
             message: "Shipping document berhasil dibuat",
