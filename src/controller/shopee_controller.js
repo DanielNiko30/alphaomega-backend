@@ -1834,15 +1834,15 @@ const createShopeeResi = async (req, res) => {
             // 1️⃣ Ambil detail order untuk dapatkan package_number
             const detailPath = "/api/v2/order/get_order_detail";
             const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
-            const detailParams = new URLSearchParams({
-                partner_id: PARTNER_ID,
-                timestamp,
-                access_token,
-                shop_id,
-                sign: detailSign,
-                order_sn_list: order_sn,
-                response_optional_fields: "package_list",
-            });
+            const detailParams = new URLSearchParams();
+            detailParams.append("partner_id", PARTNER_ID.toString());
+            detailParams.append("timestamp", timestamp.toString());
+            detailParams.append("access_token", access_token);
+            detailParams.append("shop_id", shop_id.toString());
+            detailParams.append("sign", detailSign);
+            detailParams.append("order_sn_list", order_sn);
+            detailParams.append("response_optional_fields", "package_list");
+
             const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
             const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
 
@@ -1856,18 +1856,16 @@ const createShopeeResi = async (req, res) => {
 
             // 2️⃣ Buat shipping document job
             const jobPath = "/api/v2/logistics/create_shipping_document_job";
-            const jobTimestamp = Math.floor(Date.now() / 1000);
-            const jobSign = generateSign(jobPath, jobTimestamp, access_token, shop_id);
-            const jobParams = new URLSearchParams({
-                partner_id: PARTNER_ID,
-                timestamp: jobTimestamp,
-                access_token,
-                shop_id,
-                sign: jobSign,
-                order_sn_list: JSON.stringify([order_sn]),
-            });
-            const jobUrl = `${BASE_URL}${jobPath}`;
-            const jobResp = await axios.post(jobUrl, jobParams.toString(), {
+            const jobSign = generateSign(jobPath, timestamp, access_token, shop_id);
+            const jobParams = new URLSearchParams();
+            jobParams.append("partner_id", PARTNER_ID.toString());
+            jobParams.append("timestamp", timestamp.toString());
+            jobParams.append("access_token", access_token);
+            jobParams.append("shop_id", shop_id.toString());
+            jobParams.append("sign", jobSign);
+            jobParams.append("order_sn_list", JSON.stringify([order_sn]));
+
+            const jobResp = await axios.post(`${BASE_URL}${jobPath}`, jobParams.toString(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 validateStatus: () => true,
             });
@@ -1879,21 +1877,22 @@ const createShopeeResi = async (req, res) => {
 
             const job_id = jobResp.data.response.job_id;
 
-            // 3️⃣ Cek status job sampai READY (maks 10x retry)
+            // 3️⃣ Cek status job sampai READY (max 10 retry)
             const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
-            let retries = 0, statusResp;
+            let statusResp, retries = 0;
             do {
-                await new Promise(r => setTimeout(r, 1000)); // delay 1 detik
+                await new Promise(r => setTimeout(r, 1000));
                 const statusTimestamp = Math.floor(Date.now() / 1000);
                 const statusSign = generateSign(statusPath, statusTimestamp, access_token, shop_id);
-                const statusParams = new URLSearchParams({
-                    partner_id: PARTNER_ID,
-                    timestamp: statusTimestamp,
-                    access_token,
-                    shop_id,
-                    sign: statusSign,
-                    job_id,
-                });
+
+                const statusParams = new URLSearchParams();
+                statusParams.append("partner_id", PARTNER_ID.toString());
+                statusParams.append("timestamp", statusTimestamp.toString());
+                statusParams.append("access_token", access_token);
+                statusParams.append("shop_id", shop_id.toString());
+                statusParams.append("sign", statusSign);
+                statusParams.append("job_id", job_id);
+
                 statusResp = await axios.get(`${BASE_URL}${statusPath}?${statusParams.toString()}`, { validateStatus: () => true });
                 retries++;
             } while (statusResp.data?.response?.status !== "READY" && retries < 10);
@@ -1907,14 +1906,15 @@ const createShopeeResi = async (req, res) => {
             const downloadPath = "/api/v2/logistics/download_shipping_document_job";
             const downloadTimestamp = Math.floor(Date.now() / 1000);
             const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id);
-            const downloadParams = new URLSearchParams({
-                partner_id: PARTNER_ID,
-                timestamp: downloadTimestamp,
-                access_token,
-                shop_id,
-                sign: downloadSign,
-                job_id,
-            });
+
+            const downloadParams = new URLSearchParams();
+            downloadParams.append("partner_id", PARTNER_ID.toString());
+            downloadParams.append("timestamp", downloadTimestamp.toString());
+            downloadParams.append("access_token", access_token);
+            downloadParams.append("shop_id", shop_id.toString());
+            downloadParams.append("sign", downloadSign);
+            downloadParams.append("job_id", job_id);
+
             const downloadResp = await axios.get(`${BASE_URL}${downloadPath}?${downloadParams.toString()}`, { validateStatus: () => true });
 
             if (downloadResp.data.error) {
@@ -1924,13 +1924,12 @@ const createShopeeResi = async (req, res) => {
                     order_sn,
                     package_number,
                     success: true,
-                    label_base64: downloadResp.data.response.file, // bisa langsung preview atau download di frontend
+                    label_base64: downloadResp.data.response.file, // nanti bisa preview/download di frontend
                 });
             }
         }
 
         return res.json({ success: true, message: "Berhasil ambil resi Shopee", data: results });
-
     } catch (error) {
         console.error("❌ Error getShopeeResiJob:", error.response?.data || error.message);
         return res.status(500).json({
