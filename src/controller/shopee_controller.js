@@ -1831,7 +1831,7 @@ const createShopeeResi = async (req, res) => {
         for (const order_sn of order_sn_list) {
             const timestamp = Math.floor(Date.now() / 1000);
 
-            // 1️⃣ Ambil detail order untuk dapatkan package_number
+            // 1️⃣ Ambil detail order untuk package_number
             const detailPath = "/api/v2/order/get_order_detail";
             const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
             const detailParams = new URLSearchParams({
@@ -1878,12 +1878,12 @@ const createShopeeResi = async (req, res) => {
 
             const job_id = jobResp.data.response.job_id;
 
-            // 3️⃣ Cek status job sampai READY
+            // 3️⃣ Cek status job sampai READY (retry max 10x)
             const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
-            const statusSign = generateSign(statusPath, timestamp, access_token, shop_id);
             let statusResp, retries = 0;
             do {
-                await new Promise(r => setTimeout(r, 1000)); // delay 1 detik
+                await new Promise(r => setTimeout(r, 1000));
+                const statusSign = generateSign(statusPath, Math.floor(Date.now() / 1000), access_token, shop_id);
                 const statusParams = new URLSearchParams({
                     partner_id: PARTNER_ID,
                     timestamp: Math.floor(Date.now() / 1000),
@@ -1903,7 +1903,7 @@ const createShopeeResi = async (req, res) => {
 
             // 4️⃣ Download shipping document (PDF base64)
             const downloadPath = "/api/v2/logistics/download_shipping_document_job";
-            const downloadSign = generateSign(downloadPath, timestamp, access_token, shop_id);
+            const downloadSign = generateSign(downloadPath, Math.floor(Date.now() / 1000), access_token, shop_id);
             const downloadParams = new URLSearchParams({
                 partner_id: PARTNER_ID,
                 timestamp: Math.floor(Date.now() / 1000),
@@ -1921,12 +1921,13 @@ const createShopeeResi = async (req, res) => {
                     order_sn,
                     package_number,
                     success: true,
-                    label_base64: downloadResp.data.response.file, // bisa langsung preview atau download di frontend
+                    label_base64: downloadResp.data.response.file, // bisa langsung preview / download di frontend
                 });
             }
         }
 
         return res.json({ success: true, message: "Berhasil ambil resi Shopee", data: results });
+
     } catch (error) {
         console.error("❌ Error getShopeeResiJob:", error.response?.data || error.message);
         return res.status(500).json({
