@@ -884,7 +884,7 @@ const getOrderDetail = async (req, res) => {
             sign: sign,
             order_sn_list: order_sn_list,
             response_optional_fields:
-                "buyer_username,item_list,total_amount,recipient_address,package_list",
+                "buyer_username,item_list,total_amount,recipient_address,package_list,pickup_done_time",
         });
 
         const finalUrl = `${BASE_URL}${path}?${params.toString()}`;
@@ -960,9 +960,11 @@ const getOrderDetail = async (req, res) => {
                 }
             }
 
-            // Ambil package_number dari package_list
+            // Ambil package_number, booking_sn, advance_package, dll
             const packages = (order.package_list || []).map(pkg => ({
                 package_number: pkg.package_number,
+                booking_sn: pkg.booking_sn,
+                advance_package: pkg.advance_package,
                 logistics_status: pkg.logistics_status,
                 shipping_carrier: pkg.shipping_carrier,
                 allow_self_design_awb: pkg.allow_self_design_awb,
@@ -973,15 +975,16 @@ const getOrderDetail = async (req, res) => {
                 buyer_username: order.buyer_username,
                 total_amount: order.total_amount,
                 status: order.order_status,
+                pickup_done_time: order.pickup_done_time || null,
                 recipient_address: order.recipient_address,
                 items: items,
-                packages: packages, // ✅ Tambahan
+                packages: packages,
             });
         }
 
         return res.json({
             success: true,
-            message: "Berhasil mengambil detail order Shopee + data lokal (lengkap) termasuk package_number",
+            message: "Berhasil mengambil detail order Shopee + data lokal (lengkap) termasuk package_number & booking_sn",
             data: combinedOrders,
         });
     } catch (error) {
