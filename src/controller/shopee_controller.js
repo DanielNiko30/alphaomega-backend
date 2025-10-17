@@ -1835,7 +1835,7 @@ const createShopeeResi = async (req, res) => {
             const detailPath = "/api/v2/order/get_order_detail";
             const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
             const detailParams = new URLSearchParams({
-                partner_id: PARTNER_ID.toString(),
+                partner_id: PARTNER_ID,
                 timestamp: timestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
@@ -1868,7 +1868,7 @@ const createShopeeResi = async (req, res) => {
             const jobPath = "/api/v2/logistics/create_shipping_document_job";
             const jobSign = generateSign(jobPath, timestamp, access_token, shop_id);
             const jobParams = new URLSearchParams({
-                partner_id: PARTNER_ID.toString(),
+                partner_id: PARTNER_ID,
                 timestamp: timestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
@@ -1898,7 +1898,7 @@ const createShopeeResi = async (req, res) => {
                 const statusSign = generateSign(statusPath, statusTimestamp, access_token, shop_id);
 
                 const statusParams = new URLSearchParams({
-                    partner_id: PARTNER_ID.toString(),
+                    partner_id: PARTNER_ID,
                     timestamp: statusTimestamp.toString(),
                     access_token,
                     shop_id: shop_id.toString(),
@@ -1921,7 +1921,7 @@ const createShopeeResi = async (req, res) => {
             const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id);
 
             const downloadParams = new URLSearchParams({
-                partner_id: PARTNER_ID.toString(),
+                partner_id: PARTNER_ID,
                 timestamp: downloadTimestamp.toString(),
                 access_token,
                 shop_id: shop_id.toString(),
