@@ -16,7 +16,7 @@ const {
     searchShopeeProductByName,
     getShopeeOrdersWithItems,
     getShippingParameter,
-    createShippingDocumentJob,
+    createBookingShippingDocument,
     getShopeeShippedOrders,
     getShopeeShippedOrdersWithItems
 } = require('../controller/shopee_controller');
@@ -45,6 +45,6 @@ router.get('/searchproduct', searchShopeeProductByName);
 router.post("/shipping-parameter", getShippingParameter);
 router.post("/ship-order/pickup", setShopeePickup);
 router.post("/ship-order/dropoff", setShopeeDropoff);
-router.post('/orders/print-resi', createShippingDocumentJob);
+router.post('/orders/print-resi', createBookingShippingDocument);
 
 module.exports = router;

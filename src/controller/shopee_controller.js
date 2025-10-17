@@ -1803,109 +1803,121 @@ const setShopeeDropoff = async (req, res) => {
     }
 };
 
-const createShippingDocumentJob = async (req, res) => {
-    try {
-        const { order_sn } = req.body;
+const createBookingShippingDocument = async (req, res) => {
+  try {
+    const { order_sn } = req.body;
 
-        if (!order_sn) {
-            return res.status(400).json({
-                success: false,
-                message: "Field 'order_sn' wajib diisi",
-            });
-        }
-
-        // Ambil shop credentials dari DB
-        const shopee = await Shopee.findOne();
-        if (!shopee?.access_token || !shopee?.shop_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Shopee credentials tidak ditemukan di database",
-            });
-        }
-
-        const shop_id = Number(shopee.shop_id);
-        const access_token = shopee.access_token;
-        const partner_id = Number(process.env.SHOPEE_PARTNER_ID);
-        const partner_key = process.env.SHOPEE_PARTNER_KEY;
-        const timestamp = Math.floor(Date.now() / 1000);
-
-        // 1️⃣ Ambil package_number dari Shopee (get_order_detail)
-        const pathOrderDetail = "/api/v2/order/get_order_detail";
-        const signOrderDetail = crypto.createHmac("sha256", partner_key)
-            .update(`${partner_id}${pathOrderDetail}${timestamp}${access_token}${shop_id}`)
-            .digest("hex");
-
-        const urlOrderDetail = `https://partner.shopeemobile.com${pathOrderDetail}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signOrderDetail}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
-
-        const orderDetailResp = await axios.get(urlOrderDetail, {
-            headers: { "Content-Type": "application/json" },
-            validateStatus: () => true,
-        });
-
-        if (orderDetailResp.data.error) {
-            return res.status(400).json({
-                success: false,
-                message: orderDetailResp.data.message || "Shopee API Error",
-                data: orderDetailResp.data,
-            });
-        }
-
-        const package_number = orderDetailResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number;
-
-        if (!package_number) {
-            return res.status(404).json({
-                success: false,
-                message: "Package number tidak ditemukan untuk order_sn ini",
-            });
-        }
-
-        // 2️⃣ Buat shipping document job
-        const path = "/api/v2/logistics/create_shipping_document_job";
-        const sign = crypto.createHmac("sha256", partner_key)
-            .update(`${partner_id}${path}${timestamp}${access_token}${shop_id}`)
-            .digest("hex");
-
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
-
-        const body = {
-            shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
-            unpackaged_sku_requests: [
-                {
-                    unpackaged_sku_id: package_number,
-                    quantity: 1
-                }
-            ]
-        };
-
-        const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/json" },
-            validateStatus: () => true,
-        });
-
-        if (response.data.error) {
-            return res.status(400).json({
-                success: false,
-                message: response.data.message || "Shopee API Error",
-                data: response.data,
-            });
-        }
-
-        return res.json({
-            success: true,
-            message: "Shipping document berhasil dibuat",
-            order_sn,
-            package_number,
-            data: response.data,
-        });
-
-    } catch (error) {
-        console.error("❌ Error create shipping document:", error.response?.data || error.message);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal membuat shipping document",
-            error: error.response?.data || error.message,
-        });
+    if (!order_sn) {
+      return res.status(400).json({
+        success: false,
+        message: "Field 'order_sn' wajib diisi",
+      });
     }
+
+    // Ambil Shopee credentials
+    const shop = await Shopee.findOne();
+    if (!shop?.access_token || !shop?.shop_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Shopee token atau shop_id tidak ditemukan di database",
+      });
+    }
+
+    const shop_id = Number(shop.shop_id);
+    const access_token = shop.access_token;
+    const partner_key = process.env.SHOPEE_PARTNER_KEY;
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    // 1️⃣ Ambil order detail untuk dapatkan tracking_number & booking_sn
+    const pathOrderDetail = "/api/v2/order/get_order_detail";
+    const signOrderDetail = crypto
+      .createHmac("sha256", partner_key)
+      .update(`${PARTNER_ID}${pathOrderDetail}${timestamp}${access_token}${shop_id}`)
+      .digest("hex");
+
+    const urlOrderDetail = `https://partner.shopecdn.com${pathOrderDetail}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signOrderDetail}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
+
+    const orderDetailResp = await axios.get(urlOrderDetail, {
+      headers: { "Content-Type": "application/json" },
+      validateStatus: () => true,
+    });
+
+    if (orderDetailResp.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: orderDetailResp.data.message || "Shopee API Error",
+        data: orderDetailResp.data,
+      });
+    }
+
+    const orderInfo = orderDetailResp.data.response?.order_list?.[0];
+    if (!orderInfo) {
+      return res.status(404).json({
+        success: false,
+        message: "Order tidak ditemukan di Shopee",
+      });
+    }
+
+    const packageData = orderInfo.package_list?.[0];
+    if (!packageData?.tracking_number || !packageData?.booking_sn) {
+      return res.status(400).json({
+        success: false,
+        message: "Order belum memiliki tracking number / booking_sn",
+        packageData,
+      });
+    }
+
+    const booking_sn = packageData.booking_sn;
+    const tracking_number = packageData.tracking_number;
+
+    // 2️⃣ Buat booking shipping document
+    const pathBooking = "/api/v2/logistics/create_booking_shipping_document";
+    const signBooking = crypto
+      .createHmac("sha256", partner_key)
+      .update(`${PARTNER_ID}${pathBooking}${timestamp}${access_token}${shop_id}`)
+      .digest("hex");
+
+    const urlBooking = `https://partner.shopecdn.com${pathBooking}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signBooking}`;
+
+    const body = {
+      booking_list: [
+        {
+          booking_sn,
+          tracking_number,
+          shipping_document_type: "NORMAL_AIR_WAYBILL", // Bisa juga THERMAL_AIR_WAYBILL
+        },
+      ],
+    };
+
+    const response = await axios.post(urlBooking, body, {
+      headers: { "Content-Type": "application/json" },
+      validateStatus: () => true,
+    });
+
+    if (response.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: response.data.message || "Shopee API Error",
+        data: response.data,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Booking shipping document berhasil dibuat",
+      order_sn,
+      booking_sn,
+      tracking_number,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error("❌ Error createBookingShippingDocument:", error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal membuat booking shipping document",
+      error: error.response?.data || error.message,
+    });
+  }
 };
 
 module.exports = {
@@ -1925,6 +1937,6 @@ module.exports = {
     getShopeeShippedOrdersWithItems,
     getShippingParameter,
     setShopeePickup,
-    createShippingDocumentJob,
+    createBookingShippingDocument,
     setShopeeDropoff
 };
