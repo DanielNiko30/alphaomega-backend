@@ -1814,15 +1814,6 @@ const createShippingDocumentJob = async (req, res) => {
             });
         }
 
-        // Ambil transaksi lokal
-        const htrans = await HTransJual.findOne({ where: { order_sn } });
-        if (!htrans) {
-            return res.status(404).json({
-                success: false,
-                message: `Order dengan order_sn ${order_sn} tidak ditemukan`,
-            });
-        }
-
         // Ambil shop credentials dari DB
         const shopee = await Shopee.findOne();
         if (!shopee?.access_token || !shopee?.shop_id) {
@@ -1838,46 +1829,37 @@ const createShippingDocumentJob = async (req, res) => {
         const partner_key = process.env.SHOPEE_PARTNER_KEY;
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // ✅ Jika package_number belum ada di DB, ambil dari Shopee
-        let package_number = htrans.package_number;
-        if (!package_number) {
-            const pathOrderDetail = "/api/v2/order/get_order_detail";
-            const signOrderDetail = crypto.createHmac("sha256", partner_key)
-                .update(`${partner_id}${pathOrderDetail}${timestamp}${access_token}${shop_id}`)
-                .digest("hex");
+        // 1️⃣ Ambil package_number dari Shopee (get_order_detail)
+        const pathOrderDetail = "/api/v2/order/get_order_detail";
+        const signOrderDetail = crypto.createHmac("sha256", partner_key)
+            .update(`${partner_id}${pathOrderDetail}${timestamp}${access_token}${shop_id}`)
+            .digest("hex");
 
-            const urlOrderDetail = `https://partner.shopeemobile.com${pathOrderDetail}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signOrderDetail}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
+        const urlOrderDetail = `https://partner.shopeemobile.com${pathOrderDetail}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signOrderDetail}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
 
-            const orderDetailResp = await axios.get(urlOrderDetail, {
-                headers: { "Content-Type": "application/json" },
-                validateStatus: () => true,
+        const orderDetailResp = await axios.get(urlOrderDetail, {
+            headers: { "Content-Type": "application/json" },
+            validateStatus: () => true,
+        });
+
+        if (orderDetailResp.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: orderDetailResp.data.message || "Shopee API Error",
+                data: orderDetailResp.data,
             });
-
-            if (orderDetailResp.data.error) {
-                return res.status(400).json({
-                    success: false,
-                    message: orderDetailResp.data.message || "Shopee API Error",
-                    data: orderDetailResp.data,
-                });
-            }
-
-            package_number = orderDetailResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number;
-
-            if (!package_number) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Package number tidak ditemukan untuk order_sn ini",
-                });
-            }
-
-            // Update ke DB supaya tidak perlu ambil lagi
-            await HTransJual.update(
-                { package_number },
-                { where: { order_sn } }
-            );
         }
 
-        // ✅ Buat shipping document job
+        const package_number = orderDetailResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number;
+
+        if (!package_number) {
+            return res.status(404).json({
+                success: false,
+                message: "Package number tidak ditemukan untuk order_sn ini",
+            });
+        }
+
+        // 2️⃣ Buat shipping document job
         const path = "/api/v2/logistics/create_shipping_document_job";
         const sign = crypto.createHmac("sha256", partner_key)
             .update(`${partner_id}${path}${timestamp}${access_token}${shop_id}`)
