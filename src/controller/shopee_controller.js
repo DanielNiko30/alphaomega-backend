@@ -1814,7 +1814,7 @@ const createShippingDocumentJob = async (req, res) => {
             });
         }
 
-        // 🔍 Cari data transaksi lokal di tabel htrans_penjualan
+        // Ambil data transaksi lokal
         const htrans = await HTransJual.findOne({ where: { order_sn } });
 
         if (!htrans) {
@@ -1833,7 +1833,7 @@ const createShippingDocumentJob = async (req, res) => {
 
         const package_number = htrans.package_number;
 
-        // 🔑 Ambil kredensial Shopee
+        // Kredensial Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const partner_id = process.env.SHOPEE_PARTNER_ID;
         const shop_id = process.env.SHOPEE_SHOP_ID;
@@ -1844,21 +1844,19 @@ const createShippingDocumentJob = async (req, res) => {
         const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
         const sign = crypto.createHmac("sha256", partner_key).update(baseString).digest("hex");
 
-        // 🔗 Buat URL lengkap dengan query string
         const url = `https://partner.shopeemobile.com${path}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-        // 📝 Body request
+        // Body request sesuai dokumentasi terbaru
         const body = {
             shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
-            order_list: [
+            unpackaged_sku_requests: [
                 {
-                    order_sn,
-                    package_number,
-                },
-            ],
+                    unpackaged_sku_id: package_number,
+                    quantity: 1
+                }
+            ]
         };
 
-        // 🚀 Request ke Shopee
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true,
@@ -1872,7 +1870,6 @@ const createShippingDocumentJob = async (req, res) => {
             });
         }
 
-        // ✅ Berhasil
         return res.json({
             success: true,
             message: "Shipping document berhasil dibuat",
