@@ -1806,7 +1806,7 @@ const setShopeeDropoff = async (req, res) => {
     }
 };
 
-const createShopeeResiDownload = async (req, res) => {
+const createShopeeResi = async (req, res) => {
     try {
         const { order_sn_list } = req.body; // array of order_sn
         if (!order_sn_list || !order_sn_list.length)
