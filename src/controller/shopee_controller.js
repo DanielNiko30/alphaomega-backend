@@ -1810,17 +1810,18 @@ const createShopeeResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "order_sn wajib diisi" });
         }
 
-        // Ambil transaksi dari DB
-        const orderDB = await HTransJual.findOne({ where: { order_sn } });
-        if (!orderDB || !orderDB.package_number) {
+        // 1️⃣ Ambil HTransJual dari DB
+        const order = await HTransJual.findOne({ where: { order_sn, status: "PROCESSED" } });
+        if (!order || !order.package_number) {
             return res.status(400).json({
                 success: false,
-                message: "Order tidak ditemukan atau package_number belum tersedia di DB",
+                message: "Order belum dipickup / package_number belum tersedia di DB",
             });
         }
-        const package_number = orderDB.package_number;
 
-        // Ambil credential Shopee
+        const package_number = order.package_number;
+
+        // 2️⃣ Ambil credential Shopee
         const shop = await Shopee.findOne();
         if (!shop?.access_token || !shop?.shop_id) {
             return res.status(400).json({ success: false, message: "Shopee credential tidak ditemukan" });
@@ -1832,13 +1833,14 @@ const createShopeeResi = async (req, res) => {
         const access_token = shop.access_token.trim();
 
         const makeSign = (apiPath, ts) =>
-            crypto.createHmac("sha256", PARTNER_KEY)
+            crypto
+                .createHmac("sha256", PARTNER_KEY)
                 .update(`${PARTNER_ID}${apiPath}${ts}${access_token}${shop_id}`)
                 .digest("hex");
 
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-        // Ambil order detail untuk dapat booking_sn & tracking_number
+        // 3️⃣ Ambil tracking_number dari Shopee
         const getOrderDetail = async () => {
             const ts = Math.floor(Date.now() / 1000);
             const pathOD = "/api/v2/order/get_order_detail";
@@ -1846,20 +1848,19 @@ const createShopeeResi = async (req, res) => {
             const url = `https://partner.shopeemobile.com${pathOD}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${ts}&access_token=${access_token}&sign=${signOD}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
 
             const resp = await axios.get(url, { validateStatus: () => true });
+
             const pkg = resp.data?.response?.order_list?.[0]?.package_list?.find(p => p.package_number === package_number);
+
             return {
-                booking_sn: pkg?.booking_sn || null,
                 tracking_number: pkg?.tracking_number || null,
+                raw: resp.data,
             };
         };
 
-        let { booking_sn, tracking_number } = await getOrderDetail();
-        if (!booking_sn) {
-            return res.status(400).json({ success: false, message: "booking_sn belum tersedia di Shopee" });
-        }
+        let { tracking_number } = await getOrderDetail();
 
-        // Tunggu tracking_number jika belum ada
         if (!tracking_number) {
+            // tunggu sampai 6x 3 detik
             for (let i = 0; i < 6; i++) {
                 await sleep(3000);
                 ({ tracking_number } = await getOrderDetail());
@@ -1868,10 +1869,13 @@ const createShopeeResi = async (req, res) => {
         }
 
         if (!tracking_number) {
-            return res.status(400).json({ success: false, message: "tracking_number belum tersedia" });
+            return res.status(400).json({
+                success: false,
+                message: "tracking_number belum tersedia di Shopee",
+            });
         }
 
-        // Buat dokumen resi
+        // 4️⃣ Buat dokumen resi
         const tsCreate = Math.floor(Date.now() / 1000);
         const pathCreate = "/api/v2/logistics/create_booking_shipping_document";
         const signCreate = makeSign(pathCreate, tsCreate);
@@ -1880,7 +1884,7 @@ const createShopeeResi = async (req, res) => {
         const createBody = {
             booking_list: [
                 {
-                    booking_sn,
+                    booking_sn: package_number, // pakai package_number dari DB
                     tracking_number,
                     shipping_document_type: "NORMAL_AIR_WAYBILL",
                 },
@@ -1893,25 +1897,35 @@ const createShopeeResi = async (req, res) => {
         });
 
         if (createResp.data.error) {
-            return res.status(400).json({ success: false, message: "create_booking_shipping_document gagal", debug: createResp.data });
+            return res.status(400).json({
+                success: false,
+                message: "create_booking_shipping_document gagal",
+                debug: createResp.data,
+            });
         }
 
-        // Ambil file URL
+        // 5️⃣ Ambil file resi
         const tsResult = Math.floor(Date.now() / 1000);
         const pathResult = "/api/v2/logistics/get_booking_shipping_document_result";
         const signResult = makeSign(pathResult, tsResult);
         const urlResult = `https://partner.shopeemobile.com${pathResult}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${tsResult}&access_token=${access_token}&sign=${signResult}`;
 
-        const resultResp = await axios.post(urlResult, {
-            booking_list: [{ booking_sn, shipping_document_type: "NORMAL_AIR_WAYBILL" }],
-        }, { headers: { "Content-Type": "application/json" }, validateStatus: () => true });
+        const resultResp = await axios.post(
+            urlResult,
+            { booking_list: [{ booking_sn: package_number, shipping_document_type: "NORMAL_AIR_WAYBILL" }] },
+            { headers: { "Content-Type": "application/json" }, validateStatus: () => true }
+        );
 
         const fileUrl = resultResp.data?.response?.result_list?.[0]?.file_url;
         if (!fileUrl) {
-            return res.status(400).json({ success: false, message: "file_url tidak ditemukan", debug: resultResp.data });
+            return res.status(400).json({
+                success: false,
+                message: "file_url tidak ditemukan di Shopee",
+                debug: resultResp.data,
+            });
         }
 
-        // Download PDF
+        // 6️⃣ Download PDF
         const pdfResp = await axios.get(fileUrl, { responseType: "arraybuffer" });
         const outputDir = path.join(__dirname, "../resi");
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
@@ -1920,17 +1934,20 @@ const createShopeeResi = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "✅ Resi berhasil di-generate & download",
+            message: "✅ Resi Shopee berhasil dibuat dan di-download",
             order_sn,
-            booking_sn,
+            package_number,
             tracking_number,
             file_path: `/resi/resi_${order_sn}.pdf`,
             file_url: fileUrl,
         });
-
     } catch (err) {
-        console.error("❌ ERROR printResiShopee:", err.response?.data || err.message);
-        return res.status(500).json({ success: false, message: "Gagal generate resi", error: err.response?.data || err.message });
+        console.error("❌ ERROR printShopeeResi:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal membuat resi Shopee",
+            error: err.response?.data || err.message,
+        });
     }
 };
 
