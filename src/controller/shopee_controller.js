@@ -1807,74 +1807,94 @@ const setShopeeDropoff = async (req, res) => {
 };
 
 const createShopeeResi = async (req, res) => {
-    try {
-        const { order_sn_list } = req.body; // array of order_sn
-        if (!order_sn_list || !order_sn_list.length)
-            return res.status(400).json({ success: false, message: "order_sn_list wajib dikirim" });
-
-        const shop = await Shopee.findOne();
-        if (!shop) throw new Error("Shopee account belum ada di DB");
-
-        const { shop_id, access_token } = shop;
-        const timestamp = Math.floor(Date.now() / 1000);
-        const BASE_URL = "https://partner.shopeemobile.com";
-
-        // Ambil order pertama untuk contoh
-        const order_sn = order_sn_list[0];
-
-        // 1️⃣ Ambil detail order untuk dapatkan package_number
-        const detailPath = "/api/v2/order/get_order_detail";
-        const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
-        const detailParams = new URLSearchParams({
-            partner_id: PARTNER_ID,
-            timestamp,
-            access_token,
-            shop_id,
-            sign: detailSign,
-            order_sn_list: order_sn,
-            response_optional_fields: "package_list",
-        });
-        const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
-        const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
-
-        const orderDetail = detailResp.data?.response?.order_list?.[0];
-        if (!orderDetail || !orderDetail.package_list?.length)
-            return res.status(400).json({ success: false, message: "Package_number belum tersedia di Shopee" });
-
-        const pkg = orderDetail.package_list[0];
-
-        // 2️⃣ Ambil label base64
-        const path = "/api/v2/logistics/get_logistics_label";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-        const params = new URLSearchParams({
-            partner_id: PARTNER_ID,
-            timestamp,
-            access_token,
-            shop_id,
-            sign,
-            order_sn: order_sn,
-            package_number: pkg.package_number,
-        });
-        const url = `${BASE_URL}${path}?${params.toString()}`;
-        const resp = await axios.get(url, { validateStatus: () => true });
-
-        if (resp.data.error)
-            return res.status(400).json({ success: false, message: resp.data.message });
-
-        const buffer = Buffer.from(resp.data.response.label_base64, 'base64');
-
-        // 3️⃣ Kirim langsung PDF untuk download
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `attachment; filename=resi_${order_sn}.pdf`
-        );
-        return res.send(buffer);
-
-    } catch (error) {
-        console.error("❌ Error printResiShopeeDownload:", error.message);
-        return res.status(500).json({ success: false, message: "Gagal print resi", error: error.message });
+  try {
+    const { order_sn_list } = req.body;
+    if (!order_sn_list || !Array.isArray(order_sn_list) || !order_sn_list.length) {
+      return res.status(400).json({
+        success: false,
+        message: "order_sn_list wajib dikirim dan harus array",
+      });
     }
+
+    const shop = await Shopee.findOne();
+    if (!shop || !shop.shop_id || !shop.access_token) {
+      return res.status(400).json({
+        success: false,
+        message: "Shopee account belum lengkap di DB (shop_id / access_token)",
+      });
+    }
+
+    const { shop_id, access_token } = shop;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const BASE_URL = "https://partner.shopeemobile.com";
+
+    const order_sn = order_sn_list[0]; // Ambil 1 order saja
+
+    // 1️⃣ Ambil detail order
+    const detailPath = "/api/v2/order/get_order_detail";
+    const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
+    const detailParams = new URLSearchParams({
+      partner_id: PARTNER_ID,
+      timestamp,
+      access_token,
+      shop_id,
+      sign: detailSign,
+      order_sn_list: order_sn,
+      response_optional_fields: "package_list",
+    });
+    const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
+    const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
+
+    const orderDetail = detailResp.data?.response?.order_list?.[0];
+    if (!orderDetail || !orderDetail.package_list?.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Package_number belum tersedia di Shopee",
+      });
+    }
+
+    const pkg = orderDetail.package_list[0];
+
+    // 2️⃣ Ambil label base64
+    const labelPath = "/api/v2/logistics/get_logistics_label";
+    const labelSign = generateSign(labelPath, timestamp, access_token, shop_id);
+    const labelParams = new URLSearchParams({
+      partner_id: PARTNER_ID,
+      timestamp,
+      access_token,
+      shop_id,
+      sign: labelSign,
+      order_sn: order_sn,
+      package_number: pkg.package_number,
+    });
+    const labelUrl = `${BASE_URL}${labelPath}?${labelParams.toString()}`;
+    const labelResp = await axios.get(labelUrl, { validateStatus: () => true });
+
+    if (labelResp.data.error) {
+      return res.status(400).json({
+        success: false,
+        message: labelResp.data.message || "Gagal ambil resi dari Shopee",
+      });
+    }
+
+    const pdfBuffer = Buffer.from(labelResp.data.response.label_base64, "base64");
+
+    // 3️⃣ Kirim PDF langsung
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=resi_${order_sn}.pdf`
+    );
+    return res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("❌ Error createShopeeResiDownload:", error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal print resi",
+      error: error.response?.data || error.message,
+    });
+  }
 };
 
 module.exports = {
