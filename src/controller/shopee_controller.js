@@ -1807,93 +1807,134 @@ const setShopeeDropoff = async (req, res) => {
 };
 
 const createShopeeResi = async (req, res) => {
-  try {
-    const { order_sn_list } = req.body;
-    if (!order_sn_list || !Array.isArray(order_sn_list) || !order_sn_list.length) {
-      return res.status(400).json({
-        success: false,
-        message: "order_sn_list wajib dikirim dan harus array",
-      });
-    }
-
-    const shop = await Shopee.findOne();
-    if (!shop || !shop.shop_id || !shop.access_token) {
-      return res.status(400).json({
-        success: false,
-        message: "Shopee account belum lengkap di DB (shop_id / access_token)",
-      });
-    }
-
-    const { shop_id, access_token } = shop;
-    const timestamp = Math.floor(Date.now() / 1000);
-    const BASE_URL = "https://partner.shopeemobile.com";
-
-    const results = [];
-
-    for (const order_sn of order_sn_list) {
-      // Ambil detail order untuk dapatkan package_number
-      const detailPath = "/api/v2/order/get_order_detail";
-      const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
-      const detailParams = new URLSearchParams({
-        partner_id: PARTNER_ID,
-        timestamp,
-        access_token,
-        shop_id,
-        sign: detailSign,
-        order_sn_list: order_sn,
-        response_optional_fields: "package_list",
-      });
-      const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
-      const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
-
-      const orderDetail = detailResp.data?.response?.order_list?.[0];
-      if (!orderDetail || !orderDetail.package_list?.length) {
-        results.push({ order_sn, success: false, message: "Package_number belum tersedia di Shopee" });
-        continue;
-      }
-
-      for (const pkg of orderDetail.package_list) {
-        const path = "/api/v2/logistics/get_logistics_label";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-        const params = new URLSearchParams({
-          partner_id: PARTNER_ID,
-          timestamp,
-          access_token,
-          shop_id,
-          sign,
-          order_sn: order_sn,
-          package_number: pkg.package_number,
-        });
-        const url = `${BASE_URL}${path}?${params.toString()}`;
-        const resp = await axios.get(url, { validateStatus: () => true });
-
-        if (resp.data.error) {
-          results.push({ order_sn, package_number: pkg.package_number, success: false, message: resp.data.message });
-        } else {
-          results.push({
-            order_sn,
-            package_number: pkg.package_number,
-            success: true,
-            label_base64: resp.data.response.label_base64, // ini yang nanti bisa preview / download di frontend
-          });
+    try {
+        const { order_sn_list } = req.body;
+        if (!order_sn_list || !Array.isArray(order_sn_list) || !order_sn_list.length) {
+            return res.status(400).json({
+                success: false,
+                message: "order_sn_list wajib dikirim dan harus array",
+            });
         }
-      }
+
+        const shop = await Shopee.findOne();
+        if (!shop || !shop.shop_id || !shop.access_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee account belum lengkap di DB (shop_id / access_token)",
+            });
+        }
+
+        const { shop_id, access_token } = shop;
+        const BASE_URL = "https://partner.shopeemobile.com";
+        const results = [];
+
+        for (const order_sn of order_sn_list) {
+            const timestamp = Math.floor(Date.now() / 1000);
+
+            // 1️⃣ Ambil detail order untuk dapatkan package_number
+            const detailPath = "/api/v2/order/get_order_detail";
+            const detailSign = generateSign(detailPath, timestamp, access_token, shop_id);
+            const detailParams = new URLSearchParams({
+                partner_id: PARTNER_ID,
+                timestamp,
+                access_token,
+                shop_id,
+                sign: detailSign,
+                order_sn_list: order_sn,
+                response_optional_fields: "package_list",
+            });
+            const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
+            const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
+
+            const orderDetail = detailResp.data?.response?.order_list?.[0];
+            if (!orderDetail || !orderDetail.package_list?.length) {
+                results.push({ order_sn, success: false, message: "Package_number belum tersedia" });
+                continue;
+            }
+
+            const package_number = orderDetail.package_list[0].package_number;
+
+            // 2️⃣ Buat shipping document job
+            const jobPath = "/api/v2/logistics/create_shipping_document_job";
+            const jobSign = generateSign(jobPath, timestamp, access_token, shop_id);
+            const jobParams = new URLSearchParams({
+                partner_id: PARTNER_ID,
+                timestamp,
+                access_token,
+                shop_id,
+                sign: jobSign,
+                order_sn_list: JSON.stringify([order_sn]),
+            });
+            const jobUrl = `${BASE_URL}${jobPath}`;
+            const jobResp = await axios.post(jobUrl, jobParams.toString(), {
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                validateStatus: () => true,
+            });
+
+            if (jobResp.data.error) {
+                results.push({ order_sn, package_number, success: false, message: jobResp.data.message });
+                continue;
+            }
+
+            const job_id = jobResp.data.response.job_id;
+
+            // 3️⃣ Cek status job sampai READY
+            const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
+            const statusSign = generateSign(statusPath, timestamp, access_token, shop_id);
+            let statusResp, retries = 0;
+            do {
+                await new Promise(r => setTimeout(r, 1000)); // delay 1 detik
+                const statusParams = new URLSearchParams({
+                    partner_id: PARTNER_ID,
+                    timestamp: Math.floor(Date.now() / 1000),
+                    access_token,
+                    shop_id,
+                    sign: statusSign,
+                    job_id,
+                });
+                statusResp = await axios.get(`${BASE_URL}${statusPath}?${statusParams.toString()}`, { validateStatus: () => true });
+                retries++;
+            } while (statusResp.data?.response?.status !== "READY" && retries < 10);
+
+            if (statusResp.data?.response?.status !== "READY") {
+                results.push({ order_sn, package_number, success: false, message: "Shipping document belum siap" });
+                continue;
+            }
+
+            // 4️⃣ Download shipping document (PDF base64)
+            const downloadPath = "/api/v2/logistics/download_shipping_document_job";
+            const downloadSign = generateSign(downloadPath, timestamp, access_token, shop_id);
+            const downloadParams = new URLSearchParams({
+                partner_id: PARTNER_ID,
+                timestamp: Math.floor(Date.now() / 1000),
+                access_token,
+                shop_id,
+                sign: downloadSign,
+                job_id,
+            });
+            const downloadResp = await axios.get(`${BASE_URL}${downloadPath}?${downloadParams.toString()}`, { validateStatus: () => true });
+
+            if (downloadResp.data.error) {
+                results.push({ order_sn, package_number, success: false, message: downloadResp.data.message });
+            } else {
+                results.push({
+                    order_sn,
+                    package_number,
+                    success: true,
+                    label_base64: downloadResp.data.response.file, // bisa langsung preview atau download di frontend
+                });
+            }
+        }
+
+        return res.json({ success: true, message: "Berhasil ambil resi Shopee", data: results });
+    } catch (error) {
+        console.error("❌ Error getShopeeResiJob:", error.response?.data || error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal ambil resi",
+            error: error.response?.data || error.message,
+        });
     }
-
-    return res.json({
-      success: true,
-      message: "Berhasil ambil resi Shopee",
-      data: results,
-    });
-
-  } catch (error) {
-    console.error("❌ Error getShopeeResi:", error.response?.data || error.message);
-    return res.status(500).json({
-      success: false,
-      message: "Gagal ambil resi",
-      error: error.response?.data || error.message,
-    });
-  }
 };
 
 
