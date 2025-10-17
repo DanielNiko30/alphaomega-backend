@@ -1812,7 +1812,6 @@ const createBookingShippingDocument = async (req, res) => {
             return res.status(400).json({ success: false, message: "order_sn wajib diisi" });
         }
 
-        // 🔹 Ambil credential Shopee
         const shop = await Shopee.findOne();
         if (!shop?.access_token || !shop?.shop_id) {
             return res.status(400).json({ success: false, message: "Shopee credential tidak ditemukan" });
@@ -1823,14 +1822,14 @@ const createBookingShippingDocument = async (req, res) => {
         const shop_id = Number(shop.shop_id);
         const access_token = shop.access_token.trim();
 
-        // 🔹 Helper generate sign
         const makeSign = (apiPath, ts) =>
             crypto
                 .createHmac("sha256", PARTNER_KEY)
                 .update(`${PARTNER_ID}${apiPath}${ts}${access_token}${shop_id}`)
                 .digest("hex");
 
-        // 🔸 Helper ambil order detail
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
         const getOrderDetail = async () => {
             const ts = Math.floor(Date.now() / 1000);
             const pathOD = "/api/v2/order/get_order_detail";
@@ -1845,21 +1844,39 @@ const createBookingShippingDocument = async (req, res) => {
             };
         };
 
-        // 1️⃣ Ambil booking_sn & tracking_number awal
+        // 1️⃣ Ambil detail awal
         let { booking_sn, tracking_number } = await getOrderDetail();
 
-        // 2️⃣ Kalau belum ada booking_sn → panggil ship_booking
+        // 2️⃣ Kalau belum ada booking_sn → ambil parameter + ship_booking
         if (!booking_sn) {
+            const tsParam = Math.floor(Date.now() / 1000);
+            const pathParam = "/api/v2/logistics/get_booking_shipping_parameter";
+            const signParam = makeSign(pathParam, tsParam);
+            const urlParam = `https://partner.shopeemobile.com${pathParam}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${tsParam}&access_token=${access_token}&sign=${signParam}`;
+            const paramResp = await axios.post(
+                urlParam,
+                { order_sn_list: [order_sn] },
+                { headers: { "Content-Type": "application/json" }, validateStatus: () => true }
+            );
+
+            if (paramResp.data.error) {
+                return res.status(400).json({
+                    success: false,
+                    message: "get_booking_shipping_parameter gagal",
+                    debug: paramResp.data,
+                });
+            }
+
             const tsShip = Math.floor(Date.now() / 1000);
             const pathShip = "/api/v2/logistics/ship_booking";
             const signShip = makeSign(pathShip, tsShip);
             const urlShip = `https://partner.shopeemobile.com${pathShip}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${tsShip}&access_token=${access_token}&sign=${signShip}`;
 
-            const shipBody = { order_sn_list: [order_sn] };
-            const shipResp = await axios.post(urlShip, shipBody, {
-                headers: { "Content-Type": "application/json" },
-                validateStatus: () => true,
-            });
+            const shipResp = await axios.post(
+                urlShip,
+                { order_sn_list: [order_sn] },
+                { headers: { "Content-Type": "application/json" }, validateStatus: () => true }
+            );
 
             if (shipResp.data.error) {
                 return res.status(400).json({
@@ -1869,7 +1886,6 @@ const createBookingShippingDocument = async (req, res) => {
                 });
             }
 
-            // Tunggu hasil booking muncul
             await sleep(3000);
             ({ booking_sn, tracking_number } = await getOrderDetail());
         }
@@ -1881,7 +1897,7 @@ const createBookingShippingDocument = async (req, res) => {
             });
         }
 
-        // 3️⃣ Tunggu tracking_number muncul
+        // 3️⃣ Tunggu tracking muncul
         if (!tracking_number) {
             for (let i = 0; i < 6; i++) {
                 await sleep(3000);
