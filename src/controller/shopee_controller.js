@@ -1822,34 +1822,69 @@ const createShippingDocumentJob = async (req, res) => {
                 message: `Order dengan order_sn ${order_sn} tidak ditemukan`,
             });
         }
-        if (!htrans.package_number) {
+
+        // Ambil shop credentials dari DB
+        const shopee = await Shopee.findOne();
+        if (!shopee?.access_token || !shopee?.shop_id) {
             return res.status(400).json({
                 success: false,
-                message: `Transaksi dengan order_sn ${order_sn} belum memiliki package_number`,
+                message: "Shopee credentials tidak ditemukan di database",
             });
         }
 
-        const package_number = htrans.package_number;
-
-        // Ambil shop_id & access_token dari DB
-        const shopee = await Shopee.findOne();
-        if (!shopee) {
-            return res.status(400).json({ success: false, message: "Shopee credentials not found" });
-        }
-        const shop_id = Number(shopee.shop_id); // ⬅️ konversi ke integer
+        const shop_id = Number(shopee.shop_id);
         const access_token = shopee.access_token;
         const partner_id = Number(process.env.SHOPEE_PARTNER_ID);
         const partner_key = process.env.SHOPEE_PARTNER_KEY;
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // Generate signature
+        // ✅ Jika package_number belum ada di DB, ambil dari Shopee
+        let package_number = htrans.package_number;
+        if (!package_number) {
+            const pathOrderDetail = "/api/v2/order/get_order_detail";
+            const signOrderDetail = crypto.createHmac("sha256", partner_key)
+                .update(`${partner_id}${pathOrderDetail}${timestamp}${access_token}${shop_id}`)
+                .digest("hex");
+
+            const urlOrderDetail = `https://partner.shopeemobile.com${pathOrderDetail}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${signOrderDetail}&order_sn_list=${order_sn}&response_optional_fields=package_list`;
+
+            const orderDetailResp = await axios.get(urlOrderDetail, {
+                headers: { "Content-Type": "application/json" },
+                validateStatus: () => true,
+            });
+
+            if (orderDetailResp.data.error) {
+                return res.status(400).json({
+                    success: false,
+                    message: orderDetailResp.data.message || "Shopee API Error",
+                    data: orderDetailResp.data,
+                });
+            }
+
+            package_number = orderDetailResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number;
+
+            if (!package_number) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Package number tidak ditemukan untuk order_sn ini",
+                });
+            }
+
+            // Update ke DB supaya tidak perlu ambil lagi
+            await HTransJual.update(
+                { package_number },
+                { where: { order_sn } }
+            );
+        }
+
+        // ✅ Buat shipping document job
         const path = "/api/v2/logistics/create_shipping_document_job";
-        const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
-        const sign = crypto.createHmac("sha256", partner_key).update(baseString).digest("hex");
+        const sign = crypto.createHmac("sha256", partner_key)
+            .update(`${partner_id}${path}${timestamp}${access_token}${shop_id}`)
+            .digest("hex");
 
         const url = `https://partner.shopeemobile.com${path}?partner_id=${partner_id}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-        // Body request terbaru
         const body = {
             shipping_document_type: "THERMAL_UNPACKAGED_LABEL",
             unpackaged_sku_requests: [
@@ -1860,7 +1895,6 @@ const createShippingDocumentJob = async (req, res) => {
             ]
         };
 
-        // Request ke Shopee
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
             validateStatus: () => true,
