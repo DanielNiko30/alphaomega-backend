@@ -1843,31 +1843,26 @@ const createShopeeResi = async (req, res) => {
       detailParams.append("order_sn_list", order_sn);
       detailParams.append("response_optional_fields", "item_list,package_list");
 
-      const detailUrl = `${BASE_URL}${detailPath}?${detailParams.toString()}`;
-      const detailResp = await axios.get(detailUrl, { validateStatus: () => true });
-
+      const detailResp = await axios.get(`${BASE_URL}${detailPath}?${detailParams.toString()}`, { validateStatus: () => true });
       const orderDetail = detailResp.data?.response?.order_list?.[0];
       if (!orderDetail) {
         results.push({ order_sn, success: false, message: "Order tidak ditemukan" });
         continue;
       }
 
-      const packageList = orderDetail.package_list || [];
       const itemList = orderDetail.item_list || [];
+      if (!itemList.length) {
+        results.push({ order_sn, success: false, message: "Item kosong, tidak bisa buat resi" });
+        continue;
+      }
 
-      // 2️⃣ Buat unpackaged_sku_requests
       const unpackaged_sku_requests = itemList.map(i => ({
         order_sn,
         sku: i.sku,
         quantity: i.quantity
       }));
 
-      if (!packageList.length && !unpackaged_sku_requests.length) {
-        results.push({ order_sn, success: false, message: "Tidak ada package atau item untuk dibuat resi" });
-        continue;
-      }
-
-      // 3️⃣ Create shipping document job
+      // 2️⃣ Buat shipping document job
       const jobPath = "/api/v2/logistics/create_shipping_document_job";
       const jobSign = generateSign(jobPath, timestamp, access_token, shop_id);
       const jobParams = new URLSearchParams();
@@ -1891,7 +1886,7 @@ const createShopeeResi = async (req, res) => {
 
       const job_id = jobResp.data.response.job_id;
 
-      // 4️⃣ Tunggu job READY (max 10 retry)
+      // 3️⃣ Tunggu job READY
       const statusPath = "/api/v2/logistics/get_shipping_document_job_status";
       let statusResp, retries = 0;
       do {
@@ -1916,7 +1911,7 @@ const createShopeeResi = async (req, res) => {
         continue;
       }
 
-      // 5️⃣ Download resi PDF (base64)
+      // 4️⃣ Download shipping document
       const downloadPath = "/api/v2/logistics/download_shipping_document_job";
       const downloadTimestamp = Math.floor(Date.now() / 1000);
       const downloadSign = generateSign(downloadPath, downloadTimestamp, access_token, shop_id);
