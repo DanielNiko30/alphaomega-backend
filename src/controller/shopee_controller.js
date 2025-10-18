@@ -1854,47 +1854,54 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
-const createAndDownloadShopeeResi = async (req, res) => {
+const createAndDownloadShopeeResiAfterPickup = async (req, res) => {
     try {
-        const { shipping_document_type = "NORMAL_AIR_WAYBILL", order_list } = req.body;
+        const { shipping_document_type = "THERMAL_A6", order_list } = req.body;
 
         // 🧩 Validasi input
         if (!order_list || !Array.isArray(order_list) || order_list.length === 0) {
-            return res.status(400).json({ success: false, message: "Field 'order_list' wajib diisi (array order_sn atau package_number)." });
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_list' wajib diisi (array order_sn atau package_number).",
+            });
         }
 
-        // 🔑 Ambil token Shopee
+        // 🔑 Ambil data Shopee (shop_id & access_token)
         const shopeeData = await Shopee.findOne();
         if (!shopeeData) {
-            return res.status(400).json({ success: false, message: "Data Shopee tidak ditemukan di database." });
+            return res.status(400).json({
+                success: false,
+                message: "Data Shopee tidak ditemukan di database.",
+            });
         }
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // === 1️⃣ CREATE SHIPPING DOCUMENT ===
-        const pathCreate = "/api/v2/logistics/create_shipping_document";
+        // === 1️⃣ CREATE SHIPPING DOCUMENT JOB ===
+        const pathCreate = "/api/v2/logistics/create_shipping_document_job";
         const signCreate = generateSign(pathCreate, timestamp, access_token, shop_id);
         const urlCreate = `https://partner.shopeemobile.com${pathCreate}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signCreate}`;
 
         const payload = {
-            shipping_document_type, // contoh: NORMAL_AIR_WAYBILL, THERMAL_AIR_WAYBILL
-            order_list // contoh: ["2510169CR62R0T"] atau package_number list
+            shipping_document_type, // contoh: NORMAL_AIR_WAYBILL, THERMAL_A6
+            order_list
         };
 
         const createResp = await axios.post(urlCreate, payload, {
             headers: { "Content-Type": "application/json" },
         });
 
+        // 🧠 Cek hasil
         if (createResp.data.error || !createResp.data.response) {
             return res.status(400).json({
                 success: false,
-                message: createResp.data.message || "Gagal membuat dokumen resi.",
+                message: createResp.data.message || "Gagal membuat shipping document job.",
                 shopee_response: createResp.data,
             });
         }
 
-        console.log("✅ Shipping document created:", createResp.data.response);
+        console.log("✅ Shipping document job created:", createResp.data.response);
 
         // === 2️⃣ DOWNLOAD SHIPPING DOCUMENT ===
         const pathDownload = "/api/v2/logistics/download_shipping_document";
@@ -1903,7 +1910,7 @@ const createAndDownloadShopeeResi = async (req, res) => {
 
         const downloadResp = await axios.post(
             urlDownload,
-            { order_list },
+            { shipping_document_type, order_list },
             { responseType: "arraybuffer" }
         );
 
@@ -1916,15 +1923,15 @@ const createAndDownloadShopeeResi = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "✅ Berhasil membuat dan mendownload resi Shopee",
+            message: "✅ Berhasil membuat dan mendownload resi Shopee (setelah pickup)",
             file_path: `/uploads/${path.basename(filePath)}`,
             shopee_response: createResp.data,
         });
     } catch (err) {
-        console.error("❌ Error createAndDownloadShopeeResi:", err.response?.data || err.message);
+        console.error("❌ Error createAndDownloadShopeeResiAfterPickup:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: "Gagal membuat atau mendownload resi Shopee",
+            message: "Gagal membuat atau mendownload resi Shopee setelah pickup",
             error: err.response?.data || err.message,
         });
     }
