@@ -53,10 +53,7 @@ router.post('/orders/print-resi', createShopeeResi);
 router.get("/create-document", getShopeeTrackingInfo);
 router.post("/shipping-info", getShippingDocumentInfo);
 router.post("/download-document", createAndDownloadShopeeResi);
-router.post("/shopee/shipping-document/status", async (req, res) => {
-    const { order_sn, package_number, shipping_document_type } = req.body;
-    const result = await getShippingDocumentResultController(order_sn, package_number, shipping_document_type);
-    res.json(result);
-});
+router.post("/shopee/shipping-document/status", getShippingDocumentResultController);
+
 
 module.exports = router;

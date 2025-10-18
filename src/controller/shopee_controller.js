@@ -1856,43 +1856,65 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
-const getShippingDocumentResultController = async (
-    order_sn,
-    package_number = null,
-    shipping_document_type = "NORMAL_AIR_WAYBILL"
-) => {
+const getShippingDocumentResultController = async (req, res) => {
     try {
-        if (!order_sn) throw new Error("order_sn wajib diisi");
+        const { order_sn, package_number, shipping_document_type } = req.body;
 
-        // ambil credential Shopee dari DB
+        if (!order_sn) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' wajib diisi",
+            });
+        }
+
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData) throw new Error("Shopee credentials not found");
+        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee credentials tidak ditemukan",
+            });
+        }
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
-        const pathStatus = "/api/v2/logistics/get_shipping_document_result";
-        const signStatus = generateSign(pathStatus, timestamp, access_token, shop_id);
+        const path = "/api/v2/logistics/get_shipping_document_result";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const urlStatus = `https://partner.shopee.com${pathStatus}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signStatus}`;
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
         const payload = {
-            shipping_document_type,
+            shipping_document_type: shipping_document_type || "NORMAL_AIR_WAYBILL",
             order_list: [
-                { order_sn, package_number }
+                { order_sn, package_number: package_number || null }
             ]
         };
 
-        const statusResp = await axios.post(urlStatus, payload, {
+        const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
-            timeout: 60000 // 60 detik
+            timeout: 60000,
         });
 
-        // langsung return response Shopee
-        return { success: true, data: statusResp.data };
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message || "Gagal ambil shipping document result",
+                shopee_response: response.data,
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Berhasil ambil shipping document result",
+            data: response.data,
+        });
 
     } catch (err) {
-        console.error("❌ Error get shipping document result:", err.response?.data || err.message);
-        return { success: false, message: err.response?.data || err.message };
+        console.error("❌ Error getShippingDocumentResultController:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal ambil shipping document result",
+            error: err.response?.data || err.message,
+        });
     }
 };
 
