@@ -18,7 +18,9 @@ const {
     getShippingParameter,
     getShopeeShippedOrders,
     getShopeeShippedOrdersWithItems,
-    createShopeeResi
+    createShopeeResi,
+    createShopeeShippingDocument,
+    downloadShopeeShippingDocument
 } = require('../controller/shopee_controller');
 
 // Shopee basic
@@ -46,5 +48,8 @@ router.post("/shipping-parameter", getShippingParameter);
 router.post("/ship-order/pickup", setShopeePickup);
 router.post("/ship-order/dropoff", setShopeeDropoff);
 router.post('/orders/print-resi', createShopeeResi);
+router.post("/create-document", createShopeeShippingDocument);
+router.post("/download-document", downloadShopeeShippingDocument);
+
 
 module.exports = router;
