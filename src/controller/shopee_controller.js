@@ -18,6 +18,8 @@ const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
 
+const POLL_INTERVAL = 5000;
+
 async function generateHTransJualId() {
     const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
     let newId = "HTJ000001";
@@ -1854,6 +1856,46 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
+const getShippingDocumentResultController = async (
+    order_sn,
+    package_number = null,
+    shipping_document_type = "NORMAL_AIR_WAYBILL"
+) => {
+    try {
+        if (!order_sn) throw new Error("order_sn wajib diisi");
+
+        // ambil credential Shopee dari DB
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData) throw new Error("Shopee credentials not found");
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const pathStatus = "/api/v2/logistics/get_shipping_document_result";
+        const signStatus = generateSign(pathStatus, timestamp, access_token, shop_id);
+
+        const urlStatus = `https://partner.shopee.com${pathStatus}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signStatus}`;
+
+        const payload = {
+            shipping_document_type,
+            order_list: [
+                { order_sn, package_number }
+            ]
+        };
+
+        const statusResp = await axios.post(urlStatus, payload, {
+            headers: { "Content-Type": "application/json" },
+            timeout: 60000 // 60 detik
+        });
+
+        // langsung return response Shopee
+        return { success: true, data: statusResp.data };
+
+    } catch (err) {
+        console.error("❌ Error get shipping document result:", err.response?.data || err.message);
+        return { success: false, message: err.response?.data || err.message };
+    }
+};
+
 const createAndDownloadShopeeResi = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
     try {
         // ambil credential dari DB
@@ -1890,7 +1932,6 @@ const createAndDownloadShopeeResi = async (order_sn, package_number, shipping_do
         return { success: false, message: err.response?.data || err.message };
     }
 };
-
 
 const getShippingDocumentInfo = async (req, res) => {
     try {
@@ -2160,4 +2201,5 @@ module.exports = {
     createAndDownloadShopeeResi,
     getShopeeTrackingInfo,
     getShippingDocumentInfo,
+    getShippingDocumentResultController
 };
