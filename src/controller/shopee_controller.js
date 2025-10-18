@@ -1805,40 +1805,59 @@ const setShopeeDropoff = async (req, res) => {
     }
 };
 
-const getShopeeTrackingNumber = async (req, res) => {
+const getShopeeTrackingInfo = async (req, res) => {
     try {
-        const { order_sn } = req.body;
+        const { order_sn, package_number } = req.query;
         if (!order_sn) {
-            return res.status(400).json({ success: false, message: "Field 'order_sn' wajib diisi." });
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' wajib diisi.",
+            });
         }
 
-        // Ambil data auth Shopee dari DB
+        // 🔹 Ambil data auth Shopee dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData) {
-            return res.status(400).json({ success: false, message: "Data Shopee tidak ditemukan." });
+            return res.status(400).json({
+                success: false,
+                message: "Data Shopee tidak ditemukan.",
+            });
         }
 
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/logistics/get_tracking_number";
+        const path = "/api/v2/logistics/get_tracking_info";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+        // 🔹 Buat URL lengkap dengan query string
+        let url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}&order_sn=${order_sn}`;
+        if (package_number) url += `&package_number=${package_number}`;
 
-        const response = await axios.post(url, { order_sn });
-        const trackingNumber = response.data?.response?.tracking_number;
+        // 🔹 GET request ke Shopee API
+        const response = await axios.get(url);
+
+        const result = response.data?.response || {};
+        const trackingInfo = result.tracking_info || [];
+        const trackingNumber = result.reversed_tracking_number || null;
+        const status = result.logistics_status || null;
 
         return res.json({
             success: true,
-            message: "Berhasil ambil nomor resi Shopee",
-            tracking_number: trackingNumber,
+            message: "Berhasil ambil tracking info Shopee",
+            data: {
+                order_sn: result.order_sn,
+                package_number: result.package_number,
+                tracking_number: trackingNumber,
+                logistics_status: status,
+                tracking_info: trackingInfo,
+            },
             shopee_response: response.data,
         });
     } catch (err) {
-        console.error("❌ Error getShopeeTrackingNumber:", err.response?.data || err.message);
+        console.error("❌ Error getShopeeTrackingInfo:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: "Gagal ambil nomor resi Shopee",
+            message: "Gagal ambil tracking info Shopee",
             error: err.response?.data || err.message,
         });
     }
