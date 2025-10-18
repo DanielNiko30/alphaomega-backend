@@ -2040,81 +2040,66 @@ const getShippingDocumentInfo = async (req, res) => {
 
 const downloadShippingDocumentController = async (req, res) => {
     try {
-        const { order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL" } = req.body;
+        const { partner_id, shop_id, order_sn, package_number, access_token, partner_key } = req.body;
 
-        if (!order_sn || !package_number) {
-            return res.status(400).json({
-                success: false,
-                message: "Field 'order_sn' dan 'package_number' wajib diisi",
-            });
-        }
-
-        const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Shopee token atau shop_id tidak tersedia",
-            });
-        }
-
-        const { shop_id, access_token } = shopeeData;
+        const path = "/api/v2/logistics/get_shipping_document";
         const timestamp = Math.floor(Date.now() / 1000);
-        const path = "/api/v2/logistics/download_shipping_document";
-        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+        // Buat signature HMAC-SHA256
+        const baseString = partner_id + path + timestamp + access_token + shop_id;
+        const sign = crypto.createHmac("sha256", partner_key)
+            .update(baseString)
+            .digest("hex");
 
-        const payload = {
-            shipping_document_type,
-            order_list: [
-                { order_sn, package_number }
-            ]
-        };
+        // Request ke Shopee
+        const response = await axios.post(
+            "https://partner.shopeemobile.com/api/v2/logistics/get_shipping_document",
+            {
+                partner_id,
+                shop_id,
+                timestamp,
+                access_token,
+                sign,
+                order_list: [
+                    { order_sn, package_number }
+                ]
+            },
+            {
+                responseType: "arraybuffer" // penting untuk PDF binary
+            }
+        );
 
-        const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" },
-            timeout: 60000,
-        });
+        const data = response.data;
 
-        if (response.data.error) {
+        // Cek apakah response sudah PDF
+        if (data && data.toString("utf8").startsWith("%PDF")) {
+            const filename = `${order_sn}_${package_number}.pdf`;
+            fs.writeFileSync(filename, data, { encoding: "binary" });
+            return res.json({
+                success: true,
+                message: "File shipping document berhasil di-download",
+                file: filename
+            });
+        } else {
+            // Jika JSON error / belum siap
+            const json = JSON.parse(Buffer.from(data).toString("utf8"));
             return res.status(400).json({
                 success: false,
-                message: response.data.message || "Gagal download shipping document",
-                shopee_response: response.data,
+                message: json.message || "File shipping document belum tersedia",
+                shopee_response: json
             });
         }
-
-        // file base64 dari Shopee
-        const fileBase64 = response.data.response?.file;
-        if (!fileBase64) {
-            return res.status(404).json({
-                success: false,
-                message: "File shipping document belum tersedia",
-                shopee_response: response.data,
-            });
-        }
-
-        // ✅ Return file base64 + info order
-        return res.json({
-            success: true,
-            message: "Berhasil download shipping document",
-            data: {
-                order_sn,
-                package_number,
-                file_base64: fileBase64,
-            },
-            shopee_response: response.data,
-        });
 
     } catch (err) {
-        console.error("❌ Error downloadShippingDocumentController:", err.response?.data || err.message);
+        console.error(err);
         return res.status(500).json({
             success: false,
-            message: "Gagal download shipping document",
-            error: err.response?.data || err.message,
+            message: "Terjadi error saat download shipping document",
+            error: err.message
         });
     }
 };
+
 
 module.exports = {
     shopeeCallback,
