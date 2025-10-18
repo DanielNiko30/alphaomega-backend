@@ -2048,25 +2048,24 @@ const downloadShippingDocumentController = async (order_sn, package_number, ship
 
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-    const payload = {
-        order_list: [{ order_sn, package_number, shipping_document_type }]
-    };
+    const payload = { order_list: [{ order_sn, package_number, shipping_document_type }] };
 
     const response = await axios.post(url, payload, {
-        responseType: "arraybuffer", // pastikan arraybuffer
-        timeout: 120000,             // 2 menit
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
+        responseType: "stream", // << streaming
+        timeout: 300000,        // 5 menit
         headers: { "Content-Type": "application/json" },
     });
 
-    // validasi apakah benar PDF
-    const contentType = response.headers['content-type'];
-    if (!contentType?.includes("pdf")) {
-        throw new Error("File belum tersedia atau bukan PDF");
-    }
+    // Simpan langsung ke file
+    const filePath = `shipping_${order_sn}.pdf`;
+    const writer = fs.createWriteStream(filePath);
 
-    return response.data; // Buffer PDF
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+        writer.on("finish", () => resolve(filePath));
+        writer.on("error", reject);
+    });
 };
 
 module.exports = {
