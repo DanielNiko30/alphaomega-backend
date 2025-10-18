@@ -2039,6 +2039,8 @@ const getShippingDocumentInfo = async (req, res) => {
 
 const downloadShippingDocumentController = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
     const shop = await Shopee.findOne();
+    if (!shop) throw new Error("Shopee auth not found");
+
     const { shop_id, access_token } = shop;
     const timestamp = Math.floor(Date.now() / 1000);
     const path = "/api/v2/logistics/download_shipping_document";
@@ -2046,9 +2048,23 @@ const downloadShippingDocumentController = async (order_sn, package_number, ship
 
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-    const response = await axios.post(url, {
-        order_list: [{ order_sn, package_number, shipping_document_type }],
-    }, { responseType: "arraybuffer" });
+    const payload = {
+        order_list: [{ order_sn, package_number, shipping_document_type }]
+    };
+
+    const response = await axios.post(url, payload, {
+        responseType: "arraybuffer", // pastikan arraybuffer
+        timeout: 120000,             // 2 menit
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        headers: { "Content-Type": "application/json" },
+    });
+
+    // validasi apakah benar PDF
+    const contentType = response.headers['content-type'];
+    if (!contentType?.includes("pdf")) {
+        throw new Error("File belum tersedia atau bukan PDF");
+    }
 
     return response.data; // Buffer PDF
 };
