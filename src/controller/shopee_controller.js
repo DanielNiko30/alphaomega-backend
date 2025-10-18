@@ -1854,7 +1854,7 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
-const createAndDownloadShopeeResiAfterPickup = async (req, res) => {
+const createAndDownloadShopeeResi = async (req, res) => {
     try {
         const { shipping_document_type = "THERMAL_A6", order_list } = req.body;
 
