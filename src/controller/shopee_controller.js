@@ -1854,86 +1854,72 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
-const createAndDownloadShopeeResi = async (req, res) => {
+const createAndDownloadShopeeResi = async (order_sn, package_number, tracking_number) => {
     try {
-        const { shipping_document_type = "THERMAL_A6", order_list } = req.body;
-
-        // 🧩 Validasi input
-        if (!order_list || !Array.isArray(order_list) || order_list.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Field 'order_list' wajib diisi (array order_sn atau package_number).",
-            });
-        }
-
-        // 🔑 Ambil data Shopee (shop_id & access_token)
+        // Ambil credential Shopee dari DB
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData) {
-            return res.status(400).json({
-                success: false,
-                message: "Data Shopee tidak ditemukan di database.",
-            });
-        }
-
         const { shop_id, access_token } = shopeeData;
+
         const timestamp = Math.floor(Date.now() / 1000);
+        const pathCreate = "/api/v2/logistics/create_shipping_document";
 
-        // === 1️⃣ CREATE SHIPPING DOCUMENT JOB ===
-        const pathCreate = "/api/v2/logistics/create_shipping_document_job";
         const signCreate = generateSign(pathCreate, timestamp, access_token, shop_id);
-        const urlCreate = `https://partner.shopeemobile.com${pathCreate}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signCreate}`;
 
-        const payload = {
-            shipping_document_type, // contoh: NORMAL_AIR_WAYBILL, THERMAL_A6
-            order_list
+        const urlCreate = `https://partner.shopee.com${pathCreate}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signCreate}`;
+
+        // 1️⃣ Create Shipping Document
+        const payloadCreate = {
+            order_list: [
+                {
+                    order_sn,
+                    package_number,
+                    tracking_number,
+                    shipping_document_type: "NORMAL_AIR_WAYBILL" // bisa ganti sesuai kebutuhan
+                }
+            ]
         };
 
-        const createResp = await axios.post(urlCreate, payload, {
+        const createResp = await axios.post(urlCreate, payloadCreate, {
             headers: { "Content-Type": "application/json" },
         });
 
-        // 🧠 Cek hasil
-        if (createResp.data.error || !createResp.data.response) {
-            return res.status(400).json({
-                success: false,
-                message: createResp.data.message || "Gagal membuat shipping document job.",
-                shopee_response: createResp.data,
-            });
+        if (createResp.data.error) {
+            console.error("❌ Create Shipping Document Error:", createResp.data);
+            return { success: false, message: createResp.data.message };
         }
 
-        console.log("✅ Shipping document job created:", createResp.data.response);
+        console.log("✅ Shipping Document Created:", createResp.data);
 
-        // === 2️⃣ DOWNLOAD SHIPPING DOCUMENT ===
+        // 2️⃣ Download Shipping Document
         const pathDownload = "/api/v2/logistics/download_shipping_document";
         const signDownload = generateSign(pathDownload, timestamp, access_token, shop_id);
-        const urlDownload = `https://partner.shopeemobile.com${pathDownload}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signDownload}`;
 
-        const downloadResp = await axios.post(
-            urlDownload,
-            { shipping_document_type, order_list },
-            { responseType: "arraybuffer" }
-        );
+        const urlDownload = `https://partner.shopee.com${pathDownload}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signDownload}`;
 
-        // 💾 Simpan PDF ke folder uploads
-        const fileDir = path.join(__dirname, "../../uploads");
-        if (!fs.existsSync(fileDir)) fs.mkdirSync(fileDir, { recursive: true });
+        const payloadDownload = {
+            order_list: [
+                {
+                    order_sn,
+                    package_number
+                }
+            ],
+            shipping_document_type: "NORMAL_AIR_WAYBILL"
+        };
 
-        const filePath = path.join(fileDir, `resi_${Date.now()}.pdf`);
-        fs.writeFileSync(filePath, downloadResp.data);
-
-        return res.json({
-            success: true,
-            message: "✅ Berhasil membuat dan mendownload resi Shopee (setelah pickup)",
-            file_path: `/uploads/${path.basename(filePath)}`,
-            shopee_response: createResp.data,
+        const downloadResp = await axios.post(urlDownload, payloadDownload, {
+            headers: { "Content-Type": "application/json" },
+            responseType: "arraybuffer" // penting untuk file PDF/waybill
         });
+
+        const filename = `resi_${order_sn}.pdf`;
+        fs.writeFileSync(filename, downloadResp.data);
+        console.log(`✅ Shipping Document downloaded: ${filename}`);
+
+        return { success: true, filename };
+
     } catch (err) {
-        console.error("❌ Error createAndDownloadShopeeResiAfterPickup:", err.response?.data || err.message);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal membuat atau mendownload resi Shopee setelah pickup",
-            error: err.response?.data || err.message,
-        });
+        console.error("❌ Error Print Resi:", err.response?.data || err.message);
+        return { success: false, message: err.response?.data || err.message };
     }
 };
 
