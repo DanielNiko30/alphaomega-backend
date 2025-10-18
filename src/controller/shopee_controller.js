@@ -1952,6 +1952,66 @@ const createAndDownloadShopeeResi = async (req, res) => {
         });
     }
 };
+
+const getShippingDocumentInfo = async (req, res) => {
+    try {
+        const { order_sn, package_number } = req.body;
+
+        if (!order_sn) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' wajib diisi.",
+            });
+        }
+
+        // 🔹 Ambil auth Shopee dari DB
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData) {
+            return res.status(400).json({
+                success: false,
+                message: "Data Shopee tidak ditemukan di database.",
+            });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/get_shipping_document_data_info";
+
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        // 🔹 URL resmi Shopee (production)
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        // 🔹 Body request minimal (tanpa recipient_address_info)
+        const payload = { order_sn };
+        if (package_number) payload.package_number = package_number;
+
+        // 🔹 Request ke Shopee API
+        const response = await axios.post(url, payload);
+
+        const data = response.data?.response || {};
+
+        return res.json({
+            success: true,
+            message: "Berhasil ambil shipping document info Shopee",
+            data: {
+                unpackaged_sku_id: data.shipping_document_info?.unpackaged_sku_id || null,
+                unpackaged_sku_id_qrcode: data.shipping_document_info?.unpackaged_sku_id_qrcode || null,
+                logistics_channel_id: data.shipping_document_info?.logistics_channel_id || null,
+                shipping_carrier: data.shipping_document_info?.shipping_carrier || null,
+            },
+            shopee_response: response.data,
+        });
+    } catch (err) {
+        console.error("❌ Error getShippingDocumentInfo:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal ambil shipping document info Shopee",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
 const createShopeeResi = async (req, res) => {
     try {
         const { order_sn_list } = req.body;
@@ -2159,5 +2219,6 @@ module.exports = {
     createShopeeResi,
     setShopeeDropoff,
     createAndDownloadShopeeResi,
-    getShopeeTrackingInfo
+    getShopeeTrackingInfo,
+    getShippingDocumentInfo,
 };
