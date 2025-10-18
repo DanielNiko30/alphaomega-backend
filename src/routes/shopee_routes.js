@@ -22,6 +22,7 @@ const {
     getShippingDocumentInfo,
     getShippingDocumentResultController,
     createShopeeShippingDocument,
+    downloadShippingDocumentController,
 
 } = require('../controller/shopee_controller');
 
@@ -53,6 +54,7 @@ router.get("/tracking-info", getShopeeTrackingInfo);
 router.post("/shipping-info", getShippingDocumentInfo);
 router.post("/create-document", createShopeeShippingDocument);
 router.post("/shipping-document/status", getShippingDocumentResultController);
+router.post("/download-resi", downloadShippingDocumentController);
 
 
 module.exports = router;

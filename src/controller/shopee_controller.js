@@ -2038,6 +2038,84 @@ const getShippingDocumentInfo = async (req, res) => {
     }
 };
 
+const downloadShippingDocumentController = async (req, res) => {
+    try {
+        const { order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL" } = req.body;
+
+        if (!order_sn || !package_number) {
+            return res.status(400).json({
+                success: false,
+                message: "Field 'order_sn' dan 'package_number' wajib diisi",
+            });
+        }
+
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Shopee token atau shop_id tidak tersedia",
+            });
+        }
+
+        const { shop_id, access_token } = shopeeData;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/logistics/download_shipping_document";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+
+        const payload = {
+            shipping_document_type,
+            order_list: [
+                { order_sn, package_number }
+            ]
+        };
+
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+            timeout: 60000,
+        });
+
+        if (response.data.error) {
+            return res.status(400).json({
+                success: false,
+                message: response.data.message || "Gagal download shipping document",
+                shopee_response: response.data,
+            });
+        }
+
+        // file base64 dari Shopee
+        const fileBase64 = response.data.response?.file;
+        if (!fileBase64) {
+            return res.status(404).json({
+                success: false,
+                message: "File shipping document belum tersedia",
+                shopee_response: response.data,
+            });
+        }
+
+        // ✅ Return file base64 + info order
+        return res.json({
+            success: true,
+            message: "Berhasil download shipping document",
+            data: {
+                order_sn,
+                package_number,
+                file_base64: fileBase64,
+            },
+            shopee_response: response.data,
+        });
+
+    } catch (err) {
+        console.error("❌ Error downloadShippingDocumentController:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal download shipping document",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -2059,5 +2137,6 @@ module.exports = {
     getShopeeTrackingInfo,
     getShippingDocumentInfo,
     getShippingDocumentResultController,
-    createShopeeShippingDocument
+    createShopeeShippingDocument,
+    downloadShippingDocumentController
 };
