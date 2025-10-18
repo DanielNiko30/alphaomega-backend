@@ -2156,5 +2156,5 @@ module.exports = {
     createShopeeResi,
     setShopeeDropoff,
     createAndDownloadShopeeResi,
-    getShopeeTrackingNumber
+    getShopeeTrackingInfo
 };
