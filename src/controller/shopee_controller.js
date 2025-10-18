@@ -1807,16 +1807,17 @@ const setShopeeDropoff = async (req, res) => {
 
 const getShopeeTrackingInfo = async (req, res) => {
     try {
-        const { order_sn, package_number } = req.body; // 🔹 Ambil dari body
+        const { order_sn, package_number } = req.body; // 🔹 ambil dari body
 
-        if (!order_sn) {
+        // 🔹 Validasi input
+        if (!order_sn || !package_number) {
             return res.status(400).json({
                 success: false,
-                message: "Field 'order_sn' wajib diisi.",
+                message: "Field 'order_sn' dan 'package_number' wajib diisi.",
             });
         }
 
-        // 🔹 Ambil data auth Shopee dari DB
+        // 🔹 Ambil data Shopee Auth dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData) {
             return res.status(400).json({
@@ -1830,9 +1831,8 @@ const getShopeeTrackingInfo = async (req, res) => {
         const path = "/api/v2/logistics/get_tracking_info";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // 🔹 Bangun URL lengkap Shopee API
-        let url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&order_sn=${order_sn}`;
-        if (package_number) url += `&package_number=${package_number}`;
+        // 🔹 URL langsung ke Shopee API
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&order_sn=${order_sn}&package_number=${package_number}`;
 
         // 🔹 GET request ke Shopee API
         const response = await axios.get(url);
