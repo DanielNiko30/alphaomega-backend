@@ -48,7 +48,7 @@ router.post("/shipping-parameter", getShippingParameter);
 router.post("/ship-order/pickup", setShopeePickup);
 router.post("/ship-order/dropoff", setShopeeDropoff);
 router.post('/orders/print-resi', createShopeeResi);
-router.post("/create-document", getShopeeTrackingInfo);
+router.get("/create-document", getShopeeTrackingInfo);
 router.post("/download-document", createAndDownloadShopeeResi);
 
 
