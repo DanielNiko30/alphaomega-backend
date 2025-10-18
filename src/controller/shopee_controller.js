@@ -1807,7 +1807,8 @@ const setShopeeDropoff = async (req, res) => {
 
 const getShopeeTrackingInfo = async (req, res) => {
     try {
-        const { order_sn, package_number } = req.query;
+        const { order_sn, package_number } = req.body; // ✅ pakai body, bukan query
+
         if (!order_sn) {
             return res.status(400).json({
                 success: false,
@@ -1815,7 +1816,7 @@ const getShopeeTrackingInfo = async (req, res) => {
             });
         }
 
-        // 🔹 Ambil data auth Shopee dari DB
+        // 🔹 Ambil data Shopee dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData) {
             return res.status(400).json({
@@ -1829,16 +1830,19 @@ const getShopeeTrackingInfo = async (req, res) => {
         const path = "/api/v2/logistics/get_tracking_info";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // 🔹 Buat URL lengkap dengan query string
-        let url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}&order_sn=${order_sn}`;
-        if (package_number) url += `&package_number=${package_number}`;
+        const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // 🔹 GET request ke Shopee API
-        const response = await axios.get(url);
+        // 🔹 POST request ke Shopee
+        const payload = { order_sn };
+        if (package_number) payload.package_number = package_number;
+
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
 
         const result = response.data?.response || {};
         const trackingInfo = result.tracking_info || [];
-        const trackingNumber = result.reversed_tracking_number || null;
+        const trackingNumber = result.tracking_number || null;
         const status = result.logistics_status || null;
 
         return res.json({
