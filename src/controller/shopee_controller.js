@@ -10,6 +10,7 @@ const { getDB } = require("../config/sequelize");
 const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Op } = require("sequelize");
+const fs = require("fs");
 
 
 const db = getDB();
@@ -17,8 +18,6 @@ const db = getDB();
 const PARTNER_ID = Number(process.env.SHOPEE_PARTNER_ID);
 let PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 if (PARTNER_KEY) PARTNER_KEY = PARTNER_KEY.trim();
-
-const POLL_INTERVAL = 5000;
 
 async function generateHTransJualId() {
     const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
@@ -2038,68 +2037,21 @@ const getShippingDocumentInfo = async (req, res) => {
     }
 };
 
-const downloadShippingDocumentController = async (req, res) => {
-    try {
-        const { partner_id, shop_id, order_sn, package_number, access_token, partner_key } = req.body;
+const downloadShippingDocumentController = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
+    const shop = await Shopee.findOne();
+    const { shop_id, access_token } = shop;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = "/api/v2/logistics/download_shipping_document";
+    const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const path = "/api/v2/logistics/get_shipping_document";
-        const timestamp = Math.floor(Date.now() / 1000);
+    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
-        // Buat signature HMAC-SHA256
-        const baseString = partner_id + path + timestamp + access_token + shop_id;
-        const sign = crypto.createHmac("sha256", partner_key)
-            .update(baseString)
-            .digest("hex");
+    const response = await axios.post(url, {
+        order_list: [{ order_sn, package_number, shipping_document_type }],
+    }, { responseType: "arraybuffer" });
 
-        // Request ke Shopee
-        const response = await axios.post(
-            "https://partner.shopeemobile.com/api/v2/logistics/get_shipping_document",
-            {
-                partner_id,
-                shop_id,
-                timestamp,
-                access_token,
-                sign,
-                order_list: [
-                    { order_sn, package_number }
-                ]
-            },
-            {
-                responseType: "arraybuffer" // penting untuk PDF binary
-            }
-        );
-
-        const data = response.data;
-
-        // Cek apakah response sudah PDF
-        if (data && data.toString("utf8").startsWith("%PDF")) {
-            const filename = `${order_sn}_${package_number}.pdf`;
-            fs.writeFileSync(filename, data, { encoding: "binary" });
-            return res.json({
-                success: true,
-                message: "File shipping document berhasil di-download",
-                file: filename
-            });
-        } else {
-            // Jika JSON error / belum siap
-            const json = JSON.parse(Buffer.from(data).toString("utf8"));
-            return res.status(400).json({
-                success: false,
-                message: json.message || "File shipping document belum tersedia",
-                shopee_response: json
-            });
-        }
-
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Terjadi error saat download shipping document",
-            error: err.message
-        });
-    }
+    return response.data; // Buffer PDF
 };
-
 
 module.exports = {
     shopeeCallback,
