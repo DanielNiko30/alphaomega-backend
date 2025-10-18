@@ -1807,7 +1807,7 @@ const setShopeeDropoff = async (req, res) => {
 
 const getShopeeTrackingInfo = async (req, res) => {
     try {
-        const { order_sn, package_number } = req.body; // ✅ pakai body, bukan query
+        const { order_sn, package_number } = req.query;
 
         if (!order_sn) {
             return res.status(400).json({
@@ -1816,7 +1816,7 @@ const getShopeeTrackingInfo = async (req, res) => {
             });
         }
 
-        // 🔹 Ambil data Shopee dari DB
+        // 🔹 Ambil data auth Shopee dari DB
         const shopeeData = await Shopee.findOne();
         if (!shopeeData) {
             return res.status(400).json({
@@ -1830,31 +1830,18 @@ const getShopeeTrackingInfo = async (req, res) => {
         const path = "/api/v2/logistics/get_tracking_info";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+        // 🔹 Langsung gunakan URL resmi Shopee (bukan BASE_URL)
+        let url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&order_sn=${order_sn}`;
+        if (package_number) url += `&package_number=${package_number}`;
 
-        // 🔹 POST request ke Shopee
-        const payload = { order_sn };
-        if (package_number) payload.package_number = package_number;
-
-        const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" },
-        });
+        // 🔹 GET ke API Shopee
+        const response = await axios.get(url);
 
         const result = response.data?.response || {};
-        const trackingInfo = result.tracking_info || [];
-        const trackingNumber = result.tracking_number || null;
-        const status = result.logistics_status || null;
-
         return res.json({
             success: true,
             message: "Berhasil ambil tracking info Shopee",
-            data: {
-                order_sn: result.order_sn,
-                package_number: result.package_number,
-                tracking_number: trackingNumber,
-                logistics_status: status,
-                tracking_info: trackingInfo,
-            },
+            data: result,
             shopee_response: response.data,
         });
     } catch (err) {
