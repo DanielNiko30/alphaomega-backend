@@ -1862,7 +1862,6 @@ const createAndDownloadShopeeResi = async (order_sn, package_number, shipping_do
 
         const timestamp = Math.floor(Date.now() / 1000);
         const pathDownload = "/api/v2/logistics/download_shipping_document";
-
         const signDownload = generateSign(pathDownload, timestamp, access_token, shop_id);
 
         const urlDownload = `https://partner.shopee.com${pathDownload}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signDownload}`;
@@ -1877,22 +1876,21 @@ const createAndDownloadShopeeResi = async (order_sn, package_number, shipping_do
             ]
         };
 
+        // request tanpa responseType arraybuffer
         const downloadResp = await axios.post(urlDownload, payloadDownload, {
-            headers: { "Content-Type": "application/json" },
-            responseType: "arraybuffer", // penting untuk PDF / waybill
+            headers: { "Content-Type": "application/json" }
         });
 
-        const filename = `resi_${order_sn}.pdf`;
-        fs.writeFileSync(filename, downloadResp.data);
-        console.log(`✅ Resi berhasil di-download: ${filename}`);
+        console.log("✅ Response Shopee (raw):", downloadResp.data);
 
-        return { success: true, filename };
+        return { success: true, data: downloadResp.data };
 
     } catch (err) {
         console.error("❌ Error download resi:", err.response?.data || err.message);
         return { success: false, message: err.response?.data || err.message };
     }
 };
+
 
 const getShippingDocumentInfo = async (req, res) => {
     try {
