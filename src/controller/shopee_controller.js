@@ -1830,7 +1830,7 @@ const getShopeeTrackingInfo = async (req, res) => {
         const path = "/api/v2/logistics/get_tracking_info";
         const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        const url = `${BASE_URL}${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
         // 🔹 POST request ke Shopee
         const payload = { order_sn };
