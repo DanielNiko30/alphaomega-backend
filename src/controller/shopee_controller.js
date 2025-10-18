@@ -1854,71 +1854,42 @@ const getShopeeTrackingInfo = async (req, res) => {
     }
 };
 
-const createAndDownloadShopeeResi = async (order_sn, package_number, tracking_number) => {
+const createAndDownloadShopeeResi = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
     try {
-        // Ambil credential Shopee dari DB
+        // ambil credential dari DB
         const shopeeData = await Shopee.findOne();
         const { shop_id, access_token } = shopeeData;
 
         const timestamp = Math.floor(Date.now() / 1000);
-        const pathCreate = "/api/v2/logistics/create_shipping_document";
-
-        const signCreate = generateSign(pathCreate, timestamp, access_token, shop_id);
-
-        const urlCreate = `https://partner.shopee.com${pathCreate}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signCreate}`;
-
-        // 1️⃣ Create Shipping Document
-        const payloadCreate = {
-            order_list: [
-                {
-                    order_sn,
-                    package_number,
-                    tracking_number,
-                    shipping_document_type: "NORMAL_AIR_WAYBILL" // bisa ganti sesuai kebutuhan
-                }
-            ]
-        };
-
-        const createResp = await axios.post(urlCreate, payloadCreate, {
-            headers: { "Content-Type": "application/json" },
-        });
-
-        if (createResp.data.error) {
-            console.error("❌ Create Shipping Document Error:", createResp.data);
-            return { success: false, message: createResp.data.message };
-        }
-
-        console.log("✅ Shipping Document Created:", createResp.data);
-
-        // 2️⃣ Download Shipping Document
         const pathDownload = "/api/v2/logistics/download_shipping_document";
+
         const signDownload = generateSign(pathDownload, timestamp, access_token, shop_id);
 
         const urlDownload = `https://partner.shopee.com${pathDownload}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${signDownload}`;
 
         const payloadDownload = {
+            shipping_document_type,
             order_list: [
                 {
                     order_sn,
                     package_number
                 }
-            ],
-            shipping_document_type: "NORMAL_AIR_WAYBILL"
+            ]
         };
 
         const downloadResp = await axios.post(urlDownload, payloadDownload, {
             headers: { "Content-Type": "application/json" },
-            responseType: "arraybuffer" // penting untuk file PDF/waybill
+            responseType: "arraybuffer", // penting untuk PDF / waybill
         });
 
         const filename = `resi_${order_sn}.pdf`;
         fs.writeFileSync(filename, downloadResp.data);
-        console.log(`✅ Shipping Document downloaded: ${filename}`);
+        console.log(`✅ Resi berhasil di-download: ${filename}`);
 
         return { success: true, filename };
 
     } catch (err) {
-        console.error("❌ Error Print Resi:", err.response?.data || err.message);
+        console.error("❌ Error download resi:", err.response?.data || err.message);
         return { success: false, message: err.response?.data || err.message };
     }
 };
