@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
 const { DTransBeli } = require("./dtrans_beli_model");
+const { Supplier } = require("./supplier_model"); // opsional kalau ada tabel supplier
 
 const db = getDB();
 
@@ -16,7 +17,7 @@ const HTransBeli = db.define(
       allowNull: false,
     },
     tanggal: {
-      type: DataTypes.DATE,
+      type: DataTypes.DATEONLY, // pakai DATEONLY biar bisa difilter lebih mudah
       allowNull: false,
     },
     total_harga: {
@@ -34,6 +35,7 @@ const HTransBeli = db.define(
     ppn: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      defaultValue: 0,
     },
   },
   {
@@ -42,7 +44,24 @@ const HTransBeli = db.define(
   }
 );
 
-// Relasi
-HTransBeli.hasMany(DTransBeli, { foreignKey: "id_htrans_beli", as: "detail_transaksi" });
+// ✅ Relasi ke detail transaksi
+HTransBeli.hasMany(DTransBeli, {
+  foreignKey: "id_htrans_beli",
+  as: "detail_transaksi",
+});
+
+// ✅ Relasi balik dari DTransBeli ke HTransBeli
+DTransBeli.belongsTo(HTransBeli, {
+  foreignKey: "id_htrans_beli",
+  as: "HTransBeli",
+});
+
+// ✅ Relasi ke Supplier (kalau tabelnya ada)
+if (Supplier) {
+  HTransBeli.belongsTo(Supplier, {
+    foreignKey: "id_supplier",
+    as: "supplier",
+  });
+}
 
 module.exports = { HTransBeli };
