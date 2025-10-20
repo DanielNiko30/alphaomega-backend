@@ -1220,6 +1220,183 @@ const getLazadaOrdersWithItems = async (req, res) => {
     }
 };
 
+const getLazadaReadyOrdersWithItems = async (req, res) => {
+    try {
+        // === Ambil token Lazada dari DB ===
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Token Lazada tidak ditemukan di DB",
+            });
+        }
+
+        const accessToken = lazadaData.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const baseUrl = "https://api.lazada.co.id/rest";
+
+        // === Ambil daftar order READY_TO_SHIP (alias pending dikirim) ===
+        const apiPath = "/orders/get";
+        const timestamp = Date.now().toString();
+
+        const params = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+            limit: 50,
+            offset: 0,
+            created_after: "2024-01-01T00:00:00+08:00",
+            status: "ready_to_ship", // ✅ ambil yang siap dikirim
+        };
+
+        const sign = generateSign(apiPath, params, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({
+            ...params,
+            sign,
+        }).toString()}`;
+
+        const orderListResp = await axios.get(url);
+        const orders = orderListResp.data?.data?.orders || [];
+
+        if (orders.length === 0) {
+            return res.json({
+                success: true,
+                message: "Tidak ada pesanan Ready To Ship di Lazada",
+                data: [],
+            });
+        }
+
+        const finalOrders = [];
+
+        // === Loop setiap order untuk ambil detail item ===
+        for (const order of orders) {
+            const order_id = order.order_id;
+
+            // Step 1: Ambil detail pesanan
+            const detailPath = "/order/get";
+            const paramsOrder = {
+                app_key: apiKey,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp: Date.now().toString(),
+                v: "1.0",
+                order_id,
+            };
+            const signOrder = generateSign(detailPath, paramsOrder, appSecret);
+            const urlOrder = `${baseUrl}${detailPath}?${new URLSearchParams({
+                ...paramsOrder,
+                sign: signOrder,
+            }).toString()}`;
+            const orderDetailResp = await axios.get(urlOrder);
+            const orderDetail = orderDetailResp.data?.data || {};
+
+            // Step 2: Ambil item pesanan
+            const itemPath = "/order/items/get";
+            const paramsItem = {
+                app_key: apiKey,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp: Date.now().toString(),
+                v: "1.0",
+                order_id,
+            };
+            const signItem = generateSign(itemPath, paramsItem, appSecret);
+            const urlItem = `${baseUrl}${itemPath}?${new URLSearchParams({
+                ...paramsItem,
+                sign: signItem,
+            }).toString()}`;
+            const itemResp = await axios.get(urlItem);
+            const items = itemResp.data?.data || [];
+
+            // === Gabungkan item dengan data lokal ===
+            const mergedItems = [];
+            for (const item of items) {
+                const stok = await db.query(
+                    `
+                    SELECT 
+                        s.id_product_stok,
+                        s.id_product_lazada,
+                        s.satuan,
+                        p.nama_product,
+                        p.gambar_product
+                    FROM stok s
+                    JOIN product p ON p.id_product = s.id_product_stok
+                    WHERE s.id_product_lazada = :productId
+                    LIMIT 1
+                    `,
+                    {
+                        replacements: { productId: String(item.product_id) },
+                        type: db.QueryTypes.SELECT,
+                    }
+                );
+
+                if (stok.length > 0) {
+                    const local = stok[0];
+                    const gambarBase64 = local.gambar_product
+                        ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
+                        : null;
+
+                    mergedItems.push({
+                        item_id: item.order_item_id,
+                        product_id: item.product_id,
+                        sku_id: item.sku_id,
+                        name: item.name,
+                        quantity: 1,
+                        price: item.item_price,
+                        status: item.status,
+                        from_db: true,
+                        id_product_stok: local.id_product_stok,
+                        satuan: local.satuan,
+                        nama_product: local.nama_product,
+                        image_url: gambarBase64,
+                    });
+                } else {
+                    mergedItems.push({
+                        item_id: item.order_item_id,
+                        product_id: item.product_id,
+                        sku_id: item.sku_id,
+                        name: item.name,
+                        quantity: 1,
+                        price: item.item_price,
+                        status: item.status,
+                        from_db: false,
+                    });
+                }
+            }
+
+            finalOrders.push({
+                order_id: order_id,
+                order_number: orderDetail.order_number,
+                buyer_name:
+                    `${orderDetail.address_shipping?.first_name || ""} ${orderDetail.address_shipping?.last_name || ""}`.trim(),
+                total_amount: orderDetail.price,
+                payment_method: orderDetail.payment_method,
+                status: orderDetail.statuses?.[0],
+                created_at: orderDetail.created_at,
+                recipient_address: orderDetail.address_shipping,
+                items: mergedItems,
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Berhasil mengambil semua pesanan Ready To Ship + data lokal (Lazada)",
+            count: finalOrders.length,
+            data: finalOrders,
+        });
+    } catch (err) {
+        console.error("❌ Error getLazadaOrdersWithItems:", err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: "Gagal mengambil data pesanan Lazada",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
 
 module.exports = {
     generateLoginUrl,
