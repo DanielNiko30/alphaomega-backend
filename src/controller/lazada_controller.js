@@ -1412,5 +1412,6 @@ module.exports = {
     getProductItemLazada,
     getFullOrderDetailLazada,
     getLazadaOrders,
-    getLazadaOrdersWithItems
+    getLazadaOrdersWithItems,
+    getLazadaReadyOrdersWithItems,
 };
