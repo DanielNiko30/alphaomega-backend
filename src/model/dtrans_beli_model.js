@@ -30,7 +30,6 @@ const DTransBeli = db.define(
     diskon_barang: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      defaultValue: 0,
     },
     subtotal: {
       type: DataTypes.INTEGER,
@@ -44,9 +43,6 @@ const DTransBeli = db.define(
 );
 
 // ✅ Relasi ke produk
-DTransBeli.belongsTo(Product, {
-  foreignKey: "id_produk",
-  as: "produk",
-});
+DTransBeli.belongsTo(Product, { foreignKey: "id_produk", as: "produk" });
 
 module.exports = { DTransBeli };
