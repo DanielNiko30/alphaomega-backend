@@ -2,7 +2,7 @@ const { Op, Sequelize } = require("sequelize");
 const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { HTransBeli } = require("../model/htrans_beli_model");
-const { DTransBeli   } = require("../model/dtrans_beli_model");
+const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Product } = require("../model/product_model");
 
 const LaporanController = {
@@ -181,18 +181,25 @@ const LaporanController = {
                     [Sequelize.fn("SUM", Sequelize.col("total_harga")), "total_pembelian"],
                 ],
                 where: {
-                    tanggal: {
-                        [Op.between]: [start, end],
-                    },
+                    tanggal: { [Op.between]: [start, end] },
                 },
                 group: ["periode"],
                 order: [[Sequelize.literal("periode"), "ASC"]],
             });
 
+            const totalPengeluaran = laporan.reduce(
+                (acc, item) => acc + parseFloat(item.getDataValue("total_pembelian") || 0),
+                0
+            );
+
             return res.status(200).json({
                 success: true,
                 message: "Laporan pembelian berhasil diambil",
                 data: laporan,
+                summary: {
+                    total_transaksi: laporan.length,
+                    total_pengeluaran: totalPengeluaran,
+                },
             });
         } catch (error) {
             console.error("Error laporan pembelian:", error);
@@ -205,23 +212,32 @@ const LaporanController = {
     },
 
     // =====================================
-    // ✅ LAPORAN PEMBELIAN PER PRODUK
+    // 📦 LAPORAN PEMBELIAN PER PRODUK
     // =====================================
     getLaporanPembelianProduk: async (req, res) => {
         try {
-            const { startDate, endDate } = req.query;
+            const { startDate, endDate, groupBy } = req.query;
+
+            const today = new Date();
+            const defaultStart = new Date();
+            defaultStart.setMonth(today.getMonth() - 1);
+
+            const start = startDate ? new Date(startDate) : defaultStart;
+            const end = endDate ? new Date(endDate) : today;
+
+            let dateFormat = "%Y-%m-%d";
+            if (groupBy === "month") dateFormat = "%Y-%m";
+            if (groupBy === "week") dateFormat = "%x-%v";
 
             const data = await DTransBeli.findAll({
                 include: [
                     {
                         model: HTransBeli,
                         as: "HTransBeli",
-                        where: {
-                            tanggal: {
-                                [Op.between]: [startDate, endDate],
-                            },
-                        },
-                        attributes: [],
+                        where: { tanggal: { [Op.between]: [start, end] } },
+                        attributes: [
+                            [Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat), "periode"],
+                        ],
                     },
                     {
                         model: Product,
@@ -234,11 +250,18 @@ const LaporanController = {
                     [Sequelize.fn("SUM", Sequelize.col("jumlah_barang")), "total_terbeli"],
                     [Sequelize.fn("SUM", Sequelize.col("subtotal")), "total_pembelian"],
                 ],
-                group: ["id_produk", "produk.nama_product"],
+                group: [
+                    "id_produk",
+                    "produk.nama_product",
+                    "HTransBeli.periode"
+                ],
                 raw: true,
             });
 
-            const totalPengeluaran = data.reduce((acc, item) => acc + parseFloat(item.total_pembelian || 0), 0);
+            const totalPengeluaran = data.reduce(
+                (acc, item) => acc + parseFloat(item.total_pembelian || 0),
+                0
+            );
 
             res.status(200).json({
                 success: true,
@@ -260,17 +283,22 @@ const LaporanController = {
     },
 
     // =====================================
-    // ✅ LAPORAN PEMBELIAN DETAIL
+    // 🧾 LAPORAN PEMBELIAN DETAIL
     // =====================================
     getLaporanPembelianDetail: async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
 
+            const today = new Date();
+            const defaultStart = new Date();
+            defaultStart.setMonth(today.getMonth() - 1);
+
+            const start = startDate ? new Date(startDate) : defaultStart;
+            const end = endDate ? new Date(endDate) : today;
+
             const data = await HTransBeli.findAll({
                 where: {
-                    tanggal: {
-                        [Op.between]: [startDate, endDate],
-                    },
+                    tanggal: { [Op.between]: [start, end] },
                 },
                 include: [
                     {
@@ -288,7 +316,10 @@ const LaporanController = {
                 order: [["tanggal", "ASC"]],
             });
 
-            const totalPengeluaran = data.reduce((acc, h) => acc + parseFloat(h.total_harga || 0), 0);
+            const totalPengeluaran = data.reduce(
+                (acc, h) => acc + parseFloat(h.total_harga || 0),
+                0
+            );
 
             res.status(200).json({
                 success: true,
@@ -309,6 +340,5 @@ const LaporanController = {
         }
     },
 };
-
 
 module.exports = LaporanController;
