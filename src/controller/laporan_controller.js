@@ -159,6 +159,9 @@ const LaporanController = {
         }
     },
 
+    // =====================================
+    // 🧾 LAPORAN PEMBELIAN (PER PERIODE)
+    // =====================================
     getLaporanPembelian: async (req, res) => {
         try {
             const { startDate, endDate, groupBy } = req.query;
@@ -183,12 +186,13 @@ const LaporanController = {
                 where: {
                     tanggal: { [Op.between]: [start, end] },
                 },
-                group: ["periode"],
+                group: [Sequelize.fn("DATE_FORMAT", Sequelize.col("tanggal"), dateFormat)],
                 order: [[Sequelize.literal("periode"), "ASC"]],
+                raw: true,
             });
 
             const totalPengeluaran = laporan.reduce(
-                (acc, item) => acc + parseFloat(item.getDataValue("total_pembelian") || 0),
+                (acc, item) => acc + parseFloat(item.total_pembelian || 0),
                 0
             );
 
@@ -235,9 +239,7 @@ const LaporanController = {
                         model: HTransBeli,
                         as: "HTransBeli",
                         where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: [
-                            [Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat), "periode"],
-                        ],
+                        attributes: [],
                     },
                     {
                         model: Product,
@@ -247,14 +249,16 @@ const LaporanController = {
                 ],
                 attributes: [
                     "id_produk",
+                    [Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat), "periode"],
                     [Sequelize.fn("SUM", Sequelize.col("jumlah_barang")), "total_terbeli"],
                     [Sequelize.fn("SUM", Sequelize.col("subtotal")), "total_pembelian"],
                 ],
                 group: [
                     "id_produk",
                     "produk.nama_product",
-                    "HTransBeli.periode"
+                    Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat),
                 ],
+                order: [[Sequelize.literal("periode"), "ASC"]],
                 raw: true,
             });
 
@@ -283,7 +287,7 @@ const LaporanController = {
     },
 
     // =====================================
-    // 🧾 LAPORAN PEMBELIAN DETAIL
+    // 🔍 LAPORAN PEMBELIAN DETAIL
     // =====================================
     getLaporanPembelianDetail: async (req, res) => {
         try {
