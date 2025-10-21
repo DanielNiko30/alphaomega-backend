@@ -158,7 +158,8 @@ const TransJualController = {
 
             // 5️⃣ Emit notifikasi realtime ke pegawai yang ditugaskan
             if (global.io && id_user_penjual) {
-                global.io.to(String(id_user_penjual)).emit("newTransaction", {
+                global.io.to(String(id_user_penjual)).emit("transactionNotification", {
+                    type: "new", // tipe transaksi baru
                     id_htrans_jual,
                     nama_pembeli,
                     total_harga,
@@ -194,30 +195,27 @@ const TransJualController = {
                 detail
             } = req.body;
 
-            console.log("PARAM ID:", id_htrans_jual);
-            console.log("BODY:", req.body);
-
-            // 1. Ambil detail lama
+            // 1️⃣ Ambil detail lama
             const oldDetails = await DTransJual.findAll({
                 where: { id_htrans_jual },
                 transaction: t
             });
 
-            // 2. Buat map detail lama
+            // 2️⃣ Buat map detail lama
             const oldDetailMap = {};
             oldDetails.forEach(item => {
                 const key = `${item.id_produk}_${item.satuan}`;
                 oldDetailMap[key] = item;
             });
 
-            // 3. Buat map detail baru
+            // 3️⃣ Buat map detail baru
             const newDetailMap = {};
             detail.forEach(item => {
                 const key = `${item.id_produk}_${item.satuan}`;
                 newDetailMap[key] = item;
             });
 
-            // 4. Update header transaksi
+            // 4️⃣ Update header transaksi
             await HTransJual.update(
                 {
                     id_user,
@@ -230,7 +228,7 @@ const TransJualController = {
                 { where: { id_htrans_jual }, transaction: t }
             );
 
-            // 5. Proses item lama → hapus jika tidak ada di detail baru
+            // 5️⃣ Proses item lama → hapus jika tidak ada di detail baru
             for (const oldItem of oldDetails) {
                 const key = `${oldItem.id_produk}_${oldItem.satuan}`;
                 const newItem = newDetailMap[key];
@@ -257,7 +255,7 @@ const TransJualController = {
                 }
             }
 
-            // 6. Proses item baru atau update jumlah lama
+            // 6️⃣ Proses item baru atau update jumlah lama
             for (const item of detail) {
                 const key = `${item.id_produk}_${item.satuan}`;
                 const oldItem = oldDetailMap[key];
@@ -334,12 +332,13 @@ const TransJualController = {
 
             // Emit notifikasi realtime ke pegawai yang ditugaskan
             if (global.io && id_user_penjual) {
-                global.io.to(String(id_user_penjual)).emit("updateTransaction", {
+                global.io.to(String(id_user_penjual)).emit("transactionNotification", {
+                    type: "update", // tipe update transaksi
                     id_htrans_jual,
                     nama_pembeli,
                     total_harga,
                     detail,
-                    message: `Transaksi ${id_htrans_jual} telah diupdate`
+                    message: `Transaksi ${id_htrans_jual} telah diperbarui`
                 });
             }
 
@@ -350,6 +349,7 @@ const TransJualController = {
             res.status(500).json({ message: error.message });
         }
     },
+
 
     getPendingTransactions: async (req, res) => {
         try {
