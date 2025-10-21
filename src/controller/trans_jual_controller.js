@@ -2,7 +2,6 @@ const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Stok } = require("../model/stok_model");
 const { User } = require('../model/user_model');
-const admin = require("../config/fcm");
 const { Op } = require("sequelize");
 
 async function generateHTransJualId() {
@@ -159,36 +158,13 @@ const TransJualController = {
 
             // 5️⃣ Emit notifikasi realtime ke pegawai yang ditugaskan
             if (global.io && id_user_penjual) {
-                global.io.to(String(id_user_penjual)).emit("transactionNotification", {
-                    type: "new", // tipe transaksi baru
+                global.io.to(String(id_user_penjual)).emit("newTransaction", {
                     id_htrans_jual,
                     nama_pembeli,
                     total_harga,
                     detail,
                     message: `Ada transaksi baru untuk ${nama_pembeli}`
                 });
-            }
-
-            if (id_user_penjual) {
-                const penjual = await User.findByPk(id_user_penjual);
-                if (penjual && penjual.fcm_token) { // pastikan user punya token FCM
-                    const message = {
-                        token: penjual.fcm_token,
-                        notification: {
-                            title: "Transaksi Baru!",
-                            body: `Ada transaksi baru dari ${nama_pembeli} senilai Rp${total_harga}.`,
-                        },
-                        data: {
-                            type: "transaction",
-                            id_htrans_jual,
-                            nomor_invoice,
-                        },
-                    };
-
-                    await admin.messaging().send(message)
-                        .then(() => console.log("✅ FCM sent to:", penjual.name))
-                        .catch(err => console.error("❌ FCM error:", err));
-                }
             }
 
             // 6️⃣ Response sukses
@@ -218,27 +194,30 @@ const TransJualController = {
                 detail
             } = req.body;
 
-            // 1️⃣ Ambil detail lama
+            console.log("PARAM ID:", id_htrans_jual);
+            console.log("BODY:", req.body);
+
+            // 1. Ambil detail lama
             const oldDetails = await DTransJual.findAll({
                 where: { id_htrans_jual },
                 transaction: t
             });
 
-            // 2️⃣ Buat map detail lama
+            // 2. Buat map detail lama
             const oldDetailMap = {};
             oldDetails.forEach(item => {
                 const key = `${item.id_produk}_${item.satuan}`;
                 oldDetailMap[key] = item;
             });
 
-            // 3️⃣ Buat map detail baru
+            // 3. Buat map detail baru
             const newDetailMap = {};
             detail.forEach(item => {
                 const key = `${item.id_produk}_${item.satuan}`;
                 newDetailMap[key] = item;
             });
 
-            // 4️⃣ Update header transaksi
+            // 4. Update header transaksi
             await HTransJual.update(
                 {
                     id_user,
@@ -251,7 +230,7 @@ const TransJualController = {
                 { where: { id_htrans_jual }, transaction: t }
             );
 
-            // 5️⃣ Proses item lama → hapus jika tidak ada di detail baru
+            // 5. Proses item lama → hapus jika tidak ada di detail baru
             for (const oldItem of oldDetails) {
                 const key = `${oldItem.id_produk}_${oldItem.satuan}`;
                 const newItem = newDetailMap[key];
@@ -278,7 +257,7 @@ const TransJualController = {
                 }
             }
 
-            // 6️⃣ Proses item baru atau update jumlah lama
+            // 6. Proses item baru atau update jumlah lama
             for (const item of detail) {
                 const key = `${item.id_produk}_${item.satuan}`;
                 const oldItem = oldDetailMap[key];
@@ -355,35 +334,13 @@ const TransJualController = {
 
             // Emit notifikasi realtime ke pegawai yang ditugaskan
             if (global.io && id_user_penjual) {
-                global.io.to(String(id_user_penjual)).emit("transactionNotification", {
-                    type: "update", // tipe update transaksi
+                global.io.to(String(id_user_penjual)).emit("updateTransaction", {
                     id_htrans_jual,
                     nama_pembeli,
                     total_harga,
                     detail,
-                    message: `Transaksi ${id_htrans_jual} telah diperbarui`
+                    message: `Transaksi ${id_htrans_jual} telah diupdate`
                 });
-            }
-
-            if (id_user_penjual) {
-                const penjual = await User.findByPk(id_user_penjual);
-                if (penjual && penjual.fcm_token) {
-                    const message = {
-                        token: penjual.fcm_token,
-                        notification: {
-                            title: "Transaksi Diperbarui",
-                            body: `Transaksi ${id_htrans_jual} telah diperbarui.`,
-                        },
-                        data: {
-                            type: "update",
-                            id_htrans_jual,
-                        },
-                    };
-
-                    await admin.messaging().send(message)
-                        .then(() => console.log("✅ Update FCM sent"))
-                        .catch(err => console.error("❌ Update FCM error:", err));
-                }
             }
 
             res.json({ message: "Transaksi berhasil diperbarui" });
@@ -393,7 +350,6 @@ const TransJualController = {
             res.status(500).json({ message: error.message });
         }
     },
-
 
     getPendingTransactions: async (req, res) => {
         try {

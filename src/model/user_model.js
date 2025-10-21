@@ -28,10 +28,6 @@ const User = db.define('User', {
         type: DataTypes.STRING(50),
         allowNull: false,
     },
-    fcm_token: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
 }, {
     tableName: 'user',
     timestamps: false,
