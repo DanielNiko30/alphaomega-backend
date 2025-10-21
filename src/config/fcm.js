@@ -1,10 +1,11 @@
 const admin = require("firebase-admin");
-const path = require("path");
 
-const serviceAccountPath = path.resolve(__dirname, "serviceAccountKey.json");
+const serviceAccountPath = "/home/alphaomega2/alphaomega-backend/src/config/serviceAccountKey.json";
+
+const serviceAccount = require(serviceAccountPath);
 
 admin.initializeApp({
-    credential: admin.credential.cert(require(serviceAccountPath)),
+    credential: admin.credential.cert(serviceAccount),
 });
 
 module.exports = admin;
