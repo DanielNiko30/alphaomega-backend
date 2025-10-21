@@ -1,11 +1,15 @@
-const admin = require("firebase-admin");
-const path = require("path");
+import admin from "firebase-admin";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// Path absolut ke serviceAccountKey.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Pastikan path serviceAccountKey.json sesuai
 const serviceAccountPath = path.join(__dirname, "serviceAccountKey.json");
 
 admin.initializeApp({
-    credential: admin.credential.cert(require(serviceAccountPath)),
+    credential: admin.credential.cert(serviceAccountPath),
 });
 
-module.exports = admin;
+export default admin;
