@@ -2,6 +2,7 @@ const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Stok } = require("../model/stok_model");
 const { User } = require('../model/user_model');
+const admin = require("../config/fcm");
 const { Op } = require("sequelize");
 
 async function generateHTransJualId() {
@@ -166,6 +167,28 @@ const TransJualController = {
                     detail,
                     message: `Ada transaksi baru untuk ${nama_pembeli}`
                 });
+            }
+
+            if (id_user_penjual) {
+                const penjual = await User.findByPk(id_user_penjual);
+                if (penjual && penjual.fcm_token) { // pastikan user punya token FCM
+                    const message = {
+                        token: penjual.fcm_token,
+                        notification: {
+                            title: "Transaksi Baru!",
+                            body: `Ada transaksi baru dari ${nama_pembeli} senilai Rp${total_harga}.`,
+                        },
+                        data: {
+                            type: "transaction",
+                            id_htrans_jual,
+                            nomor_invoice,
+                        },
+                    };
+
+                    await admin.messaging().send(message)
+                        .then(() => console.log("✅ FCM sent to:", penjual.name))
+                        .catch(err => console.error("❌ FCM error:", err));
+                }
             }
 
             // 6️⃣ Response sukses
@@ -340,6 +363,27 @@ const TransJualController = {
                     detail,
                     message: `Transaksi ${id_htrans_jual} telah diperbarui`
                 });
+            }
+
+            if (id_user_penjual) {
+                const penjual = await User.findByPk(id_user_penjual);
+                if (penjual && penjual.fcm_token) {
+                    const message = {
+                        token: penjual.fcm_token,
+                        notification: {
+                            title: "Transaksi Diperbarui",
+                            body: `Transaksi ${id_htrans_jual} telah diperbarui.`,
+                        },
+                        data: {
+                            type: "update",
+                            id_htrans_jual,
+                        },
+                    };
+
+                    await admin.messaging().send(message)
+                        .then(() => console.log("✅ Update FCM sent"))
+                        .catch(err => console.error("❌ Update FCM error:", err));
+                }
             }
 
             res.json({ message: "Transaksi berhasil diperbarui" });
