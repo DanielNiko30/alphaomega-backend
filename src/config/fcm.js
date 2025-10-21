@@ -1,18 +1,11 @@
 const admin = require("firebase-admin");
-const path = require("path");
 
-const serviceAccountPath = path.resolve(__dirname, "serviceAccountKey.json");
-console.log("🔥 Full path ke serviceAccountKey.json:", serviceAccountPath);
-
-const fs = require("fs");
-if (!fs.existsSync(serviceAccountPath)) {
-    console.error("❌ File tidak ditemukan di path ini!");
-}
-
-const serviceAccount = require(serviceAccountPath);
+// 🔥 Ganti path di bawah sesuai lokasi file kamu di server IDCloudHost
+const serviceAccount = require("/home/alphaomega2/alphaomega-backend/src/config/serviceAccountKey.json");
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
 });
 
 module.exports = admin;
+ 
