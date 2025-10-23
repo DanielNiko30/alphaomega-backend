@@ -3,8 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 
 // Simpan di .env biar aman, jangan langsung di code
-const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
-const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l5hfdmdho4cun55pz2boaaqipxm2354ctowrlu4gjudqhipmtjigu3javtddrogkgml3agb5zhye76q";
+const ONESIGNAL_APP_ID = "257845e8-86e4-466e-b8cb-df95a1005a5f";
+const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l77dtzxyewue2anofcau7i6isuunhmxqf2gty4ootqcrprhfqfgrmk3onnr6mjzf273ll2oz3rgtwiy";
 
 // POST /api/notification/send
 router.post('/send', async (req, res) => {
