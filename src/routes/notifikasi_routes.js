@@ -25,8 +25,17 @@ router.post('/send', async (req, res) => {
 
         res.json({ success: true, data: response.data });
     } catch (err) {
-        console.error(err.response?.data || err.message);
-        res.status(500).json({ success: false, error: err.message });
+        console.error('❌ OneSignal Error:');
+        if (err.response) {
+            console.error('Status:', err.response.status);
+            console.error('Data:', err.response.data);
+        } else {
+            console.error(err.message);
+        }
+        res.status(500).json({
+            success: false,
+            error: err.response?.data || err.message,
+        });
     }
 });
 
