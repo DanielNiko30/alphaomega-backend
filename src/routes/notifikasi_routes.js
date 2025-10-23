@@ -15,21 +15,15 @@ router.post('/send', async (req, res) => {
         const notifMessage = message || 'Terdapat pesanan baru di sistem!';
 
         // Kirim ke OneSignal API
-        const response = await axios.post(
-            'https://onesignal.com/api/v1/notifications',
-            {
-                app_id: ONESIGNAL_APP_ID,
-                headings: { en: notifTitle },
-                contents: { en: notifMessage },
-                included_segments: ['All'], // Kirim ke semua user aktif
-            },
-            {
-                headers: {
-                    'Authorization': `Basic ${ONESIGNAL_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
+        const response = await axios.post('https://onesignal.com/api/v1/notifications', {
+            app_id: ONESIGNAL_APP_ID,
+            headings: { en: title },
+            contents: { en: message },
+            included_segments: ['All'],
+            android_visibility: 1, // pastikan visible
+            android_sound: "default",
+            priority: 10,
+        });
 
         // Kalau sukses
         res.json({
