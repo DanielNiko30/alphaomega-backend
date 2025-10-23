@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Simpan di .env biar aman, jangan langsung di code
 const ONESIGNAL_APP_ID = "ca62c025-c833-4485-888c-c27b87d810e3";
-const ONESIGNAL_API_KEY = "os_v2_org_zjrmajoigncilcemyj5ypwaq4mkqdpyltkhudtniimr55busbnbjmmyav4ew22mhmqoudl6ybek4hliyggmlqhufrjjhmsuycsoj6ga";
+const ONESIGNAL_API_KEY = "os_v2_org_zjrmajoigncilcemyj5ypwaq4n2ocyolwavuaqfginr3knctlvd6rn67fta53wthv5o5eess322kisjogm3qd6v25fxqc6avbkemkmq";
 
 // POST /api/notification/send
 router.post('/send', async (req, res) => {
