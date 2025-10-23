@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Simpan di .env biar aman, jangan langsung di code
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
-const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
+const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l5hfdmdho4cun55pz2boaaqipxm2354ctowrlu4gjudqhipmtjigu3javtddrogkgml3agb5zhye76q";
 
 // POST /api/notification/send
 router.post('/send', async (req, res) => {
