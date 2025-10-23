@@ -3,6 +3,8 @@ const { DTransJual } = require("../model/dtrans_jual_model");
 const { Stok } = require("../model/stok_model");
 const { User } = require('../model/user_model');
 const { Op } = require("sequelize");
+const axios = require("axios");
+const NOTIF_URL = "https://tokalphaomegaploso.my.id/api/notifikasi/send";
 
 async function generateHTransJualId() {
     const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
@@ -166,13 +168,22 @@ const TransJualController = {
                     message: `Ada transaksi baru untuk ${nama_pembeli}`
                 });
             }
-
             // 6️⃣ Response sukses
-            return res.status(201).json({
+            const response = res.status(201).json({
                 message: "Transaksi jual berhasil dibuat",
                 invoice: nomor_invoice,
                 id_htrans_jual,
             });
+
+            // 🔔 Kirim notifikasi ke endpoint eksternal (tidak ganggu flow utama)
+            axios.post(NOTIF_URL, {
+                title: "Pesanan Baru",
+                message: `Ada pesanan baru dari ${nama_pembeli}. Mohon segera dikonfirmasi!`
+            }).catch(err => {
+                console.error("Gagal kirim notifikasi eksternal:", err.message);
+            });
+
+            return response;
 
         } catch (error) {
             console.error(error);
@@ -344,6 +355,14 @@ const TransJualController = {
             }
 
             res.json({ message: "Transaksi berhasil diperbarui" });
+
+            // 🔔 Kirim notifikasi eksternal setelah update sukses
+            axios.post(NOTIF_URL, {
+                title: "Pesanan Diperbarui",
+                message: `Pesanan ${nama_pembeli} telah diperbarui. Mohon segera dicek.`
+            }).catch(err => {
+                console.error("Gagal kirim notifikasi eksternal:", err.message);
+            });
         } catch (error) {
             await t.rollback();
             console.error("Update Transaction Error:", error);
