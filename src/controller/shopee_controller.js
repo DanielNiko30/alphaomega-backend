@@ -2091,10 +2091,12 @@ const downloadShippingDocumentController = async (req, res) => {
 const printShopeeResi = async (req, res) => {
     const { order_sn } = req.body;
 
-    if (!order_sn) return res.status(400).json({ success: false, message: "order_sn required" });
+    if (!order_sn) {
+        return res.status(400).json({ success: false, message: "order_sn required" });
+    }
 
     try {
-        // Ambil data Shopee dari DB
+        // 🔹 1. Ambil data Shopee dari DB
         const shop = await Shopee.findOne();
         if (!shop?.access_token || !shop?.shop_id) {
             return res.status(400).json({ success: false, message: "Shopee token atau shop_id tidak ditemukan" });
@@ -2102,7 +2104,7 @@ const printShopeeResi = async (req, res) => {
 
         const { shop_id, access_token } = shop;
 
-        // 1️⃣ Get Order Detail → package_number
+        // 🔹 2. Ambil detail order → untuk dapatkan package_number
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/order/get_order_detail";
         const sign = generateSign(path, timestamp, access_token, shop_id);
@@ -2119,14 +2121,43 @@ const printShopeeResi = async (req, res) => {
         });
 
         const detailResp = await axios.get(`https://partner.shopeemobile.com${path}?${params.toString()}`);
-        const orderData = detailResp.data.response.order_list[0];
+        const orderData = detailResp.data.response.order_list?.[0];
+
+        if (!orderData || !orderData.package_list?.length) {
+            return res.status(400).json({
+                success: false,
+                message: "Gagal menemukan package_number untuk order ini",
+                shopee_response: detailResp.data,
+            });
+        }
+
         const packageNumber = orderData.package_list[0].package_number;
+        console.log(`✅ Order SN: ${order_sn}, Package Number: ${packageNumber}`);
 
-        // 2️⃣ Get Tracking Info
-        const shippingInfoResp = await axios.post("https://tokalphaomegaploso.my.id/api/shopee/shipping-info");
-        const trackingNumber = shippingInfoResp.data.shopee_response.response.shipping_document_info.tracking_number;
+        // 🔹 3. Get Tracking Info → kirim order_sn + package_number
+        const shippingInfoResp = await axios.post(
+            "https://tokalphaomegaploso.my.id/api/shopee/shipping-info",
+            {
+                order_sn,
+                package_number: packageNumber,
+            },
+            { headers: { "Content-Type": "application/json" } }
+        );
 
-        // 3️⃣ Create Shipping Document
+        const trackingNumber =
+            shippingInfoResp.data?.shopee_response?.response?.shipping_document_info?.tracking_number;
+
+        if (!trackingNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "Tracking number tidak ditemukan dari shipping-info",
+                response: shippingInfoResp.data,
+            });
+        }
+
+        console.log(`✅ Tracking Number: ${trackingNumber}`);
+
+        // 🔹 4. Create Shipping Document
         await axios.post(
             "https://tokalphaomegaploso.my.id/api/shopee/create-document",
             {
@@ -2142,7 +2173,9 @@ const printShopeeResi = async (req, res) => {
             { headers: { "Content-Type": "application/json" } }
         );
 
-        // 4️⃣ Download Resi
+        console.log(`✅ Shipping document created for ${order_sn}`);
+
+        // 🔹 5. Download Resi
         const downloadResp = await axios.post(
             "https://tokalphaomegaploso.my.id/api/shopee/download-resi",
             {
@@ -2150,10 +2183,12 @@ const printShopeeResi = async (req, res) => {
                 package_number: packageNumber,
                 shipping_document_type: "NORMAL_AIR_WAYBILL",
             },
-            { responseType: "arraybuffer" } // penting untuk PDF
+            { responseType: "arraybuffer" } // penting agar PDF tidak corrupt
         );
 
-        // 5️⃣ Kirim file PDF ke client
+        console.log(`✅ Resi berhasil diunduh untuk ${order_sn}`);
+
+        // 🔹 6. Kirim file PDF ke client
         res.set({
             "Content-Type": "application/pdf",
             "Content-Disposition": `attachment; filename=resi_${order_sn}.pdf`,
@@ -2161,7 +2196,16 @@ const printShopeeResi = async (req, res) => {
         res.send(downloadResp.data);
     } catch (err) {
         console.error("❌ Error printShopeeResi:", err.response?.data || err.message);
-        res.status(500).json({ success: false, message: "Gagal print resi", error: err.response?.data || err.message });
+
+        // Tambahkan info API yang gagal jika diketahui
+        const failedApi = err.config?.url || "Unknown API";
+
+        res.status(500).json({
+            success: false,
+            message: "Gagal print resi",
+            error_from: failedApi,
+            error: err.response?.data || err.message,
+        });
     }
 };
 
