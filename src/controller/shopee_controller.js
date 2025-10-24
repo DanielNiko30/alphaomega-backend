@@ -2037,7 +2037,8 @@ const getShippingDocumentInfo = async (req, res) => {
     }
 };
 
-const downloadShippingDocumentController = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
+const downloadShippingDocumentController = async (req, res) => {
+    const { order_sn, package_number, shipping_document_type } = req.body;
     console.log("📥 Downloading shipping document for order_sn:", order_sn);
     const shop = await Shopee.findOne();
     if (!shop) throw new Error("Shopee auth not found");
@@ -2068,13 +2069,9 @@ const downloadShippingDocumentController = async (order_sn, package_number, ship
     response.data.pipe(writer);
 
     console.log("Waiting for file to finish writing...");
-    return new Promise((resolve, reject) => {
-        console.log("Setting up finish and error handlers...");
-        writer.on("finish", () => {
-            console.log("File write finished:", filePath);
-            return resolve(filePath)
-        });
-        writer.on("error", reject);
+    return res.json({
+        success: true,
+        message: "Berhasil ambil shipping document info Shopee",
     });
 };
 
