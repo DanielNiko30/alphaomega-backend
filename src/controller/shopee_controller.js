@@ -2062,7 +2062,7 @@ const downloadShippingDocumentController = async (req, res) => {
         });
 
         // Tentukan folder penyimpanan
-        const folderPath = path.resolve("downloads");
+        const folderPath = path.join(process.cwd(), "downloads");
         if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
 
         // Nama file
