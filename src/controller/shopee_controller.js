@@ -2038,32 +2038,42 @@ const getShippingDocumentInfo = async (req, res) => {
 };
 
 const downloadShippingDocumentController = async (order_sn, package_number, shipping_document_type = "NORMAL_AIR_WAYBILL") => {
+    console.log("📥 Downloading shipping document for order_sn:", order_sn);
     const shop = await Shopee.findOne();
     if (!shop) throw new Error("Shopee auth not found");
 
+    console.log("Using shop_id:", shop.shop_id);
     const { shop_id, access_token } = shop;
     const timestamp = Math.floor(Date.now() / 1000);
     const path = "/api/v2/logistics/download_shipping_document";
+    console.log("Generating sign...");
     const sign = generateSign(path, timestamp, access_token, shop_id);
 
+    console.log("Constructing URL...");
     const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
 
     const payload = { order_list: [{ order_sn, package_number, shipping_document_type }] };
-
+    console.log("Payload prepared:", payload);
     const response = await axios.post(url, payload, {
         responseType: "stream", // << streaming
         timeout: 300000,        // 5 menit
         headers: { "Content-Type": "application/json" },
     });
 
+    console.log("Response received, saving to file...");
     // Simpan langsung ke file
     const filePath = `shipping_${order_sn}.pdf`;
     const writer = fs.createWriteStream(filePath);
-
+    console.log("Piping response data to file...");
     response.data.pipe(writer);
 
+    console.log("Waiting for file to finish writing...");
     return new Promise((resolve, reject) => {
-        writer.on("finish", () => resolve(filePath));
+        console.log("Setting up finish and error handlers...");
+        writer.on("finish", () => {
+            console.log("File write finished:", filePath);
+            return resolve(filePath)
+        });
         writer.on("error", reject);
     });
 };
