@@ -2042,7 +2042,7 @@ const downloadShippingDocumentController = async (req, res) => {
         const { order_sn, package_number, shipping_document_type } = req.body;
         console.log("📥 Downloading shipping document for order_sn:", order_sn);
 
-        // Ambil token toko
+        // Ambil data toko
         const shop = await Shopee.findOne();
         if (!shop) throw new Error("Shopee auth not found");
 
@@ -2051,48 +2051,35 @@ const downloadShippingDocumentController = async (req, res) => {
         const pathApi = "/api/v2/logistics/download_shipping_document";
         const sign = generateSign(pathApi, timestamp, access_token, shop_id);
 
+        // Shopee API URL
         const url = `https://partner.shopeemobile.com${pathApi}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+
+        // Payload
         const payload = {
             order_list: [{ order_sn, package_number, shipping_document_type }],
         };
 
-        // Request ke Shopee
+        // Request ke Shopee (stream file)
         const response = await axios.post(url, payload, {
-            responseType: "stream", // karena Shopee return file PDF
+            responseType: "stream",
             timeout: 300000,
             headers: { "Content-Type": "application/json" },
         });
 
-        // Pastikan folder downloads ada
-        const folderPath = path.join(process.cwd(), "downloads");
-        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
+        // Set header biar browser/frontend tahu ini file PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="shopee_shipping_${order_sn}.pdf"`);
 
-        // Nama file unik
-        const fileName = `shopee_shipping_${Date.now()}.pdf`;
-        const filePath = path.join(folderPath, fileName);
+        // Stream langsung ke response (frontend)
+        response.data.pipe(res);
 
-        // Simpan file hasil stream
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-
-        writer.on("finish", () => {
-            console.log("✅ File saved:", filePath);
-            // Setelah file selesai disimpan, kirim langsung ke browser
-            res.download(filePath, fileName, (err) => {
-                if (err) {
-                    console.error("❌ Gagal mengirim file:", err);
-                    res.status(500).json({ success: false, message: "Gagal mengirim file" });
-                } else {
-                    console.log("📤 File dikirim ke user.");
-                    // opsional: hapus file setelah dikirim biar gak numpuk
-                    // fs.unlinkSync(filePath);
-                }
-            });
+        response.data.on("end", () => {
+            console.log("✅ File PDF berhasil dikirim ke frontend");
         });
 
-        writer.on("error", (err) => {
-            console.error("❌ Gagal menyimpan file:", err);
-            res.status(500).json({ success: false, message: "Gagal menyimpan file" });
+        response.data.on("error", (err) => {
+            console.error("❌ Error streaming:", err);
+            res.status(500).json({ success: false, message: "Gagal mengirim file PDF" });
         });
 
     } catch (error) {
