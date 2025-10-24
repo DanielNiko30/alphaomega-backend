@@ -2088,6 +2088,83 @@ const downloadShippingDocumentController = async (req, res) => {
     }
 };
 
+const printShopeeResi = async (req, res) => {
+    const { order_sn } = req.body;
+
+    if (!order_sn) return res.status(400).json({ success: false, message: "order_sn required" });
+
+    try {
+        // Ambil data Shopee dari DB
+        const shop = await Shopee.findOne();
+        if (!shop?.access_token || !shop?.shop_id) {
+            return res.status(400).json({ success: false, message: "Shopee token atau shop_id tidak ditemukan" });
+        }
+
+        const { shop_id, access_token } = shop;
+
+        // 1️⃣ Get Order Detail → package_number
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/order/get_order_detail";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+
+        const params = new URLSearchParams({
+            partner_id: PARTNER_ID,
+            timestamp,
+            access_token,
+            shop_id,
+            sign,
+            order_sn_list: order_sn,
+            response_optional_fields:
+                "buyer_username,item_list,total_amount,recipient_address,package_list,pickup_done_time,booking_sn,advance_package",
+        });
+
+        const detailResp = await axios.get(`https://partner.shopeemobile.com${path}?${params.toString()}`);
+        const orderData = detailResp.data.response.order_list[0];
+        const packageNumber = orderData.package_list[0].package_number;
+
+        // 2️⃣ Get Tracking Info
+        const shippingInfoResp = await axios.get("https://tokalphaomegaploso.my.id/api/shopee/shipping-info");
+        const trackingNumber = shippingInfoResp.data.shopee_response.response.shipping_document_info.tracking_number;
+
+        // 3️⃣ Create Shipping Document
+        await axios.post(
+            "https://tokalphaomegaploso.my.id/api/shopee/create-document",
+            {
+                order_list: [
+                    {
+                        order_sn,
+                        package_number: packageNumber,
+                        tracking_number: trackingNumber,
+                        shipping_document_type: "NORMAL_AIR_WAYBILL",
+                    },
+                ],
+            },
+            { headers: { "Content-Type": "application/json" } }
+        );
+
+        // 4️⃣ Download Resi
+        const downloadResp = await axios.post(
+            "https://tokalphaomegaploso.my.id/api/shopee/download-resi",
+            {
+                order_sn,
+                package_number: packageNumber,
+                shipping_document_type: "NORMAL_AIR_WAYBILL",
+            },
+            { responseType: "arraybuffer" } // penting untuk PDF
+        );
+
+        // 5️⃣ Kirim file PDF ke client
+        res.set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename=resi_${order_sn}.pdf`,
+        });
+        res.send(downloadResp.data);
+    } catch (err) {
+        console.error("❌ Error printShopeeResi:", err.response?.data || err.message);
+        res.status(500).json({ success: false, message: "Gagal print resi", error: err.response?.data || err.message });
+    }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -2110,5 +2187,6 @@ module.exports = {
     getShippingDocumentInfo,
     getShippingDocumentResultController,
     createShopeeShippingDocument,
-    downloadShippingDocumentController
+    downloadShippingDocumentController,
+    printShopeeResi,
 };
