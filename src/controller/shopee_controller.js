@@ -2123,7 +2123,7 @@ const printShopeeResi = async (req, res) => {
         const packageNumber = orderData.package_list[0].package_number;
 
         // 2️⃣ Get Tracking Info
-        const shippingInfoResp = await axios.get("https://tokalphaomegaploso.my.id/api/shopee/shipping-info");
+        const shippingInfoResp = await axios.post("https://tokalphaomegaploso.my.id/api/shopee/shipping-info");
         const trackingNumber = shippingInfoResp.data.shopee_response.response.shipping_document_info.tracking_number;
 
         // 3️⃣ Create Shipping Document
