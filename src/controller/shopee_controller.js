@@ -2042,6 +2042,7 @@ const downloadShippingDocumentController = async (req, res) => {
         const { order_sn, package_number, shipping_document_type } = req.body;
         console.log("📥 Downloading shipping document for order_sn:", order_sn);
 
+        // Ambil token toko
         const shop = await Shopee.findOne();
         if (!shop) throw new Error("Shopee auth not found");
 
@@ -2055,18 +2056,20 @@ const downloadShippingDocumentController = async (req, res) => {
             order_list: [{ order_sn, package_number, shipping_document_type }],
         };
 
+        // Request ke Shopee
         const response = await axios.post(url, payload, {
-            responseType: "stream", // karena Shopee return file
+            responseType: "stream", // karena Shopee return file PDF
             timeout: 300000,
             headers: { "Content-Type": "application/json" },
         });
 
-        // Tentukan folder penyimpanan
+        // Pastikan folder downloads ada
         const folderPath = path.join(process.cwd(), "downloads");
         if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
 
-        // Nama file
-        const filePath = path.join(folderPath, `shopee_shipping_${order_sn}.pdf`);
+        // Nama file unik
+        const fileName = `shopee_shipping_${Date.now()}.pdf`;
+        const filePath = path.join(folderPath, fileName);
 
         // Simpan file hasil stream
         const writer = fs.createWriteStream(filePath);
@@ -2074,10 +2077,16 @@ const downloadShippingDocumentController = async (req, res) => {
 
         writer.on("finish", () => {
             console.log("✅ File saved:", filePath);
-            res.json({
-                success: true,
-                message: "Berhasil download shipping document Shopee",
-                file_path: filePath,
+            // Setelah file selesai disimpan, kirim langsung ke browser
+            res.download(filePath, fileName, (err) => {
+                if (err) {
+                    console.error("❌ Gagal mengirim file:", err);
+                    res.status(500).json({ success: false, message: "Gagal mengirim file" });
+                } else {
+                    console.log("📤 File dikirim ke user.");
+                    // opsional: hapus file setelah dikirim biar gak numpuk
+                    // fs.unlinkSync(filePath);
+                }
             });
         });
 
@@ -2085,6 +2094,7 @@ const downloadShippingDocumentController = async (req, res) => {
             console.error("❌ Gagal menyimpan file:", err);
             res.status(500).json({ success: false, message: "Gagal menyimpan file" });
         });
+
     } catch (error) {
         console.error("❌ Error:", error.message);
         res.status(500).json({ success: false, message: error.message });
