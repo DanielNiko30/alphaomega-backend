@@ -2175,31 +2175,48 @@ const printShopeeResi = async (req, res) => {
 
         console.log(`✅ Shipping document created for ${order_sn}`);
 
-        // 🔹 5. Download Resi
-        const downloadResp = await axios.post(
-            "https://tokalphaomegaploso.my.id/api/shopee/download-resi",
-            {
-                order_sn,
-                package_number: packageNumber,
-                shipping_document_type: "NORMAL_AIR_WAYBILL",
-            },
-            { responseType: "arraybuffer" } // penting agar PDF tidak corrupt
-        );
+        // 🔹 5. Download Resi (stream langsung seperti contoh kamu)
+        const pathApi = "/api/v2/logistics/download_shipping_document";
+        const sign2 = generateSign(pathApi, timestamp, access_token, shop_id);
+        const url = `https://partner.shopeemobile.com${pathApi}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign2}`;
 
-        console.log(`✅ Resi berhasil diunduh untuk ${order_sn}`);
+        const payload = {
+            order_list: [
+                {
+                    order_sn,
+                    package_number: packageNumber,
+                    shipping_document_type: "NORMAL_AIR_WAYBILL",
+                },
+            ],
+        };
 
-        // 🔹 6. Kirim file PDF ke client
-        res.set({
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `attachment; filename=resi_${order_sn}.pdf`,
+        console.log(`📥 Downloading shipping document for ${order_sn}...`);
+
+        const response = await axios.post(url, payload, {
+            responseType: "stream",
+            timeout: 300000,
+            headers: { "Content-Type": "application/json" },
         });
-        res.send(downloadResp.data);
+
+        // 🔹 Set header agar browser tahu ini file PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="shopee_shipping_${order_sn}.pdf"`);
+
+        // 🔹 Stream data langsung ke response (frontend)
+        response.data.pipe(res);
+
+        response.data.on("end", () => {
+            console.log(`✅ File PDF berhasil dikirim ke frontend untuk ${order_sn}`);
+        });
+
+        response.data.on("error", (err) => {
+            console.error("❌ Error streaming PDF:", err);
+            res.status(500).json({ success: false, message: "Gagal mengirim file PDF" });
+        });
     } catch (err) {
         console.error("❌ Error printShopeeResi:", err.response?.data || err.message);
 
-        // Tambahkan info API yang gagal jika diketahui
         const failedApi = err.config?.url || "Unknown API";
-
         res.status(500).json({
             success: false,
             message: "Gagal print resi",
