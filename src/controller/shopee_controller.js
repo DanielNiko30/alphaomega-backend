@@ -11,7 +11,7 @@ const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Op } = require("sequelize");
 const fs = require("fs");
-
+const path = require("path");
 
 const db = getDB();
 
@@ -2038,41 +2038,57 @@ const getShippingDocumentInfo = async (req, res) => {
 };
 
 const downloadShippingDocumentController = async (req, res) => {
-    const { order_sn, package_number, shipping_document_type } = req.body;
-    console.log("📥 Downloading shipping document for order_sn:", order_sn);
-    const shop = await Shopee.findOne();
-    if (!shop) throw new Error("Shopee auth not found");
+    try {
+        const { order_sn, package_number, shipping_document_type } = req.body;
+        console.log("📥 Downloading shipping document for order_sn:", order_sn);
 
-    console.log("Using shop_id:", shop.shop_id);
-    const { shop_id, access_token } = shop;
-    const timestamp = Math.floor(Date.now() / 1000);
-    const path = "/api/v2/logistics/download_shipping_document";
-    console.log("Generating sign...");
-    const sign = generateSign(path, timestamp, access_token, shop_id);
+        const shop = await Shopee.findOne();
+        if (!shop) throw new Error("Shopee auth not found");
 
-    console.log("Constructing URL...");
-    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+        const { shop_id, access_token } = shop;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const pathApi = "/api/v2/logistics/download_shipping_document";
+        const sign = generateSign(pathApi, timestamp, access_token, shop_id);
 
-    const payload = { order_list: [{ order_sn, package_number, shipping_document_type }] };
-    console.log("Payload prepared:", payload);
-    const response = await axios.post(url, payload, {
-        responseType: "stream", // << streaming
-        timeout: 300000,        // 5 menit
-        headers: { "Content-Type": "application/json" },
-    });
+        const url = `https://partner.shopeemobile.com${pathApi}?partner_id=${PARTNER_ID}&shop_id=${shop_id}&timestamp=${timestamp}&access_token=${access_token}&sign=${sign}`;
+        const payload = {
+            order_list: [{ order_sn, package_number, shipping_document_type }],
+        };
 
-    console.log("Response received, saving to file...");
-    // Simpan langsung ke file
-    const filePath = `shipping_${order_sn}.pdf`;
-    const writer = fs.createWriteStream(filePath);
-    console.log("Piping response data to file...");
-    response.data.pipe(writer);
+        const response = await axios.post(url, payload, {
+            responseType: "stream", // karena Shopee return file
+            timeout: 300000,
+            headers: { "Content-Type": "application/json" },
+        });
 
-    console.log("Waiting for file to finish writing...");
-    return res.json({
-        success: true,
-        message: "Berhasil ambil shipping document info Shopee",
-    });
+        // Tentukan folder penyimpanan
+        const folderPath = path.resolve("downloads");
+        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
+
+        // Nama file
+        const filePath = path.join(folderPath, `shopee_shipping_${order_sn}.pdf`);
+
+        // Simpan file hasil stream
+        const writer = fs.createWriteStream(filePath);
+        response.data.pipe(writer);
+
+        writer.on("finish", () => {
+            console.log("✅ File saved:", filePath);
+            res.json({
+                success: true,
+                message: "Berhasil download shipping document Shopee",
+                file_path: filePath,
+            });
+        });
+
+        writer.on("error", (err) => {
+            console.error("❌ Gagal menyimpan file:", err);
+            res.status(500).json({ success: false, message: "Gagal menyimpan file" });
+        });
+    } catch (error) {
+        console.error("❌ Error:", error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
 };
 
 module.exports = {
