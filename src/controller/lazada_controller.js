@@ -1517,16 +1517,18 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateSignPOST(apiPath, sysParams, appSecret) {
-    // ⚠️ jangan masukkan access_token ke base string
+function generateSignPOST(apiPath, sysParams, appSecret, payloadJSON) {
     const filtered = { ...sysParams };
-    delete filtered.access_token;
+    delete filtered.access_token; // tetap tidak disign
 
     const sortedKeys = Object.keys(filtered).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
         baseStr += key + filtered[key];
     }
+
+    // ✅ tambahkan payload ke base string (sesuai dokumentasi)
+    baseStr += "payload" + payloadJSON;
 
     return crypto
         .createHmac("sha256", appSecret)
@@ -1581,7 +1583,7 @@ const printLazadaResi = async (req, res) => {
         };
 
         // ✅ Sign TANPA access_token
-        const sign = generateSignPOST(apiPath, sysParams, appSecret);
+        const sign = generateSignPOST(apiPath, sysParams, appSecret, payloadJSON);
 
         // === Build URL
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
