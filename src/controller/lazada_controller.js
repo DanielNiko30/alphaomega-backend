@@ -1516,6 +1516,9 @@ const aturPickup = async (req, res) => {
     }
 };
 
+// ====================
+// Controller PrintAWB
+// ====================
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
@@ -1543,38 +1546,39 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
 
         // ======================
-        // Common params & signature
+        // Query params & sign
         // ======================
         const params = {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
             timestamp: Date.now().toString(),
+            v: "1.0",
         };
 
         const sign = generateSign(apiPath, params, appSecret);
         params.sign = sign;
 
         // ======================
-        // Request body
+        // Body request
         // ======================
         const requestBody = {
             getDocumentReq: {
                 doc_type: "PDF",
                 packages: [
-                    {
-                        package_number: package_id,
-                    },
+                    { package_number: package_id }
                 ],
-                print_item_list: false, // tidak mencetak item
+                print_item_list: false, // tanpa item
             },
         };
 
         // ======================
-        // Panggil API Lazada
+        // POST ke Lazada
         // ======================
         const response = await axios.post(`${baseUrl}${apiPath}`, requestBody, {
-            params,
+            params, // query params termasuk sign
+            headers: { "Content-Type": "application/json" },
+            timeout: 10000
         });
 
         if (response.data?.success && response.data?.data?.document_base64) {
