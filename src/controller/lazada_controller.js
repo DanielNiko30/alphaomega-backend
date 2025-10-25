@@ -1586,10 +1586,9 @@ const printLazadaResi = async (req, res) => {
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
-
         const timestamp = Date.now().toString();
 
-        // === Payload (utuh)
+        // ✅ Payload harus JSON murni (bukan stringified JSON di dalam string)
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1599,19 +1598,18 @@ const printLazadaResi = async (req, res) => {
         };
         const payloadJSON = JSON.stringify(payloadObj);
 
-        // === System params
+        // === System Params (urutan manual, bukan sort)
         const sysParams = {
             app_key: appKey,
-            access_token: accessToken,
-            sign_method: "sha256",
             timestamp,
+            sign_method: "sha256",
+            access_token: accessToken,
             v: "1.0",
         };
 
-        // === Buat base string: path + sysParams (urut ASCII) + payload JSON
-        const sortedKeys = Object.keys(sysParams).sort();
+        // === Buat base string (urutan sesuai di atas)
         let baseString = apiPath;
-        for (const key of sortedKeys) {
+        for (const key of Object.keys(sysParams)) {
             baseString += key + sysParams[key];
         }
         baseString += payloadJSON;
@@ -1623,26 +1621,22 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        // === URL
+        // === Buat URL
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
         const url = `${baseUrl}${apiPath}?${query}`;
 
-        // === Body
-        const body = new URLSearchParams({ payload: payloadJSON });
+        // === POST body (form-urlencoded)
+        const body = `payload=${payloadJSON}`;
 
-        const response = await axios.post(url, body.toString(), {
+        const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             timeout: 30000,
         });
 
-        // === Cek hasil
         if (response.data?.data?.document_base64) {
             const pdfBuffer = Buffer.from(response.data.data.document_base64, "base64");
             res.setHeader("Content-Type", "application/pdf");
-            res.setHeader(
-                "Content-Disposition",
-                `attachment; filename=resi_${package_number}.pdf`
-            );
+            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
             return res.send(pdfBuffer);
         }
 
