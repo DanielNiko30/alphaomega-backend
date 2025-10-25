@@ -1518,12 +1518,12 @@ const aturPickup = async (req, res) => {
 
 const printLazadaResi = async (req, res) => {
     try {
-        const { package_number } = req.body;
+        const { package_id } = req.body;
 
-        if (!package_number) {
+        if (!package_id) {
             return res.status(400).json({
                 success: false,
-                message: "Parameter 'package_number' wajib dikirim di body",
+                message: "Parameter 'package_id' wajib dikirim di body",
             });
         }
 
@@ -1560,7 +1560,7 @@ const printLazadaResi = async (req, res) => {
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
-                packages: [{ package_number }],
+                packages: [{ package_id }],
                 print_item_list: false,
             }
         };
@@ -1605,7 +1605,7 @@ const printLazadaResi = async (req, res) => {
             const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
             res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
+            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_id}.pdf`);
             res.send(pdfBuffer);
         } else {
             return res.status(400).json({
