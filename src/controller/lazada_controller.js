@@ -1369,12 +1369,11 @@ const getWarehouseBySeller = async (req, res) => {
         const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
         const response = await axios.get(url);
-
-        const warehouses = response.data?.result?.success;
-        if (!Array.isArray(warehouses)) {
+        const warehouses = response.data?.result?.module;
+        if (!Array.isArray(warehouses) || warehouses.length === 0) {
             return res.status(500).json({
                 success: false,
-                message: "Warehouse Lazada kosong atau struktur response tidak sesuai",
+                message: "Warehouse Lazada kosong",
                 raw: response.data
             });
         }
@@ -1384,6 +1383,7 @@ const getWarehouseBySeller = async (req, res) => {
             message: "Berhasil ambil daftar warehouse seller",
             data: warehouses
         });
+
 
     } catch (err) {
         console.error("❌ Error getWarehouseBySeller:", err.response?.data || err.message);
