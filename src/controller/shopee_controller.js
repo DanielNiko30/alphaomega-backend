@@ -2198,12 +2198,25 @@ const printShopeeResi = async (req, res) => {
             headers: { "Content-Type": "application/json" },
         });
 
-        // 🔹 Set header agar browser tahu ini file PDF
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `inline; filename="shopee_shipping_${order_sn}.pdf"`);
+        // 🔹 Ambil PDF buffer dari Shopee
+        const pdfBuffer = await new Promise((resolve, reject) => {
+            const chunks = [];
+            response.data.on("data", (chunk) => chunks.push(chunk));
+            response.data.on("end", () => resolve(Buffer.concat(chunks)));
+            response.data.on("error", reject);
+        });
 
-        // 🔹 Stream data langsung ke response (frontend)
-        response.data.pipe(res);
+        // 🔹 Encode ke base64 biar bisa ditampilkan di frontend
+        const pdfBase64 = pdfBuffer.toString("base64");
+
+        res.status(200).json({
+            success: true,
+            message: `Resi Shopee untuk ${order_sn}`,
+            order_sn,
+            package_number: packageNumber,
+            tracking_number: trackingNumber,
+            pdf_base64: pdfBase64,
+        });
 
         response.data.on("end", () => {
             console.log(`✅ File PDF berhasil dikirim ke frontend untuk ${order_sn}`);
