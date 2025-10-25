@@ -1542,10 +1542,10 @@ const printLazadaResi = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
 
-        // ✅ Gunakan timestamp format string (bukan milidetik)
-        const timestamp = moment().tz("Asia/Shanghai").format("YYYY-MM-DD HH:mm:ss");
+        // ✅ Lazada logistic API pakai timestamp miliseconds
+        const timestamp = Date.now().toString();
 
-        // === Payload yang dikirim ke Lazada ===
+        // === Payload ===
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1556,45 +1556,44 @@ const printLazadaResi = async (req, res) => {
 
         const jsonPayload = JSON.stringify(payloadObj);
 
-        // === Parameter sistem (harus sama urutan & isi untuk sign)
+        // === Params untuk signature
         const sysParams = {
             app_key: appKey,
             access_token: accessToken,
             sign_method: "sha256",
             timestamp,
             v: "1.0",
-            payload: jsonPayload, // wajib disertakan di signature
+            payload: jsonPayload,
         };
 
-        // === Buat base string untuk signature
+        // === Generate base string
         const sortedKeys = Object.keys(sysParams).sort();
         let baseString = apiPath;
         for (const key of sortedKeys) {
             baseString += key + sysParams[key];
         }
 
-        // === Generate signature pakai HMAC SHA256
+        // === Generate signature
         const sign = crypto
             .createHmac("sha256", appSecret)
             .update(baseString, "utf8")
             .digest("hex")
             .toUpperCase();
 
-        // === Buat URL dengan query params (kecuali payload)
+        // === Buat URL (tanpa payload)
         const { payload, ...queryParams } = sysParams;
         const query = new URLSearchParams({ ...queryParams, sign }).toString();
         const url = `${baseUrl}${apiPath}?${query}`;
 
-        // === Body request dalam bentuk x-www-form-urlencoded (Lazada standard)
+        // === Body form-urlencoded
         const body = new URLSearchParams({ payload: jsonPayload });
 
-        // === Kirim request ke Lazada
+        // === Request ke Lazada
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             timeout: 30000,
         });
 
-        // === Jika sukses (PDF base64 diterima)
         if (response.data?.data?.document_base64) {
             const pdfBase64 = response.data.data.document_base64;
             const pdfBuffer = Buffer.from(pdfBase64, "base64");
@@ -1607,14 +1606,12 @@ const printLazadaResi = async (req, res) => {
             return res.send(pdfBuffer);
         }
 
-        // === Kalau gagal, tampilkan info debug
         return res.status(400).json({
             success: false,
             message: response.data?.error_msg || "Gagal generate resi Lazada",
             raw: response.data,
             debug: { sysParams, sign, baseString },
         });
-
     } catch (err) {
         console.error("❌ Error printLazadaResi:", err.response?.data || err.message);
         return res.status(500).json({
