@@ -1518,12 +1518,12 @@ const aturPickup = async (req, res) => {
 
 const printLazadaResi = async (req, res) => {
     try {
-        const { package_id } = req.body;
+        const { package_number } = req.body;
 
-        if (!package_id) {
+        if (!package_number) {
             return res.status(400).json({
                 success: false,
-                message: "Parameter 'package_id' wajib dikirim di body",
+                message: "Parameter 'package_number' wajib dikirim di body",
             });
         }
 
@@ -1541,38 +1541,57 @@ const printLazadaResi = async (req, res) => {
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
+        const timestamp = Date.now().toString();
 
         // ======================
-        // System Params
+        // System Params Lazada
         // ======================
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
-            timestamp: Date.now().toString(),
+            timestamp,
             v: "1.0",
         };
 
         // ======================
-        // Request Body
+        // Payload
         // ======================
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
-                packages: [{ package_number: package_id }],
+                packages: [{ package_number }],
                 print_item_list: false,
-            },
+            }
         };
 
-        // ======================
-        // Generate Signature
-        // ======================
-        const sign = generateSign(apiPath, { ...sysParams, payload: JSON.stringify(payloadObj) }, appSecret);
+        // Signature harus pake payload string
+        const payloadStr = JSON.stringify(payloadObj);
+        const generateSign = (apiPath, allParams, appSecret) => {
+            const sortedKeys = Object.keys(allParams).sort();
+            let baseStr = apiPath;
+            for (const key of sortedKeys) {
+                baseStr += key + allParams[key];
+            }
+            return crypto.createHmac("sha256", appSecret)
+                .update(baseStr, "utf8")
+                .digest("hex")
+                .toUpperCase();
+        };
+
+        const sign = generateSign(apiPath, { ...sysParams, payload: payloadStr }, appSecret);
+
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         // ======================
-        // Request URL
+        // Debug log
         // ======================
-        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        console.log("=== Lazada Print Resi Debug ===");
+        console.log("URL:", url);
+        console.log("Payload:", payloadObj);
+        console.log("Payload string (for sign):", payloadStr);
+        console.log("Sign:", sign);
+        console.log("===============================");
 
         // ======================
         // Request ke Lazada
@@ -1581,26 +1600,24 @@ const printLazadaResi = async (req, res) => {
             headers: { "Content-Type": "application/json" },
         });
 
-        const data = response.data;
-
-        if (data?.success && data.data?.document_base64) {
-            const pdfBuffer = Buffer.from(data.data.document_base64, "base64");
+        if (response.data?.success && response.data?.data?.document_base64) {
+            const pdfBase64 = response.data.data.document_base64;
+            const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
             res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_id}.pdf`);
+            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
             res.send(pdfBuffer);
         } else {
-            // Kalau error, sertakan debug info
             return res.status(400).json({
                 success: false,
-                message: "Gagal generate resi Lazada",
-                raw: data,
+                message: response.data?.error_msg || "Gagal generate resi Lazada",
+                raw: response.data,
                 debug: {
-                    payload: payloadObj,
                     sysParams,
-                    baseString: apiPath + JSON.stringify({ ...sysParams, payload: JSON.stringify(payloadObj) }),
+                    payload: payloadObj,
+                    payloadStr,
                     sign,
-                },
+                }
             });
         }
     } catch (err) {
@@ -1612,7 +1629,6 @@ const printLazadaResi = async (req, res) => {
         });
     }
 };
-
 
 module.exports = {
     generateLoginUrl,
