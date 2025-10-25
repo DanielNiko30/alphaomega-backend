@@ -1516,9 +1516,6 @@ const aturPickup = async (req, res) => {
     }
 };
 
-// ====================
-// Controller PrintAWB
-// ====================
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
@@ -1530,7 +1527,6 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
-        // Ambil token Lazada dari DB
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
             return res.status(400).json({
@@ -1545,10 +1541,18 @@ const printLazadaResi = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
 
-        // ======================
-        // Params untuk signature
-        // ======================
-        const params = {
+        const payloadObj = {
+            getDocumentReq: {
+                doc_type: "PDF",
+                packages: [
+                    { package_number: package_id }
+                ],
+                print_item_list: false, // hanya cetak AWB tanpa item
+            },
+        };
+        const payload = JSON.stringify(payloadObj);
+
+        const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
             sign_method: "sha256",
@@ -1556,29 +1560,13 @@ const printLazadaResi = async (req, res) => {
             v: "1.0",
         };
 
-        // Gunakan generateSign yang sudah ada
-        const sign = generateSign(apiPath, params, appSecret);
-        params.sign = sign;
+        const sign = generateSign(apiPath, { ...sysParams, payload }, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // ======================
-        // Body request
-        // ======================
-        const requestBody = {
-            getDocumentReq: {
-                doc_type: "PDF",
-                packages: [
-                    { package_number: package_id }
-                ],
-                print_item_list: false, // tanpa item
+        const response = await axios.post(url, payload, {
+            headers: {
+                "Content-Type": "application/json",
             },
-        };
-
-        // ======================
-        // POST ke Lazada
-        // ======================
-        const response = await axios.post(`${baseUrl}${apiPath}`, requestBody, {
-            params, // query params termasuk sign
-            headers: { "Content-Type": "application/json" },
         });
 
         if (response.data?.success && response.data?.data?.document_base64) {
@@ -1598,6 +1586,7 @@ const printLazadaResi = async (req, res) => {
                 raw: response.data,
             });
         }
+
     } catch (err) {
         console.error("❌ Error printLazadaResi:", err.response?.data || err.message);
         return res.status(500).json({
