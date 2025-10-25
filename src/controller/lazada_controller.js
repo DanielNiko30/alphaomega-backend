@@ -1517,24 +1517,29 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateSignPOST(apiPath, sysParams, appSecret, payloadJSON) {
+function generateSignPOST(apiPath, sysParams, appSecret, payloadObj) {
+    // 1️⃣ urutkan parameter sistem (kecuali access_token)
     const filtered = { ...sysParams };
-    delete filtered.access_token; // tetap tidak disign
+    delete filtered.access_token;
 
     const sortedKeys = Object.keys(filtered).sort();
-    let baseStr = apiPath;
+    let baseString = apiPath;
     for (const key of sortedKeys) {
-        baseStr += key + filtered[key];
+        baseString += key + filtered[key];
     }
 
-    // ✅ tambahkan payload ke base string (sesuai dokumentasi)
-    baseStr += "payload" + payloadJSON;
+    // 2️⃣ tambahkan payload (harus string JSON mentah)
+    const payloadStr = JSON.stringify(payloadObj);
+    baseString += "payload" + payloadStr;
 
-    return crypto
+    // 3️⃣ buat HMAC SHA256 dan ubah ke uppercase
+    const sign = crypto
         .createHmac("sha256", appSecret)
-        .update(baseStr, "utf8")
+        .update(baseString, "utf8")
         .digest("hex")
         .toUpperCase();
+
+    return { sign, baseString };
 }
 
 const printLazadaResi = async (req, res) => {
@@ -1556,34 +1561,29 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
-        const accessToken = lazadaData.access_token.trim();
-        const appKey = process.env.LAZADA_APP_KEY.trim();
-        const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
-        const timestamp = Date.now().toString();
 
-        // === Payload JSON
+        const sysParams = {
+            app_key: "131919",
+            sign_method: "sha256",
+            timestamp: Date.now().toString(),
+            v: "1.0",
+            access_token: "50000900c41t2cDoxRUghaK0cixEzRH8Bjw5OR1hGexm4dt0BOB6c18b2cf5c9hU"
+        };
+
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
-                packages: [{ package_id: package_number }],
-                print_item_list: false,
-            },
-        };
-        const payloadJSON = JSON.stringify(payloadObj);
-
-        // === System params
-        const sysParams = {
-            app_key: appKey,
-            sign_method: "sha256",
-            timestamp,
-            v: "1.0",
-            access_token: accessToken, // tetap dikirim, tapi tidak disign
+                packages: [{ package_id: "FP007528506233356" }],
+                print_item_list: false
+            }
         };
 
-        // ✅ Sign TANPA access_token
-        const sign = generateSignPOST(apiPath, sysParams, appSecret, payloadJSON);
+        const { sign, baseString } = generateSignPOST(apiPath, sysParams, APP_SECRET, payloadObj);
+
+        console.log("Base string:", baseString);
+        console.log("Sign:", sign);
 
         // === Build URL
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
