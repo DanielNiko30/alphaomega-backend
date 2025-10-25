@@ -1546,7 +1546,7 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
 
         // ======================
-        // Query params & sign
+        // Params untuk signature
         // ======================
         const params = {
             app_key: apiKey,
@@ -1556,6 +1556,7 @@ const printLazadaResi = async (req, res) => {
             v: "1.0",
         };
 
+        // Gunakan generateSign yang sudah ada
         const sign = generateSign(apiPath, params, appSecret);
         params.sign = sign;
 
@@ -1578,7 +1579,6 @@ const printLazadaResi = async (req, res) => {
         const response = await axios.post(`${baseUrl}${apiPath}`, requestBody, {
             params, // query params termasuk sign
             headers: { "Content-Type": "application/json" },
-            timeout: 10000
         });
 
         if (response.data?.success && response.data?.data?.document_base64) {
