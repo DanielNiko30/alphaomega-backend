@@ -1518,11 +1518,16 @@ const aturPickup = async (req, res) => {
 };
 
 function generateSignPOST(apiPath, sysParams, appSecret) {
-    const sortedKeys = Object.keys(sysParams).sort();
+    // ⚠️ jangan masukkan access_token ke base string
+    const filtered = { ...sysParams };
+    delete filtered.access_token;
+
+    const sortedKeys = Object.keys(filtered).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
-        baseStr += key + sysParams[key];
+        baseStr += key + filtered[key];
     }
+
     return crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
@@ -1556,7 +1561,7 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
         const timestamp = Date.now().toString();
 
-        // === Payload
+        // === Payload JSON
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1566,40 +1571,40 @@ const printLazadaResi = async (req, res) => {
         };
         const payloadJSON = JSON.stringify(payloadObj);
 
-        // === System Parameters
+        // === System params
         const sysParams = {
             app_key: appKey,
-            access_token: accessToken,
             sign_method: "sha256",
             timestamp,
             v: "1.0",
+            access_token: accessToken, // tetap dikirim, tapi tidak disign
         };
 
-        // ✅ Generate signature TANPA payload JSON
+        // ✅ Sign TANPA access_token
         const sign = generateSignPOST(apiPath, sysParams, appSecret);
 
-        // === URL query
+        // === Build URL
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
         const url = `${baseUrl}${apiPath}?${query}`;
 
-        // === Body form-urlencoded
+        // === Body (form-urlencoded)
         const body = `payload=${payloadJSON}`;
 
-        // === Request POST ke Lazada
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             timeout: 30000,
         });
 
-        // === Jika sukses
         if (response.data?.data?.document_base64) {
             const pdfBuffer = Buffer.from(response.data.data.document_base64, "base64");
             res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename=resi_${package_number}.pdf`
+            );
             return res.send(pdfBuffer);
         }
 
-        // === Jika gagal
         return res.status(400).json({
             success: false,
             message: response.data?.error_msg || "Gagal generate resi Lazada",
