@@ -1555,6 +1555,24 @@ const printLazadaResi = async (req, res) => {
         };
 
         // ======================
+        // Generate signature khusus Print AWB
+        // ======================
+        const sortedKeys = Object.keys(sysParams).sort();
+        let baseString = apiPath;
+        for (const key of sortedKeys) {
+            baseString += key + sysParams[key];
+        }
+        const sign = crypto.createHmac("sha256", appSecret)
+            .update(baseString, "utf8")
+            .digest("hex")
+            .toUpperCase();
+
+        // ======================
+        // URL final dengan query string
+        // ======================
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+
+        // ======================
         // Payload JSON object
         // ======================
         const payloadObj = {
@@ -1565,37 +1583,12 @@ const printLazadaResi = async (req, res) => {
             }
         };
 
-        const payloadStr = JSON.stringify(payloadObj);
-
-        // ======================
-        // Generate signature khusus Print AWB
-        // ======================
-        const sortedKeys = Object.keys({ ...sysParams, payload: payloadStr }).sort();
-        let baseString = apiPath;
-        for (const key of sortedKeys) {
-            baseString += key + { ...sysParams, payload: payloadStr }[key];
-        }
-        const sign = crypto.createHmac("sha256", appSecret)
-            .update(baseString, "utf8")
-            .digest("hex")
-            .toUpperCase();
-
-        // ======================
-        // URL final
-        // ======================
-        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-
-        console.log("=== Lazada Print Resi Debug ===");
-        console.log("URL:", url);
-        console.log("Payload object:", payloadObj);
-        console.log("Sign:", sign);
-        console.log("===============================");
-
         // ======================
         // POST request JSON
         // ======================
         const response = await axios.post(url, payloadObj, {
             headers: { "Content-Type": "application/json" },
+            timeout: 30000,
         });
 
         if (response.data?.success && response.data?.data?.document_base64) {
@@ -1610,7 +1603,7 @@ const printLazadaResi = async (req, res) => {
                 success: false,
                 message: response.data?.error_msg || "Gagal generate resi Lazada",
                 raw: response.data,
-                debug: { sysParams, payloadObj, payloadStr, sign },
+                debug: { sysParams, payloadObj, sign },
             });
         }
 
