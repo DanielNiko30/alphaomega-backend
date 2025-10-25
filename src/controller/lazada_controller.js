@@ -48,7 +48,6 @@ function generateSign(apiPath, allParams, appSecret) {
         .toUpperCase();
 }
 
-
 /**
  * @param {*} req 
  * @param {*} res 
@@ -1541,17 +1540,28 @@ const printLazadaResi = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
 
-        // ✅ format timestamp pakai waktu Shanghai (UTC+8)
+        // ✅ Lazada pakai timezone Shanghai (UTC+8)
         const timestamp = moment().tz("Asia/Shanghai").format("YYYY-MM-DD HH:mm:ss");
 
+        // === Payload yang dikirim ke Lazada ===
+        const payload = {
+            getDocumentReq: {
+                doc_type: "PDF",
+                packages: [{ package_id: package_number }],
+                print_item_list: false,
+            },
+        };
+
         const sysParams = {
-            access_token: accessToken,
             app_key: appKey,
+            access_token: accessToken,
             sign_method: "sha256",
             timestamp,
             v: "1.0",
+            payload: JSON.stringify(payload), // 🔥 WAJIB masukkan payload ke signature!
         };
 
+        // === Generate Signature ===
         const sortedKeys = Object.keys(sysParams).sort();
         let baseString = apiPath;
         for (const key of sortedKeys) {
@@ -1564,23 +1574,19 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        const query = new URLSearchParams({ ...sysParams, sign }).toString();
+        // === Buat URL dengan parameter sistem (kecuali payload) ===
+        const { payload: _, ...queryParams } = sysParams;
+        const query = new URLSearchParams({ ...queryParams, sign }).toString();
         const url = `${baseUrl}${apiPath}?${query}`;
 
-        const payload = {
-            getDocumentReq: {
-                doc_type: "PDF",
-                packages: [{ package_id: package_number }],
-                print_item_list: false,
-            },
-        };
-
+        // === Kirim request POST ===
         const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
             timeout: 30000,
         });
 
-        if (response.data?.success && response.data?.data?.document_base64) {
+        // === Jika sukses, kirimkan PDF ke client ===
+        if (response.data?.data?.document_base64) {
             const pdfBase64 = response.data.data.document_base64;
             const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
@@ -1592,6 +1598,7 @@ const printLazadaResi = async (req, res) => {
             return res.send(pdfBuffer);
         }
 
+        // === Kalau gagal ===
         return res.status(400).json({
             success: false,
             message: response.data?.error_msg || "Gagal generate resi Lazada",
