@@ -1395,6 +1395,127 @@ const getWarehouseBySeller = async (req, res) => {
     }
 };
 
+const aturPickup = async (req, res) => {
+    try {
+        const { order_id, driverName } = req.body;
+
+        if (!order_id || !driverName) {
+            return res.status(400).json({
+                success: false,
+                message: "'order_id' dan 'driverName' wajib dikirim"
+            });
+        }
+
+        // Ambil token Lazada
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan" });
+        }
+
+        const accessToken = lazadaData.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const baseUrl = "https://api.lazada.co.id/rest";
+        const apiPath = "/logistics/tps/runsheets/stops";
+
+        // Ambil sellerId dan warehouseCode
+        const sellerResp = await axios.get(`${baseUrl}/seller/get`, {
+            params: {
+                app_key: apiKey,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp: Date.now().toString(),
+                v: "1.0",
+                sign: generateSign("/seller/get", {
+                    app_key: apiKey,
+                    access_token: accessToken,
+                    sign_method: "sha256",
+                    timestamp: Date.now().toString(),
+                    v: "1.0"
+                }, appSecret)
+            }
+        });
+
+        const sellerId = sellerResp.data?.data?.seller_id;
+        if (!sellerId) throw new Error("Gagal ambil sellerId");
+
+        const warehouseResp = await axios.get(`${baseUrl}/rc/warehouse/get`, {
+            params: {
+                app_key: apiKey,
+                access_token: accessToken,
+                sign_method: "sha256",
+                timestamp: Date.now().toString(),
+                v: "1.0",
+                sign: generateSign("/rc/warehouse/get", {
+                    app_key: apiKey,
+                    access_token: accessToken,
+                    sign_method: "sha256",
+                    timestamp: Date.now().toString(),
+                    v: "1.0"
+                }, appSecret)
+            }
+        });
+
+        const warehouseList = warehouseResp.data?.result?.module;
+        if (!warehouseList || warehouseList.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Warehouse Lazada kosong"
+            });
+        }
+
+        // Ambil warehouseCode pertama (default)
+        const warehouseCode = warehouseList[0].code;
+
+        // Siapkan payload wajib
+        const payload = {
+            stopId: `STOP-${order_id}`,       // stopId unik
+            sellerId: String(sellerId),
+            warehouseCode: warehouseCode,
+            pickupType: "Drop-off",
+            status: "planned",
+            statusUpdateTime: Date.now(),
+            driverName
+        };
+
+        // Generate signature untuk POST
+        const timestamp = Date.now().toString();
+        const sign = generateSign(apiPath, {
+            ...payload,
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0"
+        }, appSecret);
+
+        const postUrl = `${baseUrl}${apiPath}?${new URLSearchParams({
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
+            v: "1.0",
+            sign
+        }).toString()}`;
+
+        const response = await axios.post(postUrl, payload);
+
+        res.json({
+            success: true,
+            message: "Pickup berhasil diatur",
+            data: response.data
+        });
+
+    } catch (err) {
+        console.error("❌ Error aturPickup:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            message: "Gagal atur pickup",
+            error: err.response?.data || err.message
+        });
+    }
+};
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
@@ -1412,5 +1533,6 @@ module.exports = {
     getLazadaOrdersWithItems,
     getLazadaReadyOrdersWithItems,
     getSeller,
-    getWarehouseBySeller
+    getWarehouseBySeller,
+    aturPickup
 };

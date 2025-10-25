@@ -17,7 +17,8 @@ const {
     getLazadaOrdersWithItems,
     getLazadaReadyOrdersWithItems,
     getSeller,
-    getWarehouseBySeller
+    getWarehouseBySeller,
+    aturPickup
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -38,5 +39,6 @@ router.get("/orders/full", getLazadaOrdersWithItems);
 router.get("/ready/orders/full", getLazadaReadyOrdersWithItems);
 router.get("/seller",getSeller);
 router.get("/warehouse", getWarehouseBySeller);
+router.post("/atur-pickup", aturPickup);
 
 module.exports = router;
