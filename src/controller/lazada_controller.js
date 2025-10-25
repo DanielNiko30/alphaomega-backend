@@ -1565,8 +1565,11 @@ const printLazadaResi = async (req, res) => {
             }
         };
 
-        // Signature harus pake payload string
         const payloadStr = JSON.stringify(payloadObj);
+
+        // ======================
+        // Generate signature
+        // ======================
         const generateSign = (apiPath, allParams, appSecret) => {
             const sortedKeys = Object.keys(allParams).sort();
             let baseStr = apiPath;
@@ -1588,8 +1591,8 @@ const printLazadaResi = async (req, res) => {
         // ======================
         console.log("=== Lazada Print Resi Debug ===");
         console.log("URL:", url);
-        console.log("Payload:", payloadObj);
-        console.log("Payload string (for sign):", payloadStr);
+        console.log("Payload object:", payloadObj);
+        console.log("Payload string:", payloadStr);
         console.log("Sign:", sign);
         console.log("===============================");
 
