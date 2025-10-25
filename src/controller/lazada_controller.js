@@ -1561,6 +1561,9 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
+        const accessToken = lazadaData.access_token.trim();
+        const appKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
 
@@ -1580,7 +1583,7 @@ const printLazadaResi = async (req, res) => {
             }
         };
 
-        const { sign, baseString } = generateSignPOST(apiPath, sysParams, APP_SECRET, payloadObj);
+        const { sign, baseString } = generateSignPOST(apiPath, sysParams, appSecret, payloadObj);
 
         console.log("Base string:", baseString);
         console.log("Sign:", sign);
