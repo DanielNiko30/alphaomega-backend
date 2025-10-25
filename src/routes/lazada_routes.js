@@ -15,7 +15,9 @@ const {
     getFullOrderDetailLazada,
     getLazadaOrders,
     getLazadaOrdersWithItems,
-    getLazadaReadyOrdersWithItems
+    getLazadaReadyOrdersWithItems,
+    getSeller,
+    getWarehouseBySeller
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -34,5 +36,7 @@ router.get("/order/detail", getFullOrderDetailLazada);
 router.get("/orders", getLazadaOrders);
 router.get("/orders/full", getLazadaOrdersWithItems);
 router.get("/ready/orders/full", getLazadaReadyOrdersWithItems);
+router.get("/seller",getSeller);
+router.get("/warehouse", getWarehouseBySeller);
 
 module.exports = router;

@@ -572,99 +572,6 @@ const createProductLazada = async (req, res) => {
     }
 };
 
-// const createDummyProduct = async (req, res) => {
-//     try {
-//         // 1️⃣ Ambil akun Lazada
-//         const account = await Lazada.findOne();
-//         if (!account) throw new Error("Tidak ada account Lazada di DB");
-
-//         const accessToken = account.access_token.trim();
-//         const apiKey = process.env.LAZADA_APP_KEY.trim();
-//         const appSecret = process.env.LAZADA_APP_SECRET.trim();
-
-//         const apiPath = "/product/create";
-//         const timestamp = Date.now().toString();
-//         const uniqueSuffix = Date.now().toString().slice(-6);
-
-//         // 2️⃣ Pakai URL gambar langsung
-//         const uploadedImageUrl =
-//             "https://ae01.alicdn.com/kf/S4b0a02ef50ab42ac805f39ab31d4cf30r/3-Pieces-Boho-Canvas-Tote-Bag-Reusable-Aesthetic-Canvas-Bag-Minimalist-Canvas-Totes-School-Shoulder-Bag-For.jpg";
-
-//         console.log("✅ Menggunakan gambar URL langsung:", uploadedImageUrl);
-
-//         // 3️⃣ Payload produk (kategori: Tote Bag Wanita - 17935)
-//         const sysParams = {
-//             app_key: apiKey,
-//             access_token: accessToken,
-//             sign_method: "sha256",
-//             timestamp,
-//             v: "1.0",
-//         };
-
-//         const productObj = {
-//             Request: {
-//                 Product: {
-//                     PrimaryCategory: "18469", // Tote Bag Wanita
-//                     Images: { Image: [uploadedImageUrl] },
-//                     Attributes: {
-//                         name: "TEST-TOTE-BAG-" + uniqueSuffix,
-//                         brand: "No Brand",
-//                         description:
-//                             "Tas Tote Bag Wanita (Canvas) untuk percobaan API Lazada.",
-//                         short_description: "Tote Bag Kanvas API Test.",
-//                         Net_Weight: "500 g",
-//                     },
-//                     Skus: {
-//                         Sku: [
-//                             {
-//                                 SellerSku: "SKU-TOTE-" + uniqueSuffix,
-//                                 quantity: 3,
-//                                 price: 1000,
-//                                 package_height: 3,
-//                                 package_length: 35,
-//                                 package_width: 30,
-//                                 package_weight: 0.2,
-//                                 package_content: "1x Tote Bag Wanita",
-//                             },
-//                         ],
-//                     },
-//                 },
-//             },
-//         };
-
-//         // 4️⃣ Signing & Request
-//         const jsonBody = JSON.stringify(productObj);
-//         const allParamsForSign = { ...sysParams, payload: jsonBody };
-//         const sign = generateSign(apiPath, allParamsForSign, appSecret);
-
-//         const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
-//             ...sysParams,
-//             sign,
-//         }).toString()}`;
-
-//         const bodyForRequest = new URLSearchParams({ payload: jsonBody });
-
-//         // 5️⃣ Kirim request
-//         const response = await axios.post(url, bodyForRequest, {
-//             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-//         });
-
-//         // ✅ Success
-//         res.json({
-//             success: true,
-//             message: "Produk dummy berhasil dibuat (kategori Tote Bag Wanita).",
-//             image_used: uploadedImageUrl,
-//             lazada_response: response.data,
-//         });
-//     } catch (err) {
-//         console.error("❌ Create Dummy Product Error:", err.response?.data || err.message);
-//         res.status(500).json({
-//             error: err.response?.data || err.message,
-//             message: "Gagal membuat produk dummy ke Lazada.",
-//         });
-//     }
-// };
-
 const getProductItemLazada = async (req, res) => {
     try {
         const { item_id } = req.query;
@@ -1397,6 +1304,86 @@ const getLazadaReadyOrdersWithItems = async (req, res) => {
     }
 };
 
+const getSeller = async (req, res) => {
+    try {
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan" });
+        }
+
+        const accessToken = lazadaData.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const baseUrl = "https://api.lazada.co.id/rest";
+        const apiPath = "/seller/get";
+
+        const params = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp: Date.now().toString(),
+            v: "1.0",
+        };
+
+        const sign = generateSign(apiPath, params, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...params, sign }).toString()}`;
+
+        const response = await axios.get(url);
+        res.json({
+            success: true,
+            message: "Berhasil ambil info seller",
+            data: response.data?.data || {},
+        });
+    } catch (err) {
+        console.error("❌ Error getSeller:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            message: "Gagal ambil info seller",
+            error: err.response?.data || err.message,
+        });
+    }
+};
+
+const getWarehouseBySeller = async (req, res) => {
+    try {
+        const lazadaData = await Lazada.findOne();
+        if (!lazadaData?.access_token) {
+            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan" });
+        }
+
+        const accessToken = lazadaData.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const baseUrl = "https://api.lazada.co.id/rest";
+        const apiPath = "/rc/warehouse/get";
+
+        const params = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: "sha256",
+            timestamp: Date.now().toString(),
+            v: "1.0"
+        };
+
+        const sign = generateSign(apiPath, params, appSecret);
+        const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...params, sign }).toString()}`;
+
+        const response = await axios.get(url);
+
+        res.json({
+            success: true,
+            message: "Berhasil ambil daftar warehouse seller",
+            data: response.data?.result?.success || []
+        });
+    } catch (err) {
+        console.error("❌ Error getWarehouseBySeller:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            message: "Gagal ambil daftar warehouse seller",
+            error: err.response?.data || err.message
+        });
+    }
+};
 
 module.exports = {
     generateLoginUrl,
@@ -1414,4 +1401,6 @@ module.exports = {
     getLazadaOrders,
     getLazadaOrdersWithItems,
     getLazadaReadyOrdersWithItems,
+    getSeller,
+    getWarehouseBySeller
 };
