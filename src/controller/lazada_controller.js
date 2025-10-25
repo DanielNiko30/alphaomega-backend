@@ -1568,7 +1568,7 @@ const printLazadaResi = async (req, res) => {
         const payloadStr = JSON.stringify(payloadObj);
 
         // ======================
-        // Generate signature
+        // Generate signature sama persis seperti createProduct
         // ======================
         const generateSign = (apiPath, allParams, appSecret) => {
             const sortedKeys = Object.keys(allParams).sort();
@@ -1599,11 +1599,11 @@ const printLazadaResi = async (req, res) => {
         console.log("===============================");
 
         // ======================
-        // Request ke Lazada
+        // Kirim request ke Lazada
         // ======================
-        const bodyForRequest = new URLSearchParams({ payload: payloadStr });
+        const bodyForRequest = new URLSearchParams({ payload: payloadStr }).toString();
 
-        const response = await axios.post(url, bodyForRequest.toString(), {
+        const response = await axios.post(url, bodyForRequest, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
