@@ -18,7 +18,8 @@ const {
     getLazadaReadyOrdersWithItems,
     getSeller,
     getWarehouseBySeller,
-    aturPickup
+    aturPickup,
+    printLazadaResi
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -40,5 +41,7 @@ router.get("/ready/orders/full", getLazadaReadyOrdersWithItems);
 router.get("/seller",getSeller);
 router.get("/warehouse", getWarehouseBySeller);
 router.post("/atur-pickup", aturPickup);
+router.post("/print-resi", printLazadaResi);
+
 
 module.exports = router;
