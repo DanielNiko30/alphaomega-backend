@@ -1584,6 +1584,9 @@ const printLazadaResi = async (req, res) => {
 
         const sign = generateSign(apiPath, { ...sysParams, payload: payloadStr }, appSecret);
 
+        // ======================
+        // URL final
+        // ======================
         const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         // ======================
@@ -1597,32 +1600,42 @@ const printLazadaResi = async (req, res) => {
         console.log("===============================");
 
         // ======================
-        // Request ke Lazada
+        // POST body sebagai x-www-form-urlencoded
         // ======================
-        const response = await axios.post(url, payloadObj, {
-            headers: { "Content-Type": "application/json" },
+        const bodyForRequest = new URLSearchParams({ payload: payloadStr });
+
+        const response = await axios.post(url, bodyForRequest.toString(), {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            timeout: 30000,
         });
 
+        // ======================
+        // Success
+        // ======================
         if (response.data?.success && response.data?.data?.document_base64) {
             const pdfBase64 = response.data.data.document_base64;
             const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
-            res.send(pdfBuffer);
-        } else {
-            return res.status(400).json({
-                success: false,
-                message: response.data?.error_msg || "Gagal generate resi Lazada",
-                raw: response.data,
-                debug: {
-                    sysParams,
-                    payload: payloadObj,
-                    payloadStr,
-                    sign,
-                }
-            });
+            return res.send(pdfBuffer);
         }
+
+        // ======================
+        // Kalau gagal
+        // ======================
+        return res.status(400).json({
+            success: false,
+            message: response.data?.error_msg || "Gagal generate resi Lazada",
+            raw: response.data,
+            debug: {
+                sysParams,
+                payload: payloadObj,
+                payloadStr,
+                sign,
+            }
+        });
+
     } catch (err) {
         console.error("❌ Error printLazadaResi:", err.response?.data || err.message);
         return res.status(500).json({
