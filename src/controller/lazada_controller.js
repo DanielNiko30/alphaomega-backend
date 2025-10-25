@@ -1588,7 +1588,7 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
         const timestamp = Date.now().toString();
 
-        // ✅ Payload harus JSON murni (bukan stringified JSON di dalam string)
+        // ✅ Payload dalam bentuk JSON murni
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1598,18 +1598,21 @@ const printLazadaResi = async (req, res) => {
         };
         const payloadJSON = JSON.stringify(payloadObj);
 
-        // === System Params (urutan manual, bukan sort)
+        // === System Params
         const sysParams = {
             app_key: appKey,
-            timestamp,
-            sign_method: "sha256",
             access_token: accessToken,
+            sign_method: "sha256",
+            timestamp,
             v: "1.0",
         };
 
-        // === Buat base string (urutan sesuai di atas)
+        // === ⛏️ Urutkan semua parameter secara ASCII
+        const sortedKeys = Object.keys(sysParams).sort();
+
+        // === Bentuk base string sesuai aturan resmi Lazada
         let baseString = apiPath;
-        for (const key of Object.keys(sysParams)) {
+        for (const key of sortedKeys) {
             baseString += key + sysParams[key];
         }
         baseString += payloadJSON;
@@ -1625,7 +1628,7 @@ const printLazadaResi = async (req, res) => {
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
         const url = `${baseUrl}${apiPath}?${query}`;
 
-        // === POST body (form-urlencoded)
+        // === Body (form-urlencoded)
         const body = `payload=${payloadJSON}`;
 
         const response = await axios.post(url, body, {
