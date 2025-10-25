@@ -1527,6 +1527,7 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
+        // Ambil token Lazada dari DB
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
             return res.status(400).json({
@@ -1541,17 +1542,23 @@ const printLazadaResi = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
         const apiPath = "/order/package/document/get";
 
+        // ======================
+        // Request body
+        // ======================
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
                 packages: [
                     { package_number: package_id }
                 ],
-                print_item_list: false, // hanya cetak AWB tanpa item
+                print_item_list: false,
             },
         };
         const payload = JSON.stringify(payloadObj);
 
+        // ======================
+        // System parameters
+        // ======================
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -1560,9 +1567,35 @@ const printLazadaResi = async (req, res) => {
             v: "1.0",
         };
 
+        // ======================
+        // Generate signature
+        // ======================
         const sign = generateSign(apiPath, { ...sysParams, payload }, appSecret);
+
+        // ======================
+        // Base string untuk debugging
+        // ======================
+        const sortedKeys = Object.keys({ ...sysParams, payload }).sort();
+        let baseString = apiPath;
+        for (const key of sortedKeys) {
+            baseString += key + { ...sysParams, payload }[key];
+        }
+
+        console.log("=== Lazada Print AWB Debug ===");
+        console.log("Payload:", payload);
+        console.log("System Params:", sysParams);
+        console.log("Base string for signature:", baseString);
+        console.log("Generated sign:", sign);
+        console.log("==============================");
+
+        // ======================
+        // URL final
+        // ======================
         const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
+        // ======================
+        // POST request ke Lazada
+        // ======================
         const response = await axios.post(url, payload, {
             headers: {
                 "Content-Type": "application/json",
@@ -1580,10 +1613,17 @@ const printLazadaResi = async (req, res) => {
             );
             res.send(pdfBuffer);
         } else {
+            console.error("❌ Lazada generate resi failed:", response.data);
             return res.status(400).json({
                 success: false,
                 message: response.data?.error_msg || "Gagal generate resi Lazada",
                 raw: response.data,
+                debug: {
+                    payload,
+                    sysParams,
+                    baseString,
+                    sign,
+                },
             });
         }
 
