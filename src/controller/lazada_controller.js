@@ -1527,6 +1527,7 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
+        // Ambil token Lazada
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
             return res.status(400).json({
@@ -1542,6 +1543,9 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
         const timestamp = Date.now().toString();
 
+        // ======================
+        // System params Lazada
+        // ======================
         const sysParams = {
             app_key: apiKey,
             access_token: accessToken,
@@ -1550,6 +1554,9 @@ const printLazadaResi = async (req, res) => {
             v: "1.0",
         };
 
+        // ======================
+        // Payload JSON object
+        // ======================
         const payloadObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1560,21 +1567,22 @@ const printLazadaResi = async (req, res) => {
 
         const payloadStr = JSON.stringify(payloadObj);
 
-        // Generate signature
-        const generateSign = (apiPath, allParams, appSecret) => {
-            const sortedKeys = Object.keys(allParams).sort();
-            let baseStr = apiPath;
-            for (const key of sortedKeys) {
-                baseStr += key + allParams[key];
-            }
-            return crypto.createHmac("sha256", appSecret)
-                .update(baseStr, "utf8")
-                .digest("hex")
-                .toUpperCase();
-        };
+        // ======================
+        // Generate signature khusus Print AWB
+        // ======================
+        const sortedKeys = Object.keys({ ...sysParams, payload: payloadStr }).sort();
+        let baseString = apiPath;
+        for (const key of sortedKeys) {
+            baseString += key + { ...sysParams, payload: payloadStr }[key];
+        }
+        const sign = crypto.createHmac("sha256", appSecret)
+            .update(baseString, "utf8")
+            .digest("hex")
+            .toUpperCase();
 
-        const sign = generateSign(apiPath, { ...sysParams, payload: payloadStr }, appSecret);
-
+        // ======================
+        // URL final
+        // ======================
         const url = `${baseUrl}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
         console.log("=== Lazada Print Resi Debug ===");
@@ -1583,7 +1591,9 @@ const printLazadaResi = async (req, res) => {
         console.log("Sign:", sign);
         console.log("===============================");
 
-        // POST JSON object
+        // ======================
+        // POST request JSON
+        // ======================
         const response = await axios.post(url, payloadObj, {
             headers: { "Content-Type": "application/json" },
         });
