@@ -1543,7 +1543,7 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
 
         // ✅ Lazada pakai timezone Shanghai (UTC+8)
-        const timestamp = moment().tz("Asia/Shanghai").format("YYYY-MM-DD HH:mm:ss");
+        const timestamp = Date.now().toString();
 
         // === Payload yang dikirim ke Lazada ===
         const payload = {
