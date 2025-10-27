@@ -1546,10 +1546,13 @@ const printLazadaResi = async (req, res) => {
                 print_item_list: true,
             },
         };
-        // Stringify body tanpa formatting
-        const jsonPayload = JSON.stringify(requestBodyObj);
 
-        // 🔹 2. System Params
+        // 🔹 2. Stringify dan URL Encode Payload
+        const rawJsonString = JSON.stringify(requestBodyObj);
+        // ⚡ MODIFIKASI KRITIS: URL Encode payload sebelum signing
+        const encodedPayload = encodeURIComponent(rawJsonString);
+
+        // 🔹 3. System Params
         const sysParams = {
             app_key,
             access_token, // Termasuk access_token di-sign
@@ -1558,19 +1561,19 @@ const printLazadaResi = async (req, res) => {
             v: "1.0",
         };
 
-        // 🔹 3. Gabungkan semua untuk Signing (System Params + 'payload')
-        // Ini memastikan `payload` diurutkan bersama dengan parameter lainnya.
-        const allParamsForSign = { ...sysParams, payload: jsonPayload };
+        // 🔹 4. Gabungkan semua untuk Signing (System Params + 'payload' yang SUDAH DI-ENCODE)
+        const allParamsForSign = { ...sysParams, payload: encodedPayload };
 
-        // 🔹 4. Generate signature menggunakan fungsi utility yang sudah ada
+        // 🔹 5. Generate signature
         const sign = generateSign(apiPath, allParamsForSign, app_secret);
 
-        // 🔹 5. Build URL Query
-        // Semua system params (termasuk access_token) + sign dikirimkan di query string
+        // 🔹 6. Build URL Query
+        // URL query TIDAK perlu menyertakan parameter `payload` yang di-sign, 
+        // karena body dikirim via POST request.
         const queryParams = { ...sysParams, sign };
         const url = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
 
-        // 🔹 6. Send POST Request (body dikirim sebagai JSON)
+        // 🔹 7. Send POST Request (body dikirim sebagai JSON)
         const response = await axios.post(url, requestBodyObj, {
             headers: { "Content-Type": "application/json" },
         });
