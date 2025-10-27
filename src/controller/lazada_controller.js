@@ -1517,71 +1517,79 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateLazadaSignOfficial(apiName, params, body, appSecret) {
-    // 1️⃣ Urutkan semua parameter ASC (kecuali sign)
-    const sortedKeys = Object.keys(params)
-        .filter((k) => k !== "sign")
-        .sort();
-
-    // 2️⃣ Susun baseString
-    let baseString = apiName;
-    for (const key of sortedKeys) {
-        const value = params[key];
-        if (value !== undefined && value !== null && value !== "") {
-            baseString += key + value;
-        }
-    }
-
-    // 3️⃣ Tambahkan body di akhir (kalau ada)
-    if (body) baseString += body;
-
-    // 4️⃣ Buat hash HMAC-SHA256
-    const sign = crypto
-        .createHmac("sha256", appSecret)
-        .update(baseString, "utf8")
-        .digest("hex")
-        .toUpperCase();
-
-    return { sign, baseString };
+function hmacSign(appSecret, baseString) {
+    return crypto.createHmac("sha256", appSecret).update(baseString, "utf8").digest("hex").toUpperCase();
 }
 
-// 🧾 Print Resi Lazada (AWB)
+function buildBaseString(apiName, paramsForSign, bodyStr, options = {}) {
+    // paramsForSign: object of string values
+    // options: { appendApiSuffix: boolean, prependApiAgain: boolean }
+    const keys = Object.keys(paramsForSign).sort(); // ASCII order
+    let s = apiName;
+    for (const k of keys) {
+        const v = paramsForSign[k];
+        if (v !== undefined && v !== null && String(v) !== "") {
+            s += k + String(v);
+        }
+    }
+    if (bodyStr) s += bodyStr;
+    if (options.appendApiSuffix) s += apiName;
+    if (options.prependApiAgain) s = apiName + s; // rare
+    return s;
+}
+
+async function trySignVariant(apiName, baseUrl, allQueryParams, paramsForSign, bodyStr, appSecret, options = {}) {
+    // build base string with options and compute sign
+    const baseString = buildBaseString(apiName, paramsForSign, bodyStr, options);
+    const sign = hmacSign(appSecret, baseString);
+
+    // build URL query (we always include access_token/v in the URL if present in allQueryParams)
+    const queryObj = { ...allQueryParams, sign };
+    const url = `${baseUrl}${apiName}?${new URLSearchParams(queryObj).toString()}`;
+
+    // send request (bodyStr must be raw string)
+    try {
+        const resp = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/json" },
+            timeout: 30000,
+        });
+        return {
+            ok: true,
+            status: resp.status,
+            data: resp.data,
+            debug: { option: options, baseString, sign, url },
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            status: err.response?.status || null,
+            error: err.response?.data || err.message,
+            debug: { option: options, baseString, sign, url, axiosErrConfig: err.config ? { url: err.config.url, data: err.config.data } : undefined },
+        };
+    }
+}
+
+// Controller utama: coba beberapa pattern sampai sukses
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
-        if (!package_id) {
-            return res.status(400).json({
-                success: false,
-                message: "package_id wajib diisi",
-            });
-        }
+        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib diisi" });
 
-        // 🔹 Ambil token dari DB
-        const tokenData = await Lazada.findOne();
-        if (!tokenData) {
-            return res.status(400).json({
-                success: false,
-                message: "Access token tidak ditemukan di database",
-            });
-        }
+        const tokenRow = await Lazada.findOne();
+        if (!tokenRow || !tokenRow.access_token) return res.status(400).json({ success: false, message: "Access token tidak ditemukan di DB" });
 
-        const access_token = tokenData.access_token;
-        const app_key = process.env.LAZADA_APP_KEY;
-        const app_secret = process.env.LAZADA_APP_SECRET;
-        const timestamp = Date.now();
-        const sign_method = "sha256";
+        const access_token = String(tokenRow.access_token).trim();
+        const app_key = String(process.env.LAZADA_APP_KEY || "").trim();
+        const app_secret = String(process.env.LAZADA_APP_SECRET || "").trim();
+        if (!app_key || !app_secret) return res.status(500).json({ success: false, message: "LAZADA_APP_KEY / LAZADA_APP_SECRET belum diset" });
+
         const apiName = "/order/package/document/get";
+        const baseUrl = "https://api.lazada.co.id/rest";
+        const timestamp = String(Date.now());
+        const sign_method = "sha256";
+        const v = "1.0";
 
-        // 🔹 Params sistem (semua string)
-        const sysParams = {
-            access_token: String(access_token),
-            app_key: String(app_key),
-            sign_method: sign_method,
-            timestamp: String(timestamp),
-            v: "1.0",
-        };
-
-        // 🔹 Body JSON
+        // body string (must be identical to what's sent)
         const bodyObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1591,44 +1599,77 @@ const printLazadaResi = async (req, res) => {
         };
         const bodyStr = JSON.stringify(bodyObj);
 
-        // 🔹 Generate sign
-        const { sign, baseString } = generateLazadaSignOfficial(
-            apiName,
-            sysParams,
-            bodyStr,
-            app_secret
-        );
+        // prepare "allQueryParams" (what we will actually send in the URL)
+        const allQueryParams = {
+            access_token,
+            app_key,
+            sign_method,
+            timestamp,
+            v,
+        };
 
-        // 🔹 Buat URL dengan query string
-        const query = new URLSearchParams({ ...sysParams, sign }).toString();
-        const url = `https://api.lazada.co.id/rest${apiName}?${query}`;
+        // Prepare variants to try:
+        // Each variant defines: paramsForSign (which keys used in base string) and options (appendApiSuffix etc)
+        const variants = [
+            // Variant A: include access_token + v + body (your current style)
+            { paramsForSign: { access_token, app_key, sign_method, timestamp, v }, options: {} },
 
-        // 🔹 POST ke Lazada API
-        const response = await axios.post(url, bodyStr, {
-            headers: { "Content-Type": "application/json" },
-        });
+            // Variant B: exclude access_token from sign (include v)
+            { paramsForSign: { app_key, sign_method, timestamp, v }, options: {} },
 
-        res.json({
-            success: true,
-            message: "Berhasil generate resi Lazada",
-            data: response.data,
-            debug: {
-                url,
-                body: bodyObj,
-                baseString,
-                sign,
-            },
-        });
-    } catch (err) {
-        console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
-        res.status(500).json({
+            // Variant C: exclude v, include access_token
+            { paramsForSign: { access_token, app_key, sign_method, timestamp }, options: {} },
+
+            // Variant D: exclude both access_token and v
+            { paramsForSign: { app_key, sign_method, timestamp }, options: {} },
+
+            // Variant E: include body, but append api suffix at end (apiName appended)
+            { paramsForSign: { app_key, sign_method, timestamp }, options: { appendApiSuffix: true } },
+
+            // Variant F: same as D but prepend api again (rare)
+            { paramsForSign: { app_key, sign_method, timestamp }, options: { prependApiAgain: true } },
+        ];
+
+        const results = [];
+        let successResult = null;
+
+        for (const variant of variants) {
+            const r = await trySignVariant(apiName, baseUrl, allQueryParams, variant.paramsForSign, bodyStr, app_secret, variant.options);
+            results.push(r);
+            if (r.ok) {
+                successResult = r;
+                break;
+            }
+            // small throttle not necessary but can be added
+        }
+
+        if (successResult) {
+            // Return success with which variant worked
+            return res.json({
+                success: true,
+                message: "Sukses generate resi (found working variant)",
+                data: successResult.data,
+                debug: { tried: results.map((x) => x.debug), working: successResult.debug },
+            });
+        }
+
+        // If no variant worked, return all debug info for inspection
+        return res.status(500).json({
             success: false,
-            message: "Gagal generate resi Lazada",
-            raw: err.response?.data || err.message,
+            message: "Semua varian sign dicoba tetapi Lazada masih menolak signature (IncompleteSignature).",
+            debugAttempts: results.map((r) => ({
+                ok: r.ok,
+                status: r.status,
+                error: r.error,
+                debug: r.debug,
+            })),
+            hint: "Cek: app_secret, access_token validity, server time drift (NTP), dan pastikan bodyStr identik dengan yang diterima.",
         });
+    } catch (e) {
+        console.error("printLazadaResi - unexpected error:", e);
+        return res.status(500).json({ success: false, message: e.message, stack: e.stack });
     }
 };
-
 
 module.exports = {
     generateLoginUrl,
