@@ -1517,122 +1517,85 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateSignPOST(apiPath, sysParams, appSecret, payloadObj) {
-    // Hapus access_token (tidak ikut disign)
-    const filtered = { ...sysParams };
-    delete filtered.access_token;
-
-    // Urutkan key secara ASCII
-    const sortedKeys = Object.keys(filtered).sort();
-
-    // Bangun baseString
-    let baseString = apiPath;
-    for (const key of sortedKeys) {
-        baseString += key + filtered[key];
-    }
-
-    // Tambahkan body payload (TANPA spasi & baris baru)
-    const payloadStr =
-        typeof payloadObj === "string"
-            ? payloadObj
-            : JSON.stringify(payloadObj).replace(/\s+/g, "");
-
-    baseString += payloadStr; // ⚠️ tanpa "payload" di depannya
-
-    // HMAC-SHA256
-    const sign = crypto
-        .createHmac("sha256", appSecret)
-        .update(baseString, "utf8")
-        .digest("hex")
-        .toUpperCase();
-
-    return { sign, baseString };
-}
-
 const printLazadaResi = async (req, res) => {
     try {
-        const { package_number } = req.body;
-        if (!package_number)
-            return res
-                .status(400)
-                .json({ success: false, message: "Parameter 'package_number' wajib dikirim di body" });
-
-        // Ambil data Lazada dari DB
-        const lazadaData = await Lazada.findOne();
-        if (!lazadaData?.access_token)
-            return res.status(400).json({
-                success: false,
-                message: "Token Lazada tidak ditemukan di database",
-            });
-
-        const accessToken = lazadaData.access_token.trim();
-        const appKey = process.env.LAZADA_APP_KEY.trim();
-        const appSecret = process.env.LAZADA_APP_SECRET.trim();
-        const baseUrl = "https://api.lazada.co.id/rest";
-        const apiPath = "/order/package/document/get";
-        const timestamp = Date.now().toString();
-
-        // === Payload
-        const payloadObj = {
-            getDocumentReq: {
-                doc_type: "PDF",
-                packages: [{ package_id: package_number }],
-                print_item_list: false,
-            },
-        };
-        const payloadJSON = JSON.stringify(payloadObj);
-
-        // === System params (tanpa access_token di sign)
-        const sysParams = {
-            app_key: appKey,
-            sign_method: "sha256",
-            timestamp,
-            v: "1.0",
-        };
-
-        // ✅ Generate signature (tanpa access_token)
-        const { sign, baseString } = generateSignPOST(apiPath, sysParams, appSecret, payloadJSON);
-
-        // === URL final (access_token ditambahkan di URL)
-        const query = new URLSearchParams({
-            ...sysParams,
-            access_token: accessToken,
-            sign,
-        }).toString();
-
-        const url = `${baseUrl}${apiPath}?${query}`;
-
-        // === Kirim body sebagai form-urlencoded
-        const body = `payload=${payloadJSON}`;
-
-        const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            timeout: 30000,
-        });
-
-        if (response.data?.data?.document_base64) {
-            const pdfBuffer = Buffer.from(response.data.data.document_base64, "base64");
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename=resi_${package_number}.pdf`);
-            return res.send(pdfBuffer);
+        const { package_id } = req.body;
+        if (!package_id) {
+            return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
-        return res.status(400).json({
-            success: false,
-            message: response.data?.error_msg || "Gagal generate resi Lazada",
-            raw: response.data,
-            debug: { sysParams, payloadObj, baseString, sign, url },
+        // 🔹 Ambil access_token dari DB (contoh ambil token user pertama)
+        const tokenData = await LazadaToken.findOne();
+        if (!tokenData) {
+            return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
+        }
+
+        const access_token = tokenData.access_token;
+        const app_key = process.env.LAZADA_APP_KEY;
+        const app_secret = process.env.LAZADA_APP_SECRET;
+
+        const api = "/order/package/document/get";
+        const url = "https://api.lazada.co.id/rest" + api;
+        const timestamp = Date.now();
+        const sign_method = "sha256";
+
+        // 🔹 System params
+        const params = {
+            app_key,
+            sign_method,
+            timestamp,
+            access_token,
+        };
+
+        // 🔹 Body request
+        const body = {
+            getDocumentReq: {
+                doc_type: "PDF",
+                packages: [{ package_id }],
+                print_item_list: true,
+            },
+        };
+
+        // 🔹 Sort params ASC
+        const sortedKeys = Object.keys(params).sort();
+
+        // 🔹 Build base string
+        let baseString = api;
+        for (const key of sortedKeys) {
+            baseString += key + params[key];
+        }
+        baseString += JSON.stringify(body);
+
+        // 🔹 Generate HMAC SHA256 signature
+        const sign = crypto
+            .createHmac("sha256", app_secret)
+            .update(baseString)
+            .digest("hex")
+            .toUpperCase();
+
+        // 🔹 Build URL with params
+        const query = new URLSearchParams({ ...params, sign }).toString();
+        const endpoint = `${url}?${query}`;
+
+        // 🔹 Call Lazada API
+        const response = await axios.post(endpoint, body, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        res.json({
+            success: true,
+            message: "Berhasil generate resi Lazada",
+            data: response.data,
         });
     } catch (err) {
-        console.error("❌ Error printLazadaResi:", err.response?.data || err.message);
-        return res.status(500).json({
+        console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
+        res.status(500).json({
             success: false,
-            message: "Server error saat generate resi Lazada",
-            error: err.response?.data || err.message,
+            message: "Gagal generate resi Lazada",
+            raw: err.response?.data || err.message,
         });
     }
 };
-
 
 module.exports = {
     generateLoginUrl,
