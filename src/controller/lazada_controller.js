@@ -1521,19 +1521,12 @@ const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
         if (!package_id) {
-            return res.status(400).json({
-                success: false,
-                message: "package_id wajib diisi",
-            });
+            return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
-        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
-            return res.status(400).json({
-                success: false,
-                message: "Access token tidak ditemukan di database",
-            });
+            return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
         }
 
         const access_token = tokenData.access_token;
@@ -1541,21 +1534,25 @@ const printLazadaResi = async (req, res) => {
         const app_secret = process.env.LAZADA_APP_SECRET;
 
         const api = "/order/package/document/get";
-        const baseUrl = "https://api.lazada.co.id/rest" + api;
+        const url = "https://api.lazada.co.id/rest" + api;
         const timestamp = Date.now();
         const sign_method = "sha256";
-        const v = "1.0"; // ✅ tambahkan versi API (lazada butuh v=1.0)
+        const v = "1.0";
 
-        // 🔹 System params
-        const params = {
+        // 🔹 System params for signature (TANPA access_token)
+        const signParams = {
             app_key,
             sign_method,
             timestamp,
             v,
+        };
+
+        // 🔹 System params for URL (DENGAN access_token)
+        const queryParams = {
+            ...signParams,
             access_token,
         };
 
-        // 🔹 Body request
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1564,61 +1561,53 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🔹 Sort params ASC (ASCII order)
-        const sortedKeys = Object.keys(params).sort();
+        // 🔹 Sort sign params ASC
+        const sortedKeys = Object.keys(signParams).sort();
 
-        // 🔹 Build base string sesuai dokumentasi Lazada
+        // 🔹 Build base string (TANPA access_token)
         let baseString = api;
         for (const key of sortedKeys) {
-            baseString += key + params[key];
+            baseString += key + signParams[key];
         }
         baseString += JSON.stringify(body);
 
-        // 🔹 Generate signature
+        // 🔹 Generate sign
         const sign = crypto
             .createHmac("sha256", app_secret)
             .update(baseString)
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Build full URL
-        const queryParams = new URLSearchParams({ ...params, sign }).toString();
-        const fullUrl = `${baseUrl}?${queryParams}`;
+        // 🔹 Final URL (DENGAN access_token & sign)
+        const finalQuery = new URLSearchParams({ ...queryParams, sign }).toString();
+        const fullUrl = `${url}?${finalQuery}`;
 
-        // 🔹 Debug info
-        const debugInfo = {
-            baseString,
-            sign,
-            sysParams: params,
-            url: fullUrl,
-            body,
-        };
-
-        console.log("===== Lazada Print Resi Debug =====");
-        console.log(JSON.stringify(debugInfo, null, 2));
-        console.log("===================================");
-
-        // 🔹 Send request ke Lazada
+        // 🔹 Call Lazada API
         const response = await axios.post(fullUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
-        return res.json({
+        res.json({
             success: true,
             message: "Berhasil generate resi Lazada",
             data: response.data,
-            debug: debugInfo,
+            debug: {
+                baseString,
+                sign,
+                sysParams: queryParams,
+                url: fullUrl,
+                body,
+            },
         });
     } catch (err) {
         console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
             debug: {
                 requestUrl: err.config?.url || null,
                 requestBody: err.config?.data || null,
-                sysParams: err.config?.params || null,
                 stack: err.stack,
             },
         });
