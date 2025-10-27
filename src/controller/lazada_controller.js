@@ -1517,33 +1517,25 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateLazadaSignPrint(apiName, params, body, appSecret) {
-    // ⚠️ Hilangkan access_token dari proses sign
-    const filteredParams = Object.keys(params)
-        .filter((key) => key !== "access_token" && key !== "sign")
-        .reduce((obj, key) => {
-            obj[key] = params[key];
-            return obj;
-        }, {});
+function generateLazadaSignOfficial(apiName, params, body, appSecret) {
+    // 1️⃣ Urutkan semua parameter ASC (kecuali sign)
+    const sortedKeys = Object.keys(params)
+        .filter((k) => k !== "sign")
+        .sort();
 
-    // Urutkan berdasarkan abjad
-    const sortedKeys = Object.keys(filteredParams).sort();
-
-    // Base string awal = API name
+    // 2️⃣ Susun baseString
     let baseString = apiName;
-
-    // Tambahkan key-value berurutan
     for (const key of sortedKeys) {
-        const value = filteredParams[key];
+        const value = params[key];
         if (value !== undefined && value !== null && value !== "") {
             baseString += key + value;
         }
     }
 
-    // Tambahkan body (harus stringify yang sama persis dengan yang dikirim)
+    // 3️⃣ Tambahkan body di akhir (kalau ada)
     if (body) baseString += body;
 
-    // HMAC-SHA256 -> Uppercase HEX
+    // 4️⃣ Buat hash HMAC-SHA256
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseString, "utf8")
@@ -1557,7 +1549,6 @@ function generateLazadaSignPrint(apiName, params, body, appSecret) {
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
-
         if (!package_id) {
             return res.status(400).json({
                 success: false,
@@ -1565,7 +1556,7 @@ const printLazadaResi = async (req, res) => {
             });
         }
 
-        // 🔹 Ambil access token dari DB
+        // 🔹 Ambil token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({
@@ -1581,16 +1572,16 @@ const printLazadaResi = async (req, res) => {
         const sign_method = "sha256";
         const apiName = "/order/package/document/get";
 
-        // 🔹 System Params (tanpa sign)
+        // 🔹 Params sistem (semua string)
         const sysParams = {
-            app_key,
-            sign_method,
-            timestamp,
+            access_token: String(access_token),
+            app_key: String(app_key),
+            sign_method: sign_method,
+            timestamp: String(timestamp),
             v: "1.0",
-            access_token, // tetap dikirim, tapi tidak di-sign
         };
 
-        // 🔹 Body JSON harus identik untuk sign & request
+        // 🔹 Body JSON
         const bodyObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1598,26 +1589,25 @@ const printLazadaResi = async (req, res) => {
                 print_item_list: true,
             },
         };
-        const bodyStr = JSON.stringify(bodyObj); // stringify dulu
+        const bodyStr = JSON.stringify(bodyObj);
 
-        // 🔹 Generate sign baru khusus print AWB
-        const { sign, baseString } = generateLazadaSignPrint(
+        // 🔹 Generate sign
+        const { sign, baseString } = generateLazadaSignOfficial(
             apiName,
             sysParams,
             bodyStr,
             app_secret
         );
 
-        // 🔹 Query string untuk URL
+        // 🔹 Buat URL dengan query string
         const query = new URLSearchParams({ ...sysParams, sign }).toString();
         const url = `https://api.lazada.co.id/rest${apiName}?${query}`;
 
-        // 🔹 Kirim request ke Lazada (body = string!)
+        // 🔹 POST ke Lazada API
         const response = await axios.post(url, bodyStr, {
             headers: { "Content-Type": "application/json" },
         });
 
-        // ✅ Success
         res.json({
             success: true,
             message: "Berhasil generate resi Lazada",
@@ -1638,6 +1628,7 @@ const printLazadaResi = async (req, res) => {
         });
     }
 };
+
 
 module.exports = {
     generateLoginUrl,
