@@ -1517,22 +1517,19 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateLazadaSign(apiName, params, body, appSecret) {
-    // 1️⃣ Sort parameters by ASCII
+function generateLazadaSign(apiPath, params, appSecret) {
+    // 1️⃣ Urutkan semua parameter secara ASCII
     const sortedKeys = Object.keys(params).sort();
 
-    // 2️⃣ Gabungkan apiName + key-value
-    let baseString = apiName;
+    // 2️⃣ Buat base string dimulai dari path API
+    let baseString = apiPath;
+
+    // 3️⃣ Tambahkan key-value tanpa body JSON
     for (const key of sortedKeys) {
         baseString += key + params[key];
     }
 
-    // 3️⃣ Tambahkan body *tanpa escape* (pastikan JSON-nya compact)
-    if (body) {
-        baseString += body;
-    }
-
-    // 4️⃣ Generate HMAC SHA256 dan ubah ke uppercase hex
+    // 4️⃣ Generate HMAC-SHA256 uppercase hex
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseString, "utf8")
@@ -1542,60 +1539,24 @@ function generateLazadaSign(apiName, params, body, appSecret) {
     return { baseString, sign };
 }
 
-// 🔧 Helper untuk mencoba satu varian signature
-async function trySignVariant(apiName, baseUrl, allQueryParams, paramsForSign, bodyStr, appSecret) {
-    const { baseString, sign } = generateLazadaSign(apiName, paramsForSign, bodyStr, appSecret);
-
-    const query = new URLSearchParams({
-        ...allQueryParams,
-        sign,
-    }).toString();
-
-    const url = `${baseUrl}${apiName}?${query}`;
-
-    try {
-        const response = await axios.post(url, bodyStr, {
-            headers: { "Content-Type": "application/json" },
-        });
-
-        // Lazada sukses: HTTP 200 + tidak ada error code ISV.IncompleteSignature
-        const ok =
-            response.status === 200 &&
-            response.data &&
-            !(response.data.code === "IncompleteSignature");
-
-        return {
-            ok,
-            status: response.status,
-            data: response.data,
-            debug: { url, baseString, sign },
-        };
-    } catch (err) {
-        return {
-            ok: false,
-            status: err.response?.status || 500,
-            error: err.response?.data || err.message,
-            debug: { url, baseString, sign },
-        };
-    }
-}
-
-// 🧾 Controller utama: print resi Lazada
+// 🧾 Controller utama untuk print resi Lazada
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
         if (!package_id) {
-            return res
-                .status(400)
-                .json({ success: false, message: "package_id wajib diisi" });
+            return res.status(400).json({
+                success: false,
+                message: "package_id wajib diisi",
+            });
         }
 
-        // 🔑 Ambil token dan kredensial
+        // 🔑 Ambil token & credential
         const tokenRow = await Lazada.findOne();
         if (!tokenRow || !tokenRow.access_token) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Access token tidak ditemukan di DB" });
+            return res.status(400).json({
+                success: false,
+                message: "Access token tidak ditemukan di DB",
+            });
         }
 
         const access_token = String(tokenRow.access_token).trim();
@@ -1603,9 +1564,10 @@ const printLazadaResi = async (req, res) => {
         const app_secret = String(process.env.LAZADA_APP_SECRET || "").trim();
 
         if (!app_key || !app_secret) {
-            return res
-                .status(500)
-                .json({ success: false, message: "LAZADA_APP_KEY / LAZADA_APP_SECRET belum diset" });
+            return res.status(500).json({
+                success: false,
+                message: "LAZADA_APP_KEY / LAZADA_APP_SECRET belum diset",
+            });
         }
 
         // 📄 API info
@@ -1615,7 +1577,7 @@ const printLazadaResi = async (req, res) => {
         const sign_method = "sha256";
         const v = "1.0";
 
-        // 🧩 Body JSON (raw, compact)
+        // 🧩 Body JSON (harus dikirim di POST, tidak disertakan di sign)
         const bodyObj = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1625,8 +1587,8 @@ const printLazadaResi = async (req, res) => {
         };
         const bodyStr = JSON.stringify(bodyObj);
 
-        // Query param yang dikirim di URL
-        const allQueryParams = {
+        // 🔧 Query params yang disertakan di URL
+        const queryParams = {
             access_token,
             app_key,
             sign_method,
@@ -1634,65 +1596,42 @@ const printLazadaResi = async (req, res) => {
             v,
         };
 
-        // Varian signature yang akan dicoba (karena Lazada kadang beda behavior)
-        const variants = [
-            { paramsForSign: { access_token, app_key, sign_method, timestamp, v } },
-            { paramsForSign: { app_key, sign_method, timestamp, v } },
-            { paramsForSign: { access_token, app_key, sign_method, timestamp } },
-            { paramsForSign: { app_key, sign_method, timestamp } },
-        ];
+        // 🔏 Generate signature (tanpa body)
+        const { baseString, sign } = generateLazadaSign(apiName, queryParams, app_secret);
 
-        const results = [];
-        let successResult = null;
+        // 🔗 Buat query string final
+        const query = new URLSearchParams({
+            ...queryParams,
+            sign,
+        }).toString();
 
-        for (const variant of variants) {
-            const r = await trySignVariant(
-                apiName,
-                baseUrl,
-                allQueryParams,
-                variant.paramsForSign,
-                bodyStr,
-                app_secret
-            );
-            results.push(r);
+        const url = `${baseUrl}${apiName}?${query}`;
 
-            // ✅ Lazada akan balas selain "IncompleteSignature" jika sign benar
-            if (
-                r.ok ||
-                (r.data &&
-                    r.data.code !== "IncompleteSignature" &&
-                    !r.data.message?.includes("not conform"))
-            ) {
-                successResult = r;
-                break;
-            }
-        }
+        // 🚀 Kirim POST request ke Lazada
+        const response = await axios.post(url, bodyStr, {
+            headers: { "Content-Type": "application/json" },
+        });
 
-        if (successResult) {
-            return res.json({
-                success: true,
-                message: "Berhasil generate resi Lazada",
-                data: successResult.data,
-                debug: {
-                    url: successResult.debug.url,
-                    baseString: successResult.debug.baseString,
-                    sign: successResult.debug.sign,
-                },
-            });
-        }
-
-        // ❌ Semua varian gagal
-        return res.status(400).json({
-            success: false,
-            message:
-                "Semua varian signature gagal. Lazada menolak dengan IncompleteSignature.",
-            debug: results.map((r) => r.debug),
+        // ✅ Jika sukses
+        return res.json({
+            success: true,
+            message: "Berhasil generate resi Lazada",
+            data: response.data,
+            debug: {
+                url,
+                baseString,
+                sign,
+                body: bodyObj,
+            },
         });
     } catch (err) {
         console.error("printLazadaResi error:", err);
-        return res
-            .status(500)
-            .json({ success: false, message: err.message, stack: err.stack });
+
+        return res.status(500).json({
+            success: false,
+            message: "Gagal generate resi Lazada",
+            error: err.response?.data || err.message,
+        });
     }
 };
 
