@@ -1525,7 +1525,7 @@ const printLazadaResi = async (req, res) => {
         }
 
         // 🔹 Ambil access_token dari DB (contoh ambil token user pertama)
-        const tokenData = await LazadaToken.findOne();
+        const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
         }
