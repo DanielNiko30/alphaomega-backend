@@ -1517,89 +1517,114 @@ const aturPickup = async (req, res) => {
     }
 };
 
-const printLazadaResi = async (req, res) => {
+function generateLazadaSignPrint(apiName, params, body, appSecret) {
+    const sortedKeys = Object.keys(params).sort();
+    let baseString = apiName;
+    for (const key of sortedKeys) {
+        const value = params[key];
+        if (value !== undefined && value !== null && value !== "") {
+            baseString += key + value;
+        }
+    }
+    baseString += body;
+
+    const sign = crypto
+        .createHmac("sha256", appSecret)
+        .update(baseString, "utf8")
+        .digest("hex")
+        .toUpperCase();
+
+    return { sign, baseString };
+}
+
+/**
+ * 🧾 Print Resi Lazada (AWB)
+ * Endpoint: /order/package/document/get
+ */
+export const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
+
         if (!package_id) {
-            return res.status(400).json({ success: false, message: "package_id wajib diisi" });
+            return res.status(400).json({
+                success: false,
+                message: "package_id wajib diisi",
+            });
         }
 
+        // 🔹 Ambil access token dari DB Lazada
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
-            return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
+            return res.status(400).json({
+                success: false,
+                message: "Access token tidak ditemukan di database",
+            });
         }
 
-        // Pastikan trim() digunakan di sini dan di konfigurasi ENV
-        const access_token = tokenData.access_token.trim();
-        const app_key = process.env.LAZADA_APP_KEY.trim();
-        const app_secret = process.env.LAZADA_APP_SECRET.trim();
+        const access_token = tokenData.access_token;
+        const app_key = process.env.LAZADA_APP_KEY;
+        const app_secret = process.env.LAZADA_APP_SECRET;
+        const timestamp = Date.now();
+        const sign_method = "sha256";
+        const apiName = "/order/package/document/get";
 
-        const apiPath = "/order/package/document/get";
-        const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
-        const timestamp = Date.now().toString();
+        // 🔹 Parameter sistem
+        const sysParams = {
+            app_key,
+            sign_method,
+            timestamp,
+            v: "1.0",
+            access_token,
+        };
 
-        // 🔹 1. Buat JSON Body Request Object
-        const requestBodyObj = {
+        // 🔹 Body JSON request (harus string persis)
+        const body = JSON.stringify({
             getDocumentReq: {
                 doc_type: "PDF",
                 packages: [{ package_id }],
                 print_item_list: true,
             },
-        };
+        });
 
-        // 🔹 2. Stringify dan URL Encode Payload
-        const rawJsonString = JSON.stringify(requestBodyObj);
-        // ⚡ MODIFIKASI KRITIS: URL Encode payload sebelum signing
-        const encodedPayload = encodeURIComponent(rawJsonString);
+        // 🔹 Generate SIGN pakai fungsi baru (khusus print AWB)
+        const { sign, baseString } = generateLazadaSignPrint(
+            apiName,
+            sysParams,
+            body,
+            app_secret
+        );
 
-        // 🔹 3. System Params
-        const sysParams = {
-            app_key,
-            access_token, // Termasuk access_token di-sign
-            sign_method: "sha256",
-            timestamp,
-            v: "1.0",
-        };
+        // 🔹 Buat URL final
+        const query = new URLSearchParams({ ...sysParams, sign }).toString();
+        const url = `https://api.lazada.co.id/rest${apiName}?${query}`;
 
-        // 🔹 4. Gabungkan semua untuk Signing (System Params + 'payload' yang SUDAH DI-ENCODE)
-        const allParamsForSign = { ...sysParams, payload: encodedPayload };
-
-        // 🔹 5. Generate signature
-        const sign = generateSign(apiPath, allParamsForSign, app_secret);
-
-        // 🔹 6. Build URL Query
-        // URL query TIDAK perlu menyertakan parameter `payload` yang di-sign, 
-        // karena body dikirim via POST request.
-        const queryParams = { ...sysParams, sign };
-        const url = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
-
-        // 🔹 7. Send POST Request (body dikirim sebagai JSON)
-        const response = await axios.post(url, requestBodyObj, {
+        // 🔹 Kirim request POST ke Lazada
+        const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
         });
 
+        // ✅ Jika berhasil
         res.json({
             success: true,
             message: "Berhasil generate resi Lazada",
             data: response.data,
             debug: {
-                // Base string sekarang diverifikasi di dalam fungsi generateSign.
-                sign,
                 url,
-                body_json: requestBodyObj,
-                payload_signed: jsonPayload
+                body: JSON.parse(body),
+                baseString,
+                sign,
             },
         });
     } catch (err) {
         console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
-        res.status(err.response?.status || 500).json({
+        res.status(500).json({
             success: false,
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
-            error_details: err.response?.data
         });
     }
 };
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
