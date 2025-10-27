@@ -1524,6 +1524,7 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
+        // 🔹 Ambil token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
@@ -1539,6 +1540,7 @@ const printLazadaResi = async (req, res) => {
         const sign_method = "sha256";
         const v = "1.0";
 
+        // 🔹 Body
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1547,43 +1549,35 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // ⚙️ Params (semua disign kecuali access_token & sign)
+        // 🔹 System params (urut lexicographically)
         const params = {
+            access_token,
             app_key,
             sign_method,
             timestamp,
             v,
         };
-
-        // Urutkan parameter lexicographically
         const sortedKeys = Object.keys(params).sort();
 
-        // 🔹 Bangun base string (SDK-style)
+        // 🔹 Base string: api + params + JSON.stringify(body)
         let baseString = api;
         for (const key of sortedKeys) {
             baseString += key + params[key];
         }
+        baseString += JSON.stringify(body); // <<-- body ikut disign di akhir
 
-        // 🚫 Jangan sertakan body di base string (Lazada POST)
-        // 🚫 Jangan sertakan access_token di sign
-
-        // Buat signature
+        // 🔹 Generate signature
         const sign = crypto
             .createHmac("sha256", app_secret)
             .update(baseString)
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Build URL
-        const query = new URLSearchParams({
-            ...params,
-            access_token,
-            sign,
-        }).toString();
-
+        // 🔹 Build URL (sign di query)
+        const query = new URLSearchParams({ ...params, sign }).toString();
         const url = `${baseUrl}?${query}`;
 
-        // 🔹 Request ke Lazada
+        // 🔹 Kirim POST request
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
         });
