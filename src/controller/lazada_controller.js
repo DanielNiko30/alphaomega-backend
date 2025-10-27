@@ -1524,7 +1524,6 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
-        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
@@ -1536,7 +1535,7 @@ const printLazadaResi = async (req, res) => {
 
         const apiPath = "/order/package/document/get";
         const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
-        const timestamp = Date.now().toString(); // Pastikan timestamp adalah string
+        const timestamp = Date.now().toString();
         const sign_method = "sha256";
         const v = "1.0";
 
@@ -1548,13 +1547,11 @@ const printLazadaResi = async (req, res) => {
                 print_item_list: true,
             },
         };
-        // Stringify body tanpa formatting/whitespace
         const jsonBodyString = JSON.stringify(requestBodyObj);
 
-        // 🔹 2. System Params (access_token HARUS di-sign dan diurutkan)
+        // 🔹 2. System Params UNTUK SIGNING (TIDAK TERMASUK access_token)
         const paramsForSign = {
             app_key,
-            access_token, // Termasuk access_token di-sign
             sign_method,
             timestamp,
             v,
@@ -1569,29 +1566,27 @@ const printLazadaResi = async (req, res) => {
             baseString += key + paramsForSign[key];
         }
 
-        // ⚡ PERBAIKAN KRITIS: Tambahkan JSON Body string di akhir (tanpa key "payload")
+        // ⚡ PERBAIKAN: Tambahkan JSON Body string di akhir.
         baseString += jsonBodyString;
-
-        // --- DEBUGGING: Verifikasi Base String ---
-        // console.log("Final Base String:", baseString);
 
         // 🔹 5. Generate signature (HMAC SHA256)
         const sign = crypto
             .createHmac("sha256", app_secret)
-            .update(baseString, "utf8") // Penting: UTF-8 encoding
+            .update(baseString, "utf8")
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 6. Build URL Query
-        // Semua system params (termasuk access_token) + sign dikirimkan di query string
-        const query = new URLSearchParams({ ...paramsForSign, sign }).toString();
-        const url = `${baseUrl}?${query}`;
+        // 🔹 6. Build URL Query (Sekarang access_token ditambahkan di URL, tapi TIDAK di-sign)
+        const queryParams = {
+            ...paramsForSign,
+            access_token, // access_token dikirim di URL
+            sign // sign juga dikirim di URL
+        };
+        const url = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
 
         // 🔹 7. Send POST Request (body dikirim sebagai JSON)
         const response = await axios.post(url, requestBodyObj, {
-            headers: { "Content-Type": "application/json" }, // Content-Type harus JSON
-            // Jika Lazada mengembalikan PDF, Anda mungkin perlu menambahkan: 
-            // responseType: 'arraybuffer' atau 'blob'
+            headers: { "Content-Type": "application/json" },
         });
 
         res.json({
@@ -1599,7 +1594,7 @@ const printLazadaResi = async (req, res) => {
             message: "Berhasil generate resi Lazada",
             data: response.data,
             debug: {
-                baseString: baseString, // Tampilkan baseString untuk verifikasi
+                baseString: baseString,
                 sign,
                 url,
                 body_json: requestBodyObj,
