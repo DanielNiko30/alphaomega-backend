@@ -1524,18 +1524,19 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
+        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
         }
 
-        const access_token = tokenData.access_token.trim(); // Pastikan bersih
+        const access_token = tokenData.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY.trim();
         const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
         const apiPath = "/order/package/document/get";
         const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
-        const timestamp = Date.now().toString();
+        const timestamp = Date.now().toString(); // Pastikan timestamp adalah string
         const sign_method = "sha256";
         const v = "1.0";
 
@@ -1547,32 +1548,50 @@ const printLazadaResi = async (req, res) => {
                 print_item_list: true,
             },
         };
-        // 🔹 Stringify body untuk dijadikan nilai parameter 'payload'
-        const jsonPayload = JSON.stringify(requestBodyObj);
+        // Stringify body tanpa formatting/whitespace
+        const jsonBodyString = JSON.stringify(requestBodyObj);
 
-        // 🔹 2. System Params (access_token HARUS di-sign)
-        const sysParams = {
+        // 🔹 2. System Params (access_token HARUS di-sign dan diurutkan)
+        const paramsForSign = {
             app_key,
+            access_token, // Termasuk access_token di-sign
             sign_method,
             timestamp,
             v,
-            access_token, // Termasuk access_token dalam signing
         };
 
-        // 🔹 3. Gabungkan semua untuk Signing (System Params + 'payload')
-        const allParamsForSign = { ...sysParams, payload: jsonPayload };
+        // 🔹 3. Urutkan System Params secara ASCII
+        const sortedKeys = Object.keys(paramsForSign).sort();
 
-        // 🔹 4. Generate signature (fungsi generateSign akan mengurutkan semua key termasuk 'payload')
-        const sign = generateSign(apiPath, allParamsForSign, app_secret);
+        // 🔹 4. Bangun Base String: API Path + Sorted Params + JSON Body
+        let baseString = apiPath;
+        for (const key of sortedKeys) {
+            baseString += key + paramsForSign[key];
+        }
 
-        // 🔹 5. Build URL Query
+        // ⚡ PERBAIKAN KRITIS: Tambahkan JSON Body string di akhir (tanpa key "payload")
+        baseString += jsonBodyString;
+
+        // --- DEBUGGING: Verifikasi Base String ---
+        // console.log("Final Base String:", baseString);
+
+        // 🔹 5. Generate signature (HMAC SHA256)
+        const sign = crypto
+            .createHmac("sha256", app_secret)
+            .update(baseString, "utf8") // Penting: UTF-8 encoding
+            .digest("hex")
+            .toUpperCase();
+
+        // 🔹 6. Build URL Query
         // Semua system params (termasuk access_token) + sign dikirimkan di query string
-        const query = new URLSearchParams({ ...sysParams, sign }).toString();
+        const query = new URLSearchParams({ ...paramsForSign, sign }).toString();
         const url = `${baseUrl}?${query}`;
 
-        // 🔹 6. Send POST Request (body dikirim sebagai JSON)
+        // 🔹 7. Send POST Request (body dikirim sebagai JSON)
         const response = await axios.post(url, requestBodyObj, {
-            headers: { "Content-Type": "application/json" }, // Penting: Content-Type untuk body JSON
+            headers: { "Content-Type": "application/json" }, // Content-Type harus JSON
+            // Jika Lazada mengembalikan PDF, Anda mungkin perlu menambahkan: 
+            // responseType: 'arraybuffer' atau 'blob'
         });
 
         res.json({
@@ -1580,10 +1599,11 @@ const printLazadaResi = async (req, res) => {
             message: "Berhasil generate resi Lazada",
             data: response.data,
             debug: {
+                baseString: baseString, // Tampilkan baseString untuk verifikasi
                 sign,
                 url,
                 body_json: requestBodyObj,
-                payload_signed: jsonPayload
+                payload_signed: jsonBodyString
             },
         });
     } catch (err) {
