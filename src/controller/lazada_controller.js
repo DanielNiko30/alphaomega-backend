@@ -1524,61 +1524,55 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
-        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
         }
 
-        const access_token = tokenData.access_token;
-        const app_key = process.env.LAZADA_APP_KEY;
-        const app_secret = process.env.LAZADA_APP_SECRET;
+        const access_token = tokenData.access_token.trim(); // Pastikan bersih
+        const app_key = process.env.LAZADA_APP_KEY.trim();
+        const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
-        const api = "/order/package/document/get";
-        const baseUrl = "https://api.lazada.co.id/rest" + api;
-        const timestamp = Date.now();
+        const apiPath = "/order/package/document/get";
+        const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
+        const timestamp = Date.now().toString();
         const sign_method = "sha256";
         const v = "1.0";
 
-        // 🔹 Body
-        const body = {
+        // 🔹 1. Buat JSON Body Request Object
+        const requestBodyObj = {
             getDocumentReq: {
                 doc_type: "PDF",
                 packages: [{ package_id }],
                 print_item_list: true,
             },
         };
+        // 🔹 Stringify body untuk dijadikan nilai parameter 'payload'
+        const jsonPayload = JSON.stringify(requestBodyObj);
 
-        // 🔹 System params (tanpa access_token)
-        const params = {
+        // 🔹 2. System Params (access_token HARUS di-sign)
+        const sysParams = {
             app_key,
             sign_method,
             timestamp,
             v,
+            access_token, // Termasuk access_token dalam signing
         };
-        const sortedKeys = Object.keys(params).sort();
 
-        // 🔹 Build base string
-        let baseString = api;
-        for (const key of sortedKeys) {
-            baseString += key + params[key];
-        }
-        baseString += JSON.stringify(body); // body ikut disign
+        // 🔹 3. Gabungkan semua untuk Signing (System Params + 'payload')
+        const allParamsForSign = { ...sysParams, payload: jsonPayload };
 
-        // 🔹 Generate signature
-        const sign = crypto
-            .createHmac("sha256", app_secret)
-            .update(baseString)
-            .digest("hex")
-            .toUpperCase();
+        // 🔹 4. Generate signature (fungsi generateSign akan mengurutkan semua key termasuk 'payload')
+        const sign = generateSign(apiPath, allParamsForSign, app_secret);
 
-        // 🔹 Build URL (access_token dikirim, tapi tidak disign)
-        const query = new URLSearchParams({ ...params, access_token, sign }).toString();
+        // 🔹 5. Build URL Query
+        // Semua system params (termasuk access_token) + sign dikirimkan di query string
+        const query = new URLSearchParams({ ...sysParams, sign }).toString();
         const url = `${baseUrl}?${query}`;
 
-        // 🔹 Send request
-        const response = await axios.post(url, body, {
-            headers: { "Content-Type": "application/json" },
+        // 🔹 6. Send POST Request (body dikirim sebagai JSON)
+        const response = await axios.post(url, requestBodyObj, {
+            headers: { "Content-Type": "application/json" }, // Penting: Content-Type untuk body JSON
         });
 
         res.json({
@@ -1586,18 +1580,19 @@ const printLazadaResi = async (req, res) => {
             message: "Berhasil generate resi Lazada",
             data: response.data,
             debug: {
-                baseString,
                 sign,
                 url,
-                body,
+                body_json: requestBodyObj,
+                payload_signed: jsonPayload
             },
         });
     } catch (err) {
         console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
-        res.status(500).json({
+        res.status(err.response?.status || 500).json({
             success: false,
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
+            error_details: err.response?.data
         });
     }
 };
