@@ -1547,43 +1547,44 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🔹 Params untuk signature (TANPA access_token)
-        const signParams = {
+        // ⚙️ Params (semua disign kecuali access_token & sign)
+        const params = {
             app_key,
             sign_method,
             timestamp,
             v,
         };
 
-        // 🔹 Urutkan parameter secara lexicographical (A–Z)
-        const sortedKeys = Object.keys(signParams).sort();
+        // Urutkan parameter lexicographically
+        const sortedKeys = Object.keys(params).sort();
 
-        // 🔹 Buat base string dengan API name di awal & akhir
+        // 🔹 Bangun base string (SDK-style)
         let baseString = api;
         for (const key of sortedKeys) {
-            baseString += key + signParams[key];
+            baseString += key + params[key];
         }
-        baseString += JSON.stringify(body);
-        baseString += api;
 
-        // 🔹 Generate signature
+        // 🚫 Jangan sertakan body di base string (Lazada POST)
+        // 🚫 Jangan sertakan access_token di sign
+
+        // Buat signature
         const sign = crypto
             .createHmac("sha256", app_secret)
             .update(baseString)
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Params untuk URL (DENGAN access_token)
-        const queryParams = {
-            ...signParams,
+        // 🔹 Build URL
+        const query = new URLSearchParams({
+            ...params,
             access_token,
             sign,
-        };
+        }).toString();
 
-        const fullUrl = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
+        const url = `${baseUrl}?${query}`;
 
-        // 🔹 Eksekusi request
-        const response = await axios.post(fullUrl, body, {
+        // 🔹 Request ke Lazada
+        const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
         });
 
@@ -1594,7 +1595,7 @@ const printLazadaResi = async (req, res) => {
             debug: {
                 baseString,
                 sign,
-                url: fullUrl,
+                url,
                 body,
             },
         });
@@ -1604,11 +1605,6 @@ const printLazadaResi = async (req, res) => {
             success: false,
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
-            debug: {
-                requestUrl: err.config?.url,
-                requestBody: err.config?.data,
-                stack: err.stack,
-            },
         });
     }
 };
