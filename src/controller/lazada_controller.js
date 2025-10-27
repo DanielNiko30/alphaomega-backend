@@ -1534,24 +1534,10 @@ const printLazadaResi = async (req, res) => {
         const app_secret = process.env.LAZADA_APP_SECRET;
 
         const api = "/order/package/document/get";
-        const url = "https://api.lazada.co.id/rest" + api;
+        const baseUrl = "https://api.lazada.co.id/rest" + api;
         const timestamp = Date.now();
         const sign_method = "sha256";
         const v = "1.0";
-
-        // 🔹 System params for signature (TANPA access_token)
-        const signParams = {
-            app_key,
-            sign_method,
-            timestamp,
-            v,
-        };
-
-        // 🔹 System params for URL (DENGAN access_token)
-        const queryParams = {
-            ...signParams,
-            access_token,
-        };
 
         const body = {
             getDocumentReq: {
@@ -1561,28 +1547,42 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🔹 Sort sign params ASC
+        // 🔹 Params untuk signature (TANPA access_token)
+        const signParams = {
+            app_key,
+            sign_method,
+            timestamp,
+            v,
+        };
+
+        // 🔹 Urutkan parameter secara lexicographical (A–Z)
         const sortedKeys = Object.keys(signParams).sort();
 
-        // 🔹 Build base string (TANPA access_token)
+        // 🔹 Buat base string dengan API name di awal & akhir
         let baseString = api;
         for (const key of sortedKeys) {
             baseString += key + signParams[key];
         }
         baseString += JSON.stringify(body);
+        baseString += api;
 
-        // 🔹 Generate sign
+        // 🔹 Generate signature
         const sign = crypto
             .createHmac("sha256", app_secret)
             .update(baseString)
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Final URL (DENGAN access_token & sign)
-        const finalQuery = new URLSearchParams({ ...queryParams, sign }).toString();
-        const fullUrl = `${url}?${finalQuery}`;
+        // 🔹 Params untuk URL (DENGAN access_token)
+        const queryParams = {
+            ...signParams,
+            access_token,
+            sign,
+        };
 
-        // 🔹 Call Lazada API
+        const fullUrl = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
+
+        // 🔹 Eksekusi request
         const response = await axios.post(fullUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
@@ -1594,7 +1594,6 @@ const printLazadaResi = async (req, res) => {
             debug: {
                 baseString,
                 sign,
-                sysParams: queryParams,
                 url: fullUrl,
                 body,
             },
@@ -1606,8 +1605,8 @@ const printLazadaResi = async (req, res) => {
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
             debug: {
-                requestUrl: err.config?.url || null,
-                requestBody: err.config?.data || null,
+                requestUrl: err.config?.url,
+                requestBody: err.config?.data,
                 stack: err.stack,
             },
         });
