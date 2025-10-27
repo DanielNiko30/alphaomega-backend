@@ -1524,7 +1524,7 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
         }
 
-        // 🔹 Ambil token dari DB
+        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
@@ -1549,9 +1549,8 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🔹 System params (urut lexicographically)
+        // 🔹 System params (tanpa access_token)
         const params = {
-            access_token,
             app_key,
             sign_method,
             timestamp,
@@ -1559,12 +1558,12 @@ const printLazadaResi = async (req, res) => {
         };
         const sortedKeys = Object.keys(params).sort();
 
-        // 🔹 Base string: api + params + JSON.stringify(body)
+        // 🔹 Build base string
         let baseString = api;
         for (const key of sortedKeys) {
             baseString += key + params[key];
         }
-        baseString += JSON.stringify(body); // <<-- body ikut disign di akhir
+        baseString += JSON.stringify(body); // body ikut disign
 
         // 🔹 Generate signature
         const sign = crypto
@@ -1573,11 +1572,11 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Build URL (sign di query)
-        const query = new URLSearchParams({ ...params, sign }).toString();
+        // 🔹 Build URL (access_token dikirim, tapi tidak disign)
+        const query = new URLSearchParams({ ...params, access_token, sign }).toString();
         const url = `${baseUrl}?${query}`;
 
-        // 🔹 Kirim POST request
+        // 🔹 Send request
         const response = await axios.post(url, body, {
             headers: { "Content-Type": "application/json" },
         });
