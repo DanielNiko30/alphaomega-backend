@@ -1521,13 +1521,19 @@ const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
         if (!package_id) {
-            return res.status(400).json({ success: false, message: "package_id wajib diisi" });
+            return res.status(400).json({
+                success: false,
+                message: "package_id wajib diisi",
+            });
         }
 
-        // 🔹 Ambil access_token dari DB (contoh ambil token user pertama)
+        // 🔹 Ambil access_token dari DB
         const tokenData = await Lazada.findOne();
         if (!tokenData) {
-            return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
+            return res.status(400).json({
+                success: false,
+                message: "Access token tidak ditemukan di database",
+            });
         }
 
         const access_token = tokenData.access_token;
@@ -1535,15 +1541,17 @@ const printLazadaResi = async (req, res) => {
         const app_secret = process.env.LAZADA_APP_SECRET;
 
         const api = "/order/package/document/get";
-        const url = "https://api.lazada.co.id/rest" + api;
+        const baseUrl = "https://api.lazada.co.id/rest" + api;
         const timestamp = Date.now();
         const sign_method = "sha256";
+        const v = "1.0"; // ✅ tambahkan versi API (lazada butuh v=1.0)
 
         // 🔹 System params
         const params = {
             app_key,
             sign_method,
             timestamp,
+            v,
             access_token,
         };
 
@@ -1556,43 +1564,63 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🔹 Sort params ASC
+        // 🔹 Sort params ASC (ASCII order)
         const sortedKeys = Object.keys(params).sort();
 
-        // 🔹 Build base string
+        // 🔹 Build base string sesuai dokumentasi Lazada
         let baseString = api;
         for (const key of sortedKeys) {
             baseString += key + params[key];
         }
         baseString += JSON.stringify(body);
 
-        // 🔹 Generate HMAC SHA256 signature
+        // 🔹 Generate signature
         const sign = crypto
             .createHmac("sha256", app_secret)
             .update(baseString)
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Build URL with params
-        const query = new URLSearchParams({ ...params, sign }).toString();
-        const endpoint = `${url}?${query}`;
+        // 🔹 Build full URL
+        const queryParams = new URLSearchParams({ ...params, sign }).toString();
+        const fullUrl = `${baseUrl}?${queryParams}`;
 
-        // 🔹 Call Lazada API
-        const response = await axios.post(endpoint, body, {
+        // 🔹 Debug info
+        const debugInfo = {
+            baseString,
+            sign,
+            sysParams: params,
+            url: fullUrl,
+            body,
+        };
+
+        console.log("===== Lazada Print Resi Debug =====");
+        console.log(JSON.stringify(debugInfo, null, 2));
+        console.log("===================================");
+
+        // 🔹 Send request ke Lazada
+        const response = await axios.post(fullUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
-        res.json({
+        return res.json({
             success: true,
             message: "Berhasil generate resi Lazada",
             data: response.data,
+            debug: debugInfo,
         });
     } catch (err) {
         console.error("❌ Lazada Print Resi Error:", err.response?.data || err.message);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Gagal generate resi Lazada",
             raw: err.response?.data || err.message,
+            debug: {
+                requestUrl: err.config?.url || null,
+                requestBody: err.config?.data || null,
+                sysParams: err.config?.params || null,
+                stack: err.stack,
+            },
         });
     }
 };
