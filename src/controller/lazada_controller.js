@@ -1529,6 +1529,7 @@ const printLazadaResi = async (req, res) => {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan di database" });
         }
 
+        // Pastikan trim() digunakan di sini dan di konfigurasi ENV
         const access_token = tokenData.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY.trim();
         const app_secret = process.env.LAZADA_APP_SECRET.trim();
@@ -1536,8 +1537,6 @@ const printLazadaResi = async (req, res) => {
         const apiPath = "/order/package/document/get";
         const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
         const timestamp = Date.now().toString();
-        const sign_method = "sha256";
-        const v = "1.0";
 
         // 🔹 1. Buat JSON Body Request Object
         const requestBodyObj = {
@@ -1547,44 +1546,31 @@ const printLazadaResi = async (req, res) => {
                 print_item_list: true,
             },
         };
-        const jsonBodyString = JSON.stringify(requestBodyObj);
+        // Stringify body tanpa formatting
+        const jsonPayload = JSON.stringify(requestBodyObj);
 
-        // 🔹 2. System Params UNTUK SIGNING (TIDAK TERMASUK access_token)
-        const paramsForSign = {
+        // 🔹 2. System Params
+        const sysParams = {
             app_key,
-            sign_method,
+            access_token, // Termasuk access_token di-sign
+            sign_method: "sha256",
             timestamp,
-            v,
+            v: "1.0",
         };
 
-        // 🔹 3. Urutkan System Params secara ASCII
-        const sortedKeys = Object.keys(paramsForSign).sort();
+        // 🔹 3. Gabungkan semua untuk Signing (System Params + 'payload')
+        // Ini memastikan `payload` diurutkan bersama dengan parameter lainnya.
+        const allParamsForSign = { ...sysParams, payload: jsonPayload };
 
-        // 🔹 4. Bangun Base String: API Path + Sorted Params + JSON Body
-        let baseString = apiPath;
-        for (const key of sortedKeys) {
-            baseString += key + paramsForSign[key];
-        }
+        // 🔹 4. Generate signature menggunakan fungsi utility yang sudah ada
+        const sign = generateSign(apiPath, allParamsForSign, app_secret);
 
-        // ⚡ PERBAIKAN: Tambahkan JSON Body string di akhir.
-        baseString += jsonBodyString;
-
-        // 🔹 5. Generate signature (HMAC SHA256)
-        const sign = crypto
-            .createHmac("sha256", app_secret)
-            .update(baseString, "utf8")
-            .digest("hex")
-            .toUpperCase();
-
-        // 🔹 6. Build URL Query (Sekarang access_token ditambahkan di URL, tapi TIDAK di-sign)
-        const queryParams = {
-            ...paramsForSign,
-            access_token, // access_token dikirim di URL
-            sign // sign juga dikirim di URL
-        };
+        // 🔹 5. Build URL Query
+        // Semua system params (termasuk access_token) + sign dikirimkan di query string
+        const queryParams = { ...sysParams, sign };
         const url = `${baseUrl}?${new URLSearchParams(queryParams).toString()}`;
 
-        // 🔹 7. Send POST Request (body dikirim sebagai JSON)
+        // 🔹 6. Send POST Request (body dikirim sebagai JSON)
         const response = await axios.post(url, requestBodyObj, {
             headers: { "Content-Type": "application/json" },
         });
@@ -1594,11 +1580,11 @@ const printLazadaResi = async (req, res) => {
             message: "Berhasil generate resi Lazada",
             data: response.data,
             debug: {
-                baseString: baseString,
+                // Base string sekarang diverifikasi di dalam fungsi generateSign.
                 sign,
                 url,
                 body_json: requestBodyObj,
-                payload_signed: jsonBodyString
+                payload_signed: jsonPayload
             },
         });
     } catch (err) {
@@ -1611,7 +1597,6 @@ const printLazadaResi = async (req, res) => {
         });
     }
 };
-
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
