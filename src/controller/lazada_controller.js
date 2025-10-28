@@ -1517,35 +1517,41 @@ const aturPickup = async (req, res) => {
     }
 };
 
+// ======================================
 function generateSignLazadaAWB(apiPath, params, body, appSecret) {
+    // 1️⃣ Urutkan semua parameter ASCII (kecuali sign)
     const sortedKeys = Object.keys(params).sort();
+
+    // 2️⃣ Susun base string dimulai dari API path
     let baseStr = apiPath;
 
-    // 1️⃣ Urutkan & gabungkan semua params ASCII order
     for (const key of sortedKeys) {
-        baseStr += key + params[key];
+        const val = params[key];
+        if (val !== undefined && val !== null) {
+            baseStr += key + val;
+        }
     }
 
-    // 2️⃣ Gabungkan body (format JSON RAPIH tanpa spasi)
+    // 3️⃣ Jika ada body, tambahkan di akhir (tanpa spasi)
     let bodyStr = "";
     if (body && Object.keys(body).length > 0) {
-        // JSON.stringify default tidak boleh ada spasi
+        // Lazada expects JSON string compact (tanpa newline/spasi)
         bodyStr = JSON.stringify(body);
         baseStr += bodyStr;
     }
 
-    // 3️⃣ Generate sign (HMAC SHA256)
+    // 4️⃣ Buat signature HMAC SHA256 → HEX uppercase
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 
-    // 🔍 Log di console biar jelas semua tahapan
+    // 5️⃣ Debug log biar kelihatan prosesnya
     console.log("\n========= [LAZADA SIGN DEBUG] =========");
     console.log("API PATH :", apiPath);
-    console.log("PARAMS   :", params);
-    console.log("BODY RAW :", JSON.stringify(body));
+    console.log("PARAMS   :", JSON.stringify(params, null, 2));
+    console.log("BODY RAW :", JSON.stringify(body, null, 2));
     console.log("BODY STR :", bodyStr);
     console.log("BASE STR :", baseStr);
     console.log("SIGN     :", sign);
@@ -1557,7 +1563,7 @@ function generateSignLazadaAWB(apiPath, params, body, appSecret) {
 // ======================================
 // 🧾 PRINT AWB LAZADA (FULL DEBUG MODE)
 // ======================================
-const printLazadaResi = async (req, res) => {
+export const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
         if (!package_id)
@@ -1591,7 +1597,7 @@ const printLazadaResi = async (req, res) => {
         const timestamp = Date.now().toString();
         const sign_method = "sha256";
 
-        // 📦 Body resmi dari dokumentasi Lazada
+        // 🧾 Body request (sesuai dokumentasi resmi)
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1600,7 +1606,7 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // ⚙️ Params untuk signature
+        // ⚙️ Parameters (tanpa 'sign')
         const params = {
             access_token,
             app_key,
@@ -1608,29 +1614,28 @@ const printLazadaResi = async (req, res) => {
             timestamp,
         };
 
-        // 🔏 Generate signature
+        // 🔏 Generate signature (pakai body full)
         const signData = generateSignLazadaAWB(apiPath, params, body, app_secret);
         const sign = signData.sign;
 
-        // 🔗 Build query string
+        // 🔗 Query string akhir
         const queryString = Object.entries({ ...params, sign })
             .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
             .join("&");
 
         const finalUrl = `${baseUrl}?${queryString}`;
 
-        // 🧩 Log final URL & body
+        // 🧩 Log debug
         console.log("[LAZADA] FINAL URL:", finalUrl);
         console.log("[LAZADA] BODY SENT:", JSON.stringify(body));
 
-        // 🚀 Request ke Lazada
+        // 🚀 Kirim request POST ke Lazada
         const { data } = await axios.post(finalUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
-        console.log("[LAZADA] RESPONSE:", data);
+        console.log("[LAZADA] RESPONSE:", JSON.stringify(data, null, 2));
 
-        // ✅ Return semua info biar bisa dicek di frontend
         return res.json({
             success: true,
             message: "Print AWB request berhasil dikirim",
