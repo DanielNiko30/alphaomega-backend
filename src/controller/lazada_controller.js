@@ -101,18 +101,16 @@ const lazadaCallback = async (req, res) => {
 
 const refreshToken = async () => {
     try {
-        const CLIENT_ID = process.env.LAZADA_APP_KEY;
-        const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+        const CLIENT_ID = process.env.LAZADA_APP_KEY.trim();
+        const CLIENT_SECRET = process.env.LAZADA_APP_SECRET.trim();
         const API_PATH = "/auth/token/refresh";
-        const BASE_URL = "https://auth.lazada.com/rest";
 
-        const existing = await Lazada.findOne();
-        if (!existing) throw new Error("No Lazada token record found");
-
-        const refresh_token = existing.refresh_token;
-        if (!refresh_token) throw new Error("No refresh_token found in DB");
+        const lazada = await Lazada.findOne();
+        if (!lazada) throw new Error("Token Lazada tidak ditemukan di DB");
 
         const timestamp = String(Date.now());
+        const refresh_token = lazada.refresh_token.trim();
+
         const params = {
             app_key: CLIENT_ID,
             refresh_token,
@@ -120,45 +118,38 @@ const refreshToken = async () => {
             timestamp,
         };
 
+        // ✅ Generate sign
         const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
 
-        // build full query manually (order is important)
-        const sortedKeys = Object.keys(params).sort();
-        let query = sortedKeys.map(k => `${k}=${encodeURIComponent(params[k])}`).join("&");
-        query += `&sign=${sign}`;
+        // ✅ Kirim via body (bukan query)
+        const response = await axios.post(
+            `https://auth.lazada.com/rest${API_PATH}`,
+            new URLSearchParams(params),
+            {
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            }
+        );
 
-        // full request URL
-        const url = `${BASE_URL}${API_PATH}?${query}`;
-
-        console.log("🌐 Lazada Refresh URL =>", url);
-
-        // ⚠️ Important: NO BODY, no extra headers
-        const response = await axios.post(url, "", {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        });
-
-        console.log("✅ Lazada Refresh Success:", response.data);
+        console.log("✅ Refresh token success:", response.data);
 
         const tokenData = response.data;
-        if (tokenData.access_token) {
-            await Lazada.update(
-                {
-                    access_token: tokenData.access_token,
-                    refresh_token: tokenData.refresh_token,
-                    expires_in: tokenData.expires_in,
-                    last_updated: Math.floor(Date.now() / 1000),
-                },
-                { where: {} }
-            );
-        }
+        if (!tokenData.access_token)
+            throw new Error("Refresh gagal: access_token kosong");
 
-        return tokenData;
+        await lazada.update({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token || refresh_token,
+            expires_in: tokenData.expires_in,
+            last_updated: Math.floor(Date.now() / 1000),
+        });
+
+        console.log("✅ Token Lazada berhasil diperbarui");
     } catch (err) {
         console.error("❌ Gagal refresh token Lazada:", err.response?.data || err.message);
     }
 };
+
 
 const getProducts = async (req, res) => {
     try {
