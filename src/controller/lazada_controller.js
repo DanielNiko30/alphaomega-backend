@@ -25,27 +25,20 @@ const moment = require("moment-timezone");
 
 const db = getDB();
 
-function generateSign(apiPath, allParams, appSecret) {
-    // 1. Urutkan SEMUA parameter (System + Payload) secara ASCII.
-    const sortedKeys = Object.keys(allParams).sort();
+function generateSignForAuth(apiPath, params, appSecret) {
+    // 1️⃣ Urutkan parameter secara alfabet
+    const sortedKeys = Object.keys(params).sort();
 
-    // 2. Inisiasi base string dengan API Path
-    let baseStr = apiPath;
-
-    // 3. Gabungkan parameter yang diurutkan (Key + Value)
+    // 2️⃣ Susun base string
+    let baseString = apiPath;
     for (const key of sortedKeys) {
-        // Nilai yang digunakan adalah JSON mentah (sesuai allParams)
-        const value = allParams[key];
-        baseStr += key + value;
+        baseString += key + params[key];
     }
 
-    // --- DEBUGGING: Cetak base string untuk verifikasi manual ---
-    // console.log("BASE STRING FOR SIGNATURE:", baseStr); 
-    // -----------------------------------------------------------
-
-    // 4. Lakukan HMAC SHA256
-    return crypto.createHmac("sha256", appSecret)
-        .update(baseStr, "utf8")
+    // 3️⃣ HMAC SHA256 + Uppercase
+    return crypto
+        .createHmac("sha256", appSecret)
+        .update(baseString, "utf8")
         .digest("hex")
         .toUpperCase();
 }
@@ -115,48 +108,52 @@ const refreshToken = async () => {
         const CLIENT_ID = process.env.LAZADA_APP_KEY.trim();
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET.trim();
         const API_PATH = "/auth/token/refresh";
-        const timestamp = Date.now().toString();
+        const TIMESTAMP = String(Date.now()); // pastikan string
 
-        const lazadaData = await Lazada.findOne();
-        if (!lazadaData) throw new Error("Lazada token not found");
+        const lazada = await Lazada.findOne();
+        if (!lazada) throw new Error("Token Lazada tidak ditemukan di DB");
 
-        // 🔹 Semua parameter query
+        // ✅ Auth API params (tidak pakai payload)
         const params = {
             app_key: CLIENT_ID,
-            refresh_token: lazadaData.refresh_token.trim(),
+            refresh_token: lazada.refresh_token.trim(),
             sign_method: "sha256",
-            timestamp,
+            timestamp: TIMESTAMP,
         };
 
-        // 🔹 Generate signature
-        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
-        const fullParams = { ...params, sign };
+        // ✅ Generate tanda tangan
+        const sign = generateSignForAuth(API_PATH, params, CLIENT_SECRET);
 
-        // 🔹 Kirim parameter lewat QUERY STRING (bukan body)
-        const queryString = new URLSearchParams(fullParams).toString();
-        const url = `https://auth.lazada.com/rest${API_PATH}?${queryString}`;
+        // ✅ Susun URL query string manual (jangan pakai URLSearchParams agar urutan tetap)
+        const query =
+            Object.entries({ ...params, sign })
+                .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+                .join("&");
 
-        console.log("[LAZADA CRON] 🔹 Refresh URL:", url);
+        const url = `https://auth.lazada.com/rest${API_PATH}?${query}`;
+        console.log("[LAZADA CRON] 🔹 Refresh token URL:", url);
 
-        // 🔹 Kirim POST tanpa body
+        // ✅ Kirim POST tanpa body
         const response = await axios.post(url);
-
-        console.log("[LAZADA CRON] ✅ Refresh success:", response.data);
+        console.log("[LAZADA CRON] 🔹 Response:", response.data);
 
         const tokenData = response.data;
-        if (!tokenData.access_token) throw new Error("No access_token in response");
+        if (!tokenData.access_token)
+            throw new Error("Refresh token gagal, tidak ada access_token");
 
-        await lazadaData.update({
+        await lazada.update({
             access_token: tokenData.access_token,
-            refresh_token: tokenData.refresh_token || lazadaData.refresh_token,
+            refresh_token: tokenData.refresh_token || lazada.refresh_token,
             expires_in: tokenData.expires_in,
             last_updated: Math.floor(Date.now() / 1000),
         });
 
-        console.log("[LAZADA CRON] ✅ Token refreshed & saved");
-        return tokenData.access_token;
-    } catch (error) {
-        console.error("[LAZADA CRON] ❌ Gagal refresh token Lazada:", error.response?.data || error.message);
+        console.log("[LAZADA CRON] ✅ Token refreshed successfully");
+    } catch (err) {
+        console.error(
+            "[LAZADA CRON] ❌ Gagal refresh token Lazada:",
+            err.response?.data || err.message
+        );
     }
 };
 
