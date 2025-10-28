@@ -99,7 +99,7 @@ const lazadaCallback = async (req, res) => {
     }
 };
 
-const refreshToken = async () => {
+const refreshLazadaToken = async () => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
@@ -159,7 +159,6 @@ const refreshToken = async () => {
         console.error("❌ Gagal refresh token Lazada:", err.response?.data || err.message);
     }
 };
-
 
 const getProducts = async (req, res) => {
     try {
