@@ -10,7 +10,7 @@ cron.schedule("0 0 * * *", async () => {
 });
 
 // Untuk testing, bisa pakai setiap 5 menit
-cron.schedule("*/5 * * * *", async () => {
+cron.schedule("*/1 * * * *", async () => {
     console.log("[LAZADA CRON TEST] 🔹 Running every 5 minutes:", new Date().toISOString());
     await refreshLazadaToken();
 });
