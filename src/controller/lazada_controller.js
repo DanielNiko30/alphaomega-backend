@@ -99,7 +99,7 @@ const lazadaCallback = async (req, res) => {
     }
 };
 
-const refreshLazadaToken = async () => {
+const refreshToken = async () => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY;
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
