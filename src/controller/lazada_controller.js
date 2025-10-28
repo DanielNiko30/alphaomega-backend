@@ -1518,35 +1518,34 @@ const aturPickup = async (req, res) => {
 };
 
 function generateSignLazada(apiPath, params, body, appSecret) {
-    // 1️⃣ Urutkan param berdasarkan ASCII ascending
     const sortedKeys = Object.keys(params).sort();
-
-    // 2️⃣ Bangun base string: path + key1value1key2value2...
     let baseStr = apiPath;
+
+    // Gabungkan param dalam urutan ASCII
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
 
-    // 3️⃣ Jika ada body (POST), tambahkan JSON.stringify(body) tanpa spasi
+    // Tambahkan body (jika ada)
     if (body && Object.keys(body).length > 0) {
         baseStr += JSON.stringify(body);
     }
 
-    // 4️⃣ Buat tanda tangan
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 
-    // 🧾 Debug log
-    console.log("======= LAZADA SIGN DEBUG =======");
-    console.log("apiPath :", apiPath);
-    console.log("params  :", params);
-    console.log("sorted  :", sortedKeys);
-    console.log("baseStr :", baseStr);
-    console.log("sign    :", sign);
-    console.log("=================================");
+    // Debug info
+    console.log("=== [LAZADA SIGN DEBUG] ===");
+    console.log("API PATH :", apiPath);
+    console.log("PARAMS   :", params);
+    console.log("BODY     :", JSON.stringify(body));
+    console.log("BASE STR :", baseStr);
+    console.log("SIGN     :", sign);
+    console.log("============================");
+
     return sign;
 }
 
@@ -1556,26 +1555,28 @@ const printLazadaResi = async (req, res) => {
         if (!package_id)
             return res.status(400).json({ success: false, message: "package_id wajib diisi" });
 
-        // 🔑 Ambil token dari DB
-        const tokenRow = await db.query("SELECT access_token FROM lazada_token WHERE id = 1");
-        const access_token = tokenRow[0]?.access_token?.trim();
-        if (!access_token)
+        // 🔑 Ambil token Lazada dari database
+        const tokenRow = await Lazada.findOne();
+        if (!tokenRow || !tokenRow.access_token) {
             return res.status(400).json({ success: false, message: "Access token tidak ditemukan" });
+        }
 
+        const access_token = tokenRow.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY?.trim();
         const app_secret = process.env.LAZADA_APP_SECRET?.trim();
-        if (!app_key || !app_secret)
-            return res.status(500).json({ success: false, message: "App key/secret belum diset" });
 
-        // 🌐 API info
+        if (!app_key || !app_secret) {
+            return res.status(500).json({ success: false, message: "App key/secret belum diset" });
+        }
+
+        // 🌐 API Lazada Info
         const apiPath = "/order/package/document/get";
         const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
 
         const timestamp = Date.now().toString();
         const sign_method = "sha256";
-        const v = "1.0";
 
-        // 📦 Body sesuai dokumentasi Lazada
+        // 📦 Body resmi dari dokumentasi Lazada
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1584,19 +1585,18 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // 🧮 Params sistem untuk signing dan URL
+        // 🔧 System params untuk signature & query
         const params = {
             access_token,
             app_key,
             sign_method,
             timestamp,
-            v,
         };
 
         // 🔏 Generate signature
         const sign = generateSignLazada(apiPath, params, body, app_secret);
 
-        // 🔗 Build final URL dengan semua param + sign
+        // 🔗 Bangun URL lengkap dengan query string
         const queryString = Object.entries({ ...params, sign })
             .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
             .join("&");
@@ -1606,7 +1606,7 @@ const printLazadaResi = async (req, res) => {
         console.log("[LAZADA] Final URL:", finalUrl);
         console.log("[LAZADA] Body:", JSON.stringify(body));
 
-        // 🚀 Request POST ke Lazada API
+        // 🚀 Eksekusi POST Request
         const { data } = await axios.post(finalUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
