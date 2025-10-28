@@ -138,7 +138,7 @@ const refreshToken = async () => {
             )
             .join("&");
 
-        const url = `https://api.lazada.com/rest${API_PATH}`;
+        const url = `https://auth.lazada.com/rest${API_PATH}`;
         console.log("[LAZADA CRON] 🔹 Refresh token URL:", url);
 
         const response = await axios.post(url, formBody, {
