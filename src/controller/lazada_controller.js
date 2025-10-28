@@ -111,86 +111,38 @@ const lazadaCallback = async (req, res) => {
 };
 
 const refreshToken = async () => {
-    try {
-        const app_key = process.env.LAZADA_APP_KEY?.trim();
-        const app_secret = process.env.LAZADA_APP_SECRET?.trim();
+    const CLIENT_ID = process.env.LAZADA_APP_KEY;
+    const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
+    const API_PATH = "/auth/token/refresh";
+    const timestamp = String(Date.now());
 
-        console.log("🔑 APP_KEY:", app_key);
-        console.log("🔐 APP_SECRET (first 6 chars):", app_secret?.slice(0, 6) + "******");
+    const lazadaData = await Lazada.findOne();
+    if (!lazadaData) throw new Error("Lazada token not found");
 
-        // 🔹 Ambil refresh token dari DB
-        const [row] = await db.query("SELECT refresh_token FROM lazada_token WHERE id = 1");
-        const refresh_token = row?.refresh_token?.trim();
+    const params = {
+        app_key: CLIENT_ID,
+        refresh_token: lazadaData.refresh_token,
+        sign_method: "sha256",
+        timestamp
+    };
+    params.sign = generateSign(API_PATH, params, CLIENT_SECRET);
 
-        if (!refresh_token) throw new Error("Refresh token tidak ditemukan di database");
+    const url = `https://api.lazada.com/rest${API_PATH}`;
+    const response = await axios.post(url, new URLSearchParams(params), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
 
-        console.log("♻️ REFRESH_TOKEN:", refresh_token);
+    const tokenData = response.data;
+    if (!tokenData.access_token) throw new Error("Failed to refresh Lazada token");
 
-        // 🔹 Gunakan timestamp dalam milidetik
-        const timestamp = Date.now().toString();
-        console.log("⏰ TIMESTAMP:", timestamp, "| UTC:", new Date(parseInt(timestamp)).toISOString());
+    await lazadaData.update({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token || lazadaData.refresh_token,
+        expires_in: tokenData.expires_in,
+        last_updated: Math.floor(Date.now() / 1000)
+    });
 
-        // 🔹 Susun parameter wajib
-        const params = {
-            app_key,
-            refresh_token,
-            sign_method: "sha256",
-            timestamp,
-        };
-
-        // 🔹 Urutkan parameter alfabetik
-        const sortedParamKeys = Object.keys(params).sort();
-        const sortedParamsString = sortedParamKeys.map(k => `${k}${params[k]}`).join("");
-        console.log("📦 Sorted Params String:", sortedParamsString);
-
-        // 🔹 Buat string yang di-sign
-        const baseString = "/auth/token/refresh" + sortedParamsString;
-        console.log("🧾 Base String to Sign:", baseString);
-
-        // 🔹 Generate sign
-        const sign = crypto
-            .createHmac("sha256", app_secret)
-            .update(baseString, "utf8")
-            .digest("hex")
-            .toUpperCase();
-
-        console.log("✅ SIGNATURE:", sign);
-
-        // 🔹 Build URL GET (karena auth.lazada.com pakai GET)
-        const url = new URL("https://auth.lazada.com/rest/auth/token/refresh");
-        url.searchParams.append("app_key", app_key);
-        url.searchParams.append("timestamp", timestamp);
-        url.searchParams.append("sign_method", "sha256");
-        url.searchParams.append("refresh_token", refresh_token);
-        url.searchParams.append("sign", sign);
-
-        console.log("🌐 FINAL REQUEST URL:", url.toString());
-
-        // 🔥 Kirim request GET
-        const response = await axios.get(url.toString(), {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
-
-        console.log("🎉 [LAZADA] Refresh token berhasil:", response.data);
-
-        const data = response.data;
-        if (data.access_token) {
-            await db.query(
-                "UPDATE lazada_token SET access_token = ?, refresh_token = ?, updated_at = NOW() WHERE id = 1",
-                [data.access_token, data.refresh_token]
-            );
-            console.log("💾 Token berhasil disimpan di DB");
-        }
-
-        return data;
-    } catch (err) {
-        console.error("❌ [LAZADA] Gagal refresh token:");
-        console.error("Response Data:", err.response?.data);
-        console.error("Status Code:", err.response?.status);
-        console.error("Headers:", err.response?.headers);
-        console.error("Message:", err.message);
-        return null;
-    }
+    return tokenData.access_token;
 };
 
 const getProducts = async (req, res) => {
