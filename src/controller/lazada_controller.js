@@ -119,7 +119,7 @@ const refreshToken = async () => {
         const row = await db.query("SELECT refresh_token FROM lazada_token WHERE id = 1");
         const refresh_token = row[0].refresh_token;
 
-        const timestamp = Date.now();
+        const timestamp = Date.now().toString();
 
         // 🔐 Parameter yang wajib di-sign
         const params = {
