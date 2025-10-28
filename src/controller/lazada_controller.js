@@ -125,7 +125,7 @@ function generateSignRefresh(apiPath, params, appSecret) {
         .toUpperCase();
 }
 
-export const refreshToken = async () => {
+const refreshToken = async () => {
     try {
         const CLIENT_ID = process.env.LAZADA_APP_KEY?.trim();
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET?.trim();
