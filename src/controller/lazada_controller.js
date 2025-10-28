@@ -26,17 +26,19 @@ const moment = require("moment-timezone");
 const db = getDB();
 
 function generateSign(apiPath, params, appSecret) {
+    // Pastikan timestamp ada
     if (!params.timestamp) {
         params.timestamp = String(Date.now());
     }
 
+    // Urutkan semua key secara ASCII
     const sortedKeys = Object.keys(params).sort();
-
     let baseString = apiPath;
     for (const key of sortedKeys) {
         baseString += key + params[key];
     }
 
+    // HMAC-SHA256 pakai appSecret
     return crypto
         .createHmac("sha256", appSecret)
         .update(baseString, "utf8")
@@ -112,32 +114,40 @@ const refreshToken = async () => {
         const lazada = await Lazada.findOne();
         if (!lazada) throw new Error("Token Lazada tidak ditemukan di DB");
 
-        const refreshTokenValue = lazada.refresh_token.trim();
         const timestamp = String(Date.now());
+        const refreshTokenValue = lazada.refresh_token.trim();
 
-        // ✅ Sama seperti create token
+        // ✅ Semua param harus string
         const params = {
             app_key: CLIENT_ID,
             refresh_token: refreshTokenValue,
             sign_method: "sha256",
-            timestamp,
+            timestamp: timestamp,
         };
 
-        // ✅ Generate signature pakai fungsi yang sama
-        params.sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        // ✅ Buat sign
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+        params.sign = sign;
 
-        // ✅ POST body dengan x-www-form-urlencoded
+        // ✅ Buat body form-encoded dengan semua string
+        const body = new URLSearchParams();
+        for (const [key, val] of Object.entries(params)) {
+            body.append(key, String(val));
+        }
+
         const url = `https://api.lazada.com/rest${API_PATH}`;
-        const body = new URLSearchParams(params);
 
-        const response = await axios.post(url, body, {
+        console.log("[LAZADA REFRESH] 🔹 Request Body:", Object.fromEntries(body));
+
+        const response = await axios.post(url, body.toString(), {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        console.log("[LAZADA REFRESH] Response:", response.data);
+        console.log("[LAZADA REFRESH] 🔹 Response:", response.data);
 
         const tokenData = response.data;
-        if (!tokenData.access_token) throw new Error("Refresh gagal: access_token kosong");
+        if (!tokenData.access_token)
+            throw new Error("Refresh token gagal: access_token kosong");
 
         await lazada.update({
             access_token: tokenData.access_token,
@@ -146,9 +156,12 @@ const refreshToken = async () => {
             last_updated: Math.floor(Date.now() / 1000),
         });
 
-        console.log("[LAZADA REFRESH] ✅ Token berhasil diperbarui");
+        console.log("[LAZADA REFRESH] ✅ Token Lazada berhasil diperbarui");
     } catch (err) {
-        console.error("[LAZADA REFRESH] ❌ Error:", err.response?.data || err.message);
+        console.error(
+            "[LAZADA REFRESH] ❌ Error:",
+            err.response?.data || err.message
+        );
     }
 };
 
