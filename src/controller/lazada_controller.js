@@ -104,26 +104,23 @@ const lazadaCallback = async (req, res) => {
     }
 };
 
-function generateLazadaSign(apiPath, params, appSecret, body = "") {
-    // Urutkan key berdasarkan ASCII
+function generateLazadaSign(apiPath, params, appSecret) {
+    // 1️⃣ Sort semua param berdasarkan ASCII order
     const sortedKeys = Object.keys(params).sort();
 
-    // Gabungkan param jadi string
-    let concatenated = apiPath;
+    // 2️⃣ Gabungkan API path + key + value
+    let baseString = apiPath;
     for (const key of sortedKeys) {
-        const value = params[key];
-        if (key && value !== undefined && value !== null && value !== "") {
-            concatenated += key + value;
+        const val = params[key];
+        if (val !== undefined && val !== null) {
+            baseString += key + val;
         }
     }
 
-    // Kalau ada body (misal di POST produk), tambahkan di akhir
-    if (body) concatenated += body;
-
-    // Hash pakai HMAC SHA256 (UTF-8)
+    // 3️⃣ Generate HMAC-SHA256 dan ubah ke uppercase HEX
     const sign = crypto
         .createHmac("sha256", appSecret)
-        .update(concatenated, "utf8")
+        .update(baseString, "utf8")
         .digest("hex")
         .toUpperCase();
 
@@ -136,13 +133,14 @@ const refreshToken = async () => {
         const CLIENT_SECRET = process.env.LAZADA_APP_SECRET.trim();
         const API_PATH = "/auth/token/refresh";
 
+        // 🔍 Ambil token dari DB
         const lazada = await Lazada.findOne();
         if (!lazada) throw new Error("Token Lazada tidak ditemukan di DB");
 
         const refreshTokenValue = lazada.refresh_token.trim();
         const timestamp = String(Date.now());
 
-        // ✅ Parameters per Lazada docs
+        // 🧩 Parameter per dokumen
         const params = {
             app_key: CLIENT_ID,
             refresh_token: refreshTokenValue,
@@ -150,32 +148,35 @@ const refreshToken = async () => {
             timestamp,
         };
 
-        // ✅ Generate signature (no body for token refresh)
+        // 🧮 Generate signature
         const sign = generateLazadaSign(API_PATH, params, CLIENT_SECRET);
 
-        // ✅ Build query manually (order harus sama dengan yang di-sign)
-        const sortedKeys = Object.keys(params).sort();
+        // ⚙️ Susun query string (urutan sama dengan yang disign)
         const queryString =
-            sortedKeys.map(k => `${k}=${encodeURIComponent(params[k])}`).join("&") +
-            `&sign=${sign}`;
+            Object.keys(params)
+                .sort()
+                .map((k) => `${k}=${encodeURIComponent(params[k])}`)
+                .join("&") + `&sign=${sign}`;
 
         const url = `https://auth.lazada.com/rest${API_PATH}?${queryString}`;
 
         console.log("[LAZADA CRON] 🔹 Refresh token URL:", url);
 
-        // ✅ POST kosong sesuai dokumen
+        // 🚀 Kirim POST tanpa body
         const response = await axios.post(url, null, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
         });
 
-        console.log("[LAZADA CRON] 🔹 Response:", response.data);
-
         const tokenData = response.data;
+        console.log("[LAZADA CRON] 🔹 Lazada response:", tokenData);
+
         if (!tokenData.access_token) {
             throw new Error("Refresh token gagal: access_token kosong");
         }
 
-        // ✅ Update database
+        // 🧾 Update DB
         await lazada.update({
             access_token: tokenData.access_token,
             refresh_token: tokenData.refresh_token || refreshTokenValue,
