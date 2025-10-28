@@ -12,7 +12,7 @@ const sharp = require("sharp");
 const qs = require("qs");
 const { Builder } = require("xml2js");
 const moment = require("moment-timezone");
-
+const db = getDB();
 /**
 * @param {string} apiPath
  * @param {Object<string, string>} allParams
@@ -23,19 +23,25 @@ const moment = require("moment-timezone");
  * @returns {string}
  */
 
-const db = getDB();
+function generateSign(apiPath, params, appSecret, body = "") {
+    const sortedKeys = Object.keys(params).sort();
 
-function generateSign(apiPath, allParams, appSecret) {
-    // allParams: object with string values (refresh_token, app_key, sign_method, timestamp, etc.)
-    const sortedKeys = Object.keys(allParams).sort(); // ASCII order
     let baseStr = apiPath;
     for (const key of sortedKeys) {
-        // skip undefined/null
-        const v = allParams[key] === undefined || allParams[key] === null ? '' : String(allParams[key]);
-        baseStr += key + v;
+        const val = params[key];
+        if (val !== undefined && val !== null && val !== "")
+            baseStr += key + val;
     }
-    return crypto.createHmac("sha256", appSecret).update(baseStr, "utf8").digest("hex").toUpperCase();
+
+    if (body) baseStr += body;
+
+    return crypto
+        .createHmac("sha256", appSecret)
+        .update(baseStr, "utf8")
+        .digest("hex")
+        .toUpperCase();
 }
+
 
 /**
  * @param {*} req 
@@ -98,143 +104,82 @@ const lazadaCallback = async (req, res) => {
 };
 
 const refreshToken = async () => {
+    const API_URL = "https://auth.lazada.com/rest";
     const API_PATH = "/auth/token/refresh";
-    const AUTH_HOST = "https://auth.lazada.com/rest"; // docs: use auth.lazada.com for refresh
+
     try {
-        const CLIENT_ID = (process.env.LAZADA_APP_KEY || "").trim();
-        const CLIENT_SECRET = (process.env.LAZADA_APP_SECRET || "").trim();
-        if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("LAZADA_APP_KEY / LAZADA_APP_SECRET missing");
+        const CLIENT_ID = process.env.LAZADA_APP_KEY?.trim();
+        const CLIENT_SECRET = process.env.LAZADA_APP_SECRET?.trim();
 
-        const row = await Lazada.findOne();
-        if (!row || !row.refresh_token) throw new Error("No Lazada token row or refresh_token in DB");
+        if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("LAZADA_APP_KEY / LAZADA_APP_SECRET tidak ditemukan");
 
-        const refreshTokenValue = String(row.refresh_token).trim();
-        const timestamp = String(Date.now()); // milliseconds, e.g. 1517820392000
-
-        // params used for signing MUST be exactly the ones Lazada expects.
-        // We'll build variants that include/exclude refresh_token in sign as needed.
-        const debugAttempts = [];
-
-        // Variant definitions (ordered by likelihood):
-        // A: POST to auth endpoint, all params in form body (app_key, refresh_token, sign_method, timestamp, sign)
-        // B: POST to auth endpoint with query {app_key, sign_method, timestamp, sign} and body {refresh_token}
-        // C: POST to auth endpoint with query containing everything (app_key, refresh_token, sign_method, timestamp, sign) and no body
-        const variants = [
-            { name: "A_body_all_params", includeRefreshInSign: true, putRefreshInQuery: false, putAllInQuery: false },
-            { name: "B_query_system_body_refresh", includeRefreshInSign: true, putRefreshInQuery: false, putAllInQuery: false, querySystemOnly: true }, // query system+sign, body refresh
-            { name: "C_query_all_params", includeRefreshInSign: true, putRefreshInQuery: true, putAllInQuery: true },
-        ];
-
-        for (const v of variants) {
-            // Build paramsForSign (this is the object used to build baseString)
-            // Lazada docs: sort all request parameters (system + application) except "sign". So include refresh_token in sign.
-            const paramsForSign = {
-                app_key: CLIENT_ID,
-                refresh_token: refreshTokenValue,
-                sign_method: "sha256",
-                timestamp,
-            };
-
-            // Generate sign
-            const sign = generateSign(API_PATH, paramsForSign, CLIENT_SECRET);
-
-            // Decide how to send based on variant
-            let url;
-            let axiosConfig = { headers: {} };
-            let bodyToSend = null;
-
-            if (v.name === "A_body_all_params") {
-                // All params in body (form-urlencoded)
-                url = `${AUTH_HOST}${API_PATH}`;
-                const bodyObj = {
-                    app_key: CLIENT_ID,
-                    refresh_token: refreshTokenValue,
-                    sign_method: "sha256",
-                    timestamp,
-                    sign,
-                };
-                bodyToSend = new URLSearchParams(bodyObj).toString();
-                axiosConfig.headers["Content-Type"] = "application/x-www-form-urlencoded";
-            } else if (v.name === "B_query_system_body_refresh") {
-                // Query: app_key, sign_method, timestamp, sign
-                // Body: refresh_token only
-                const queryObj = {
-                    app_key: CLIENT_ID,
-                    sign_method: "sha256",
-                    timestamp,
-                    sign,
-                };
-                url = `${AUTH_HOST}${API_PATH}?${new URLSearchParams(queryObj).toString()}`;
-                bodyToSend = new URLSearchParams({ refresh_token: refreshTokenValue }).toString();
-                axiosConfig.headers["Content-Type"] = "application/x-www-form-urlencoded";
-            } else if (v.name === "C_query_all_params") {
-                // Query contains everything incl. refresh_token
-                const queryObj = {
-                    app_key: CLIENT_ID,
-                    refresh_token: refreshTokenValue,
-                    sign_method: "sha256",
-                    timestamp,
-                    sign,
-                };
-                url = `${AUTH_HOST}${API_PATH}?${new URLSearchParams(queryObj).toString()}`;
-                bodyToSend = null;
-                // no body needed
-            } else {
-                continue;
-            }
-
-            // Debug preview
-            debugAttempts.push({
-                variant: v.name,
-                url,
-                bodyPreview: bodyToSend ? (bodyToSend.length > 200 ? bodyToSend.slice(0, 200) + "..." : bodyToSend) : null,
-                baseString: API_PATH + Object.keys(paramsForSign).sort().map(k => k + paramsForSign[k]).join(""),
-                sign,
-            });
-
-            try {
-                const res = await axios.post(url, bodyToSend, axiosConfig);
-                // Lazada may return HTTP 200 with JSON error code. Consider success only if access_token present.
-                if (res && res.status === 200 && res.data && res.data.access_token) {
-                    // success -> update db
-                    await row.update({
-                        access_token: res.data.access_token,
-                        refresh_token: res.data.refresh_token || refreshTokenValue,
-                        expires_in: res.data.expires_in || row.expires_in,
-                        last_updated: Math.floor(Date.now() / 1000),
-                    });
-                    return {
-                        success: true,
-                        message: "Token refreshed (variant: " + v.name + ")",
-                        tokenData: res.data,
-                        debugAttempts,
-                    };
-                } else {
-                    // got response but not success
-                    debugAttempts[debugAttempts.length - 1].response = res.data;
-                }
-            } catch (err) {
-                // network / 4xx / 5xx
-                debugAttempts[debugAttempts.length - 1].error = err.response?.data || err.message;
-            }
+        // 1️⃣ Ambil refresh_token dari DB
+        const lazada = await Lazada.findOne();
+        if (!lazada || !lazada.refresh_token) {
+            throw new Error("Refresh token tidak ditemukan di database");
         }
 
-        // If reached here: none worked
+        const REFRESH_TOKEN = lazada.refresh_token.trim();
+        const TIMESTAMP = String(Date.now());
+
+        // 2️⃣ Parameter wajib sesuai dokumentasi
+        const params = {
+            app_key: CLIENT_ID,
+            sign_method: "sha256",
+            timestamp: TIMESTAMP,
+            refresh_token: REFRESH_TOKEN,
+        };
+
+        // 3️⃣ Generate signature
+        const sign = generateSign(API_PATH, params, CLIENT_SECRET);
+
+        // 4️⃣ Buat query string lengkap
+        const queryString = new URLSearchParams({ ...params, sign }).toString();
+        const url = `${API_URL}${API_PATH}?${queryString}`;
+
+        console.log("🔍 URL Request ke Lazada:");
+        console.log(url);
+
+        // 5️⃣ Kirim request POST (tanpa body, semua param di query)
+        const response = await axios.post(url);
+
+        console.log("✅ Refresh token berhasil:");
+        console.log(response.data);
+
+        // 6️⃣ Update token di DB
+        const tokenData = response.data;
+        if (tokenData.access_token) {
+            await lazada.update({
+                access_token: tokenData.access_token,
+                refresh_token: tokenData.refresh_token || REFRESH_TOKEN,
+                expires_in: tokenData.expires_in,
+                last_updated: Math.floor(Date.now() / 1000),
+            });
+
+            console.log("✅ Token berhasil diperbarui di DB");
+        }
+
+        return { success: true, data: tokenData };
+    } catch (error) {
+        console.error("❌ Gagal refresh token Lazada:");
+        if (error.response) {
+            console.error("Response:", error.response.data);
+        } else {
+            console.error(error.message);
+        }
+
         return {
             success: false,
-            message: "No variant worked. Lazada still returning ISV/missing/timestamp or incomplete signature.",
-            debugAttempts,
+            error: error.response?.data || error.message,
             hint: [
-                "Pastikan LAZADA_APP_KEY & LAZADA_APP_SECRET benar (tanpa whitespace).",
-                "Pastikan refresh_token valid dan tidak expired.",
-                "Periksa jam server (NTP). Lazada memerlukan timestamp dalam rentang 7200s dari UTC).",
-                "Cek apakah ada proxy / middleware yg men-strip query/body params.",
+                "Pastikan APP_KEY, APP_SECRET, dan REFRESH_TOKEN valid.",
+                "Pastikan timestamp dikirim dan muncul di URL.",
+                "Pastikan jam server sinkron dengan UTC (selisih max 7200 detik).",
+                "Gunakan endpoint auth.lazada.com, bukan api.lazada.com.",
             ],
         };
-    } catch (e) {
-        return { success: false, message: e.message, stack: e.stack };
     }
-};
+}
 
 const getProducts = async (req, res) => {
     try {
