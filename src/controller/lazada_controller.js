@@ -111,6 +111,8 @@ const lazadaCallback = async (req, res) => {
 };
 
 const refreshToken = async () => {
+    console.log("[LAZADA] 🚀 Starting token refresh...");
+
     const CLIENT_ID = process.env.LAZADA_APP_KEY;
     const CLIENT_SECRET = process.env.LAZADA_APP_SECRET;
     const API_PATH = "/auth/token/refresh";
@@ -118,6 +120,8 @@ const refreshToken = async () => {
 
     const lazadaData = await Lazada.findOne();
     if (!lazadaData) throw new Error("Lazada token not found");
+
+    console.log("[LAZADA] Current refresh token:", lazadaData.refresh_token);
 
     const params = {
         app_key: CLIENT_ID,
@@ -128,9 +132,13 @@ const refreshToken = async () => {
     params.sign = generateSign(API_PATH, params, CLIENT_SECRET);
 
     const url = `https://api.lazada.com/rest${API_PATH}`;
+    console.log("[LAZADA] Calling Lazada API:", url);
+
     const response = await axios.post(url, new URLSearchParams(params), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
+
+    console.log("[LAZADA] Response from Lazada:", response.data);
 
     const tokenData = response.data;
     if (!tokenData.access_token) throw new Error("Failed to refresh Lazada token");
@@ -142,6 +150,7 @@ const refreshToken = async () => {
         last_updated: Math.floor(Date.now() / 1000)
     });
 
+    console.log("[LAZADA] ✅ Token refreshed successfully");
     return tokenData.access_token;
 };
 

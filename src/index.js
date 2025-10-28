@@ -4,6 +4,10 @@ const crypto = require('crypto');
 const http = require('http');
 const { getDB } = require('./config/sequelize');
 
+// =================== CRON JOB ===================
+require("./cron/refreshShopeeToken");
+require("./cron/refreshLazadaToken");
+
 const app = express();
 
 app.use(cors({
@@ -16,10 +20,6 @@ app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// =================== CRON JOB ===================
-require("./cron/refreshShopeeToken");
-require("./cron/refreshLazadaToken");
 
 // =================== SHOPEE LOGIN URL ===================
 app.get('/api/shopee/generate-login-url', (req, res) => {
