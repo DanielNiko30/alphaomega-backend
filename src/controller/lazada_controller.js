@@ -1517,18 +1517,21 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateSignLazada(apiPath, params, body, appSecret) {
+function generateSignLazadaAWB(apiPath, params, body, appSecret) {
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
 
-    // Gabungkan param dalam urutan ASCII
+    // gabungkan param secara ASCII
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
 
-    // Tambahkan body (jika ada)
+    // tambahkan body JSON compact tanpa spasi
     if (body && Object.keys(body).length > 0) {
-        baseStr += JSON.stringify(body);
+        const bodyStr = JSON.stringify(body)
+            .replace(/\s+/g, "") // hapus spasi dan newline
+            .replace(/\//g, "\\/"); // escape slash agar match SDK Lazada
+        baseStr += bodyStr;
     }
 
     const sign = crypto
@@ -1537,17 +1540,18 @@ function generateSignLazada(apiPath, params, body, appSecret) {
         .digest("hex")
         .toUpperCase();
 
-    // Debug info
-    console.log("=== [LAZADA SIGN DEBUG] ===");
+    // log debug
+    console.log("=== [LAZADA AWB SIGN DEBUG] ===");
     console.log("API PATH :", apiPath);
     console.log("PARAMS   :", params);
     console.log("BODY     :", JSON.stringify(body));
     console.log("BASE STR :", baseStr);
     console.log("SIGN     :", sign);
-    console.log("============================");
+    console.log("===============================");
 
     return sign;
 }
+
 
 const printLazadaResi = async (req, res) => {
     try {
@@ -1594,7 +1598,7 @@ const printLazadaResi = async (req, res) => {
         };
 
         // 🔏 Generate signature
-        const sign = generateSignLazada(apiPath, params, body, app_secret);
+        const sign = generateSignLazadaAWB(apiPath, params, body, app_secret);
 
         // 🔗 Bangun URL lengkap dengan query string
         const queryString = Object.entries({ ...params, sign })
