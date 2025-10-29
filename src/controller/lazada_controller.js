@@ -1561,18 +1561,14 @@ const printLazadaResi = async (req, res) => {
             packages: [{ package_id: packageId }],
         });
 
-        // 🔹 Masukkan body param ke object untuk penandatanganan
+        // 🔹 Gabungkan ke sign params (ikut disortir)
         const signParams = { ...params, getDocumentReq };
 
-        // 🔐 Generate baseStr dengan semua param (diurutkan by key)
+        // 🔐 Generate baseStr (ikutkan getDocumentReq juga)
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
         for (const key of sortedKeys) {
-            if (key === "getDocumentReq") {
-                baseStr += key + getDocumentReq; // raw JSON
-            } else {
-                baseStr += key + signParams[key];
-            }
+            baseStr += key + signParams[key];
         }
 
         const sign = crypto
@@ -1591,7 +1587,7 @@ const printLazadaResi = async (req, res) => {
         // 🔹 Body dikirim (encoded)
         const encodedBody = new URLSearchParams({ getDocumentReq }).toString();
 
-        console.log("DEBUG FINAL:", {
+        console.log("DEBUG LAZADA AWB:", {
             finalUrl,
             baseStr,
             encodedBody,
@@ -1605,34 +1601,48 @@ const printLazadaResi = async (req, res) => {
         });
 
         const contentType = lazadaRes.headers["content-type"];
+
+        // ✅ Jika Lazada kirim PDF langsung tampilkan
         if (contentType && contentType.includes("application/pdf")) {
-            const filePath = path.join(
-                "/home/alphaomega2/alphaomega-backend/awb/",
-                `AWB_${packageId}.pdf`
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `inline; filename="AWB_${packageId}.pdf"`
             );
-            fs.writeFileSync(filePath, lazadaRes.data);
-            return res.json({
-                success: true,
-                message: "Berhasil ambil AWB PDF dari Lazada",
-                file: filePath,
-            });
-        } else {
-            const raw = Buffer.from(lazadaRes.data).toString("utf8");
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Lazada tidak mengirim PDF (kemungkinan signature salah atau package_id tidak valid)",
-                raw: JSON.parse(raw),
-            });
+            return res.send(lazadaRes.data);
         }
+
+        // ❌ Jika bukan PDF → tampilkan error jelas dari Lazada
+        const raw = Buffer.from(lazadaRes.data).toString("utf8");
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            parsed = { raw };
+        }
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "Lazada tidak mengirim PDF (kemungkinan signature salah atau package_id tidak valid)",
+            raw: parsed,
+            debug: {
+                finalUrl,
+                baseStr,
+                encodedBody,
+                sign,
+            },
+        });
     } catch (error) {
+        const errData =
+            error.response && error.response.data
+                ? Buffer.from(error.response.data).toString("utf8")
+                : error.message;
+
         return res.status(500).json({
             success: false,
             message: "Gagal ambil AWB dari Lazada",
-            error:
-                error.response && error.response.data
-                    ? error.response.data.toString()
-                    : error.message,
+            error: errData,
         });
     }
 };
