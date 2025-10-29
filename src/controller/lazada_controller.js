@@ -1527,7 +1527,7 @@ function canonicalize(obj) {
     else return "null";
 }
 
-// Generate Lazada signature
+// Generate Lazada signature for AWB
 function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
     const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
@@ -1535,7 +1535,6 @@ function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
         baseStr += k + sysParams[k];
     }
 
-    // Canonicalize body
     const bodyStr = canonicalize(bodyObj);
     baseStr += bodyStr;
 
@@ -1548,53 +1547,58 @@ function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
     return { sign, baseStr, bodyStr };
 }
 
-// Main function to print AWB
-async function printLazadaResi(package_id, region = "id") {
-    const apiBaseByRegion = {
-        id: "https://api.lazada.co.id/rest",
-        sg: "https://api.lazada.sg/rest",
-        th: "https://api.lazada.co.th/rest",
-        my: "https://api.lazada.com.my/rest",
-        ph: "https://api.lazada.com.ph/rest",
-        vn: "https://api.lazada.vn/rest",
-    };
+// Express controller
+const printLazadaResi = async (req, res) => {
+    try {
+        const { package_id, region } = req.body;
+        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
 
-    const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
-    const apiPath = "/order/package/document/get";
+        const apiBaseByRegion = {
+            id: "https://api.lazada.co.id/rest",
+            sg: "https://api.lazada.sg/rest",
+            th: "https://api.lazada.co.th/rest",
+            my: "https://api.lazada.com.my/rest",
+            ph: "https://api.lazada.com.ph/rest",
+            vn: "https://api.lazada.vn/rest",
+        };
+        const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
+        const apiPath = "/order/package/document/get";
 
-    // Ambil token & app key/secret dari environment atau DB
-    const tokenRow = await Lazada.findOne();
-    if (!tokenRow || !tokenRow.access_token) throw new Error("Access token Lazada tidak ditemukan");
-    const access_token = tokenRow.access_token.trim();
-    const app_key = process.env.LAZADA_APP_KEY.trim();
-    const app_secret = process.env.LAZADA_APP_SECRET.trim();
+        // Ambil token & app key/secret dari DB / env
+        const tokenRow = await Lazada.findOne();
+        if (!tokenRow || !tokenRow.access_token)
+            return res.status(400).json({ success: false, message: "Access token Lazada tidak ditemukan" });
 
-    // System params
-    const timestamp = Date.now().toString();
-    const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
+        const access_token = tokenRow.access_token.trim();
+        const app_key = process.env.LAZADA_APP_KEY.trim();
+        const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
-    // Wrapped body
-    const bodyForSign = {
-        getDocumentReq: {
-            doc_type: "PDF",
-            print_item_list: false,
-            packages: [{ package_id: String(package_id) }],
-        },
-    };
+        const timestamp = Date.now().toString();
+        const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
 
-    const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
+        // Body wrapped sesuai Lazada
+        const bodyForSign = {
+            getDocumentReq: {
+                doc_type: "PDF",
+                print_item_list: false,
+                packages: [{ package_id: String(package_id) }],
+            },
+        };
 
-    // Build final URL
-    const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
 
-    // POST request
-    const headers = { "Content-Type": "application/json" };
-    const { data } = await axios.post(finalUrl, bodyForSign, { headers, timeout: 30000 });
+        const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-    // Return response + debug
-    return { finalUrl, baseStr, bodyStr, sign, data };
-}
+        // POST request
+        const headers = { "Content-Type": "application/json" };
+        const { data } = await axios.post(finalUrl, bodyForSign, { headers, timeout: 30000 });
 
+        return res.json({ success: true, message: "Print AWB request berhasil dikirim", debug: { finalUrl, baseStr, bodyStr, sign }, lazada_response: data });
+    } catch (err) {
+        console.error("ERROR print AWB:", err.response?.data || err.message);
+        return res.status(500).json({ success: false, message: "Gagal print AWB Lazada", error: err.response?.data || err.message });
+    }
+};
 
 module.exports = {
     generateLoginUrl,
