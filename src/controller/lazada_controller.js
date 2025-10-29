@@ -1517,40 +1517,32 @@ const aturPickup = async (req, res) => {
     }
 };
 
-const generateSignPrintAWB = (apiPath, params, body, appSecret) => {
-    const sortedKeys = Object.keys(params).sort();
+const generateSignPrintAWB = (apiPath, sysParams, body, appSecret) => {
+    // 1️⃣ Urutkan parameter sistem secara ASCII
+    const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
 
     for (const key of sortedKeys) {
-        const val = params[key];
+        const val = sysParams[key];
         if (val !== undefined && val !== null) {
             baseStr += key + val;
         }
     }
 
+    // 2️⃣ Tambahkan body JSON getDocumentReq
     let bodyStr = "";
     if (body && body.getDocumentReq) {
         bodyStr = JSON.stringify(body.getDocumentReq);
         baseStr += bodyStr;
     }
 
-    const sign = crypto
-        .createHmac("sha256", appSecret)
+    // 3️⃣ HMAC SHA256 → uppercase
+    const sign = crypto.createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 
-    // ==== Logging detail bawel & ngawur ====
-    console.log("🔥🔥🔥 [DEBUG Print AWB - Super Detail 🔥🔥🔥]");
-    console.log("🛠️ API PATH:", apiPath);
-    console.log("📦 PARAMS:", JSON.stringify(params, null, 2));
-    console.log("📜 BODY RAW:", bodyStr);
-    console.log("🧩 BASE STRING SIGNATURE:", baseStr);
-    console.log("🔑 SIGN GENERATED:", sign);
-    console.log("🤯 INFO NGAWUR: Semoga ini membantu debugging, terserah anda bro 😎");
-    console.log("=============================================");
-
-    return sign;
+    return { sign, baseStr, bodyStr }; // return semua untuk debug
 };
 
 // =======================================================
@@ -1559,20 +1551,16 @@ const generateSignPrintAWB = (apiPath, params, body, appSecret) => {
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
-        if (!package_id) {
-            return res.status(400).json({
-                success: false,
-                message: "package_id wajib diisi",
-            });
-        }
+        if (!package_id) return res.status(400).json({
+            success: false,
+            message: "package_id wajib diisi",
+        });
 
         const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Access token tidak ditemukan",
-            });
-        }
+        if (!tokenRow || !tokenRow.access_token) return res.status(400).json({
+            success: false,
+            message: "Access token tidak ditemukan",
+        });
 
         const access_token = tokenRow.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY.trim();
@@ -1590,43 +1578,35 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        const params = { access_token, app_key, sign_method, timestamp };
+        const sysParams = { access_token, app_key, sign_method, timestamp };
 
-        // Generate signature
-        const sign = generateSignPrintAWB(apiPath, params, body, app_secret);
+        // ✅ Generate signature khusus Print AWB
+        const { sign, baseStr, bodyStr } = generateSignPrintAWB(apiPath, sysParams, body, app_secret);
 
-        const finalUrl = `${baseUrl}?${new URLSearchParams({ ...params, sign }).toString()}`;
+        const finalUrl = `${baseUrl}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        // Kirim request ke Lazada
+        // 🔁 Kirim request
         const { data } = await axios.post(finalUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
-        // RETURN semua debug info
         return res.json({
             success: true,
-            message: "Print AWB request berhasil dikirim 8234234234234234",
+            message: "Print AWB request berhasil dikirim",
             debug: {
                 apiPath,
-                params,
+                sysParams,
                 body,
-                baseStringForSign: (() => {
-                    // duplicate base string untuk pengecekan tanpa log
-                    const sortedKeys = Object.keys(params).sort();
-                    let baseStr = apiPath;
-                    for (const key of sortedKeys) {
-                        const val = params[key];
-                        if (val !== undefined && val !== null) baseStr += key + val;
-                    }
-                    if (body && body.getDocumentReq) baseStr += JSON.stringify(body.getDocumentReq);
-                    return baseStr;
-                })(),
+                baseStringForSign: baseStr,
+                bodyStr,
                 sign,
                 finalUrl,
             },
             lazada_response: data,
         });
+
     } catch (err) {
+        console.error("[LAZADA] ERROR print AWB:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal print AWB Lazada",
