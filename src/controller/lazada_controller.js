@@ -1528,7 +1528,7 @@ const generateSignLazadaAWB = (apiPath, params, bodyStr, appSecret) => {
     return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
 };
 
-const printAWB = async () => {
+const printLazadaResi = async () => {
     const apiPath = "/order/package/document/get";
     const params = {
         access_token: "50000900530VjUeqMIVDqlS2mqhD6IYEHygtSCegBq1442ba37hq0tfnf5vtRBzK",
@@ -1567,7 +1567,6 @@ const printAWB = async () => {
     console.log(response.data);
 };
 
-printAWB();
 
 module.exports = {
     generateLoginUrl,
