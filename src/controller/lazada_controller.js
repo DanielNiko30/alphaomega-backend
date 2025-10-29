@@ -1517,27 +1517,25 @@ const aturPickup = async (req, res) => {
     }
 };
 
+function canonicalize(obj) {
+    if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
+    else if (obj && typeof obj === "object") {
+        const keys = Object.keys(obj).sort();
+        return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
+    } else if (typeof obj === "string") return `"${obj}"`;
+    else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
+    else return "null";
+}
 
-function makeSign(apiPath, sysParams, bodyObj, appSecret) {
+// Generate Lazada signature
+function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
     const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
-
-    // gabungkan sys params
     for (const k of sortedKeys) {
         baseStr += k + sysParams[k];
     }
 
-    // canonicalize body: sort keys dan stringify
-    function canonicalize(obj) {
-        if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
-        else if (obj && typeof obj === "object") {
-            const keys = Object.keys(obj).sort();
-            return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
-        } else if (typeof obj === "string") return `"${obj}"`;
-        else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
-        else return "null";
-    }
-
+    // Canonicalize body
     const bodyStr = canonicalize(bodyObj);
     baseStr += bodyStr;
 
@@ -1550,92 +1548,53 @@ function makeSign(apiPath, sysParams, bodyObj, appSecret) {
     return { sign, baseStr, bodyStr };
 }
 
-// Fungsi mencoba beberapa mode kirim
-const tryPrintAwbMultiple = async ({ package_id, region = "id" }) => {
+// Main function to print AWB
+async function printLazadaResi(package_id, region = "id") {
     const apiBaseByRegion = {
         id: "https://api.lazada.co.id/rest",
         sg: "https://api.lazada.sg/rest",
         th: "https://api.lazada.co.th/rest",
         my: "https://api.lazada.com.my/rest",
         ph: "https://api.lazada.com.ph/rest",
-        vn: "https://api.lazada.vn/rest"
+        vn: "https://api.lazada.vn/rest",
     };
+
     const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
     const apiPath = "/order/package/document/get";
 
-    // ambil token dari DB
+    // Ambil token & app key/secret dari environment atau DB
     const tokenRow = await Lazada.findOne();
     if (!tokenRow || !tokenRow.access_token) throw new Error("Access token Lazada tidak ditemukan");
-
     const access_token = tokenRow.access_token.trim();
-    const app_key = (process.env.LAZADA_APP_KEY || "").trim();
-    const app_secret = (process.env.LAZADA_APP_SECRET || "").trim();
-    if (!app_key || !app_secret) throw new Error("LAZADA_APP_KEY or LAZADA_APP_SECRET not set");
+    const app_key = process.env.LAZADA_APP_KEY.trim();
+    const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
+    // System params
     const timestamp = Date.now().toString();
     const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
 
-    // canonical body
-    const getDocumentReq = {
-        doc_type: "PDF",
-        print_item_list: false,
-        packages: [{ package_id: String(package_id) }]
+    // Wrapped body
+    const bodyForSign = {
+        getDocumentReq: {
+            doc_type: "PDF",
+            print_item_list: false,
+            packages: [{ package_id: String(package_id) }],
+        },
     };
 
-    // mode kirim
-    const modes = [
-        { name: "object", bodyForSign: getDocumentReq, sendBody: getDocumentReq },
-        { name: "string_payload", bodyForSign: getDocumentReq, sendBody: JSON.stringify(getDocumentReq) },
-        { name: "wrapped", bodyForSign: { getDocumentReq }, sendBody: { getDocumentReq } }
-    ];
+    const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
 
-    const results = [];
+    // Build final URL
+    const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-    for (const mode of modes) {
-        try {
-            const { sign, baseStr, bodyStr } = makeSign(apiPath, sysParams, mode.bodyForSign, app_secret);
-            const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
-            const headers = { "Content-Type": "application/json" };
+    // POST request
+    const headers = { "Content-Type": "application/json" };
+    const { data } = await axios.post(finalUrl, bodyForSign, { headers, timeout: 30000 });
 
-            let resp;
-            try {
-                resp = await axios.post(finalUrl, mode.sendBody, { headers, timeout: 30000 });
-            } catch (err) {
-                resp = err.response || { data: { error: err.message }, status: err.code || 500 };
-            }
+    // Return response + debug
+    return { finalUrl, baseStr, bodyStr, sign, data };
+}
 
-            const data = resp.data;
-            results.push({ mode: mode.name, finalUrl, baseStr, bodyStr, sign, status: resp.status, data });
-
-            if (data && (data.success === true || data.result || data.pdf_url || data.file)) {
-                return { ok: true, mode: mode.name, response: data, debug: results };
-            }
-        } catch (err) {
-            results.push({ mode: mode.name, error: err.message || String(err) });
-        }
-    }
-
-    return { ok: false, message: "None of the sign/send modes succeeded", debug: results };
-};
-
-// Controller Express
-const printLazadaResi = async (req, res) => {
-    try {
-        const { package_id, region } = req.body;
-        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
-
-        const out = await tryPrintAwbMultiple({ package_id, region: region || "id" });
-
-        if (out.ok) {
-            return res.json({ success: true, message: "AWB retrieved", lazada: out.response, debug: out.debug });
-        } else {
-            return res.status(502).json({ success: false, message: out.message, debug: out.debug });
-        }
-    } catch (err) {
-        console.error("PRINT AWB ERROR:", err);
-        return res.status(500).json({ success: false, error: err.message || String(err) });
-    }
-};
 
 module.exports = {
     generateLoginUrl,
