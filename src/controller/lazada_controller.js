@@ -1519,9 +1519,11 @@ const aturPickup = async (req, res) => {
 
 // ======================================
 function generateSignLazadaAWB(apiPath, params, body, appSecret) {
+    // 1️⃣ Urutkan semua parameter ASCII (kecuali sign)
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
 
+    // 2️⃣ Gabungkan params
     for (const key of sortedKeys) {
         const val = params[key];
         if (val !== undefined && val !== null) {
@@ -1529,29 +1531,36 @@ function generateSignLazadaAWB(apiPath, params, body, appSecret) {
         }
     }
 
+    // 3️⃣ Tambahkan body untuk signature (hanya isi getDocumentReq)
     let bodyStr = "";
     if (body && body.getDocumentReq) {
-        // MUST stringify compact JSON, no space/newline
-        bodyStr = JSON.stringify(body.getDocumentReq);
-        // replace escaped backslashes jika ada (Node sometimes escape quotes)
-        bodyStr = bodyStr.replace(/\\/g, "");
+        bodyStr = JSON.stringify(body.getDocumentReq); // compact JSON
+        bodyStr = bodyStr.replace(/\\/g, ""); // hilangkan escape backslash
         baseStr += bodyStr;
     }
 
+    // 4️⃣ Generate HMAC SHA256 → HEX uppercase
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 
-    console.log("BASE STR FOR SIGN:", baseStr);
-    console.log("SIGNATURE GENERATED:", sign);
+    // 5️⃣ Debug log
+    console.log("\n========= [LAZADA SIGN DEBUG] =========");
+    console.log("API PATH :", apiPath);
+    console.log("PARAMS   :", JSON.stringify(params, null, 2));
+    console.log("BODY RAW :", JSON.stringify(body, null, 2));
+    console.log("BODY STR :", bodyStr);
+    console.log("BASE STR :", baseStr);
+    console.log("SIGN     :", sign);
+    console.log("=======================================\n");
 
     return { sign, baseStr, bodyStr };
 }
 
 // =======================================================
-// 🧾 PRINT AWB LAZADA (FULL DEBUG MODE)
+// 🧾 Print AWB Lazada (Full Debug Mode)
 // =======================================================
 const printLazadaResi = async (req, res) => {
     try {
@@ -1566,9 +1575,10 @@ const printLazadaResi = async (req, res) => {
         // 🔑 Ambil access token dari DB
         const tokenRow = await Lazada.findOne();
         if (!tokenRow || !tokenRow.access_token) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Access token tidak ditemukan" });
+            return res.status(400).json({
+                success: false,
+                message: "Access token tidak ditemukan",
+            });
         }
 
         const access_token = tokenRow.access_token.trim();
@@ -1589,7 +1599,7 @@ const printLazadaResi = async (req, res) => {
         const timestamp = Date.now().toString();
         const sign_method = "sha256";
 
-        // 🧾 Body request (sesuai dokumentasi resmi Lazada)
+        // 🧾 Body request POST (tetap getDocumentReq)
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1610,25 +1620,25 @@ const printLazadaResi = async (req, res) => {
         const signData = generateSignLazadaAWB(apiPath, params, body, app_secret);
         const sign = signData.sign;
 
-        // 🔗 Query string final
+        // 🔗 Build final URL dengan query string
         const queryString = Object.entries({ ...params, sign })
             .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
             .join("&");
 
         const finalUrl = `${baseUrl}?${queryString}`;
 
-        // 🧩 Log debug
+        // 🧩 Debug log
         console.log("[LAZADA] FINAL URL:", finalUrl);
         console.log("[LAZADA] BODY SENT:", JSON.stringify(body));
 
-        // 🚀 Kirim POST ke Lazada
+        // 🚀 Request POST ke Lazada
         const { data } = await axios.post(finalUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
         console.log("[LAZADA] RESPONSE:", JSON.stringify(data, null, 2));
 
-        // ✅ Kirim hasil ke frontend
+        // ✅ Return ke frontend
         return res.json({
             success: true,
             message: "Print AWB request berhasil dikirim",
