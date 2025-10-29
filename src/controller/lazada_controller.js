@@ -1543,7 +1543,6 @@ async function printLazadaResi(packageId) {
   const appSecret = process.env.LAZADA_APP_SECRET;
 
   // 🧠 ambil token dari database lazada_routes
-  const { Lazada } = require("../models/lazada");
   const lazadaAccount = await Lazada.findOne({ where: { account: "default" } });
   const access_token = lazadaAccount.access_token;
 
