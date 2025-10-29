@@ -1520,106 +1520,106 @@ const aturPickup = async (req, res) => {
 
 const readyToShipLazada = async (req, res) => {
     try {
-        // 🔹 Ambil akun Lazada (anggap hanya 1 di DB)
-        const account = (await Lazada.findAll())[0];
-        if (!account) throw new Error("Tidak ada account Lazada di DB");
+        const packageId =
+            req.body.packageId || req.params.packageId || req.query.packageId;
 
-        const accessToken = account.access_token.trim();
-        const apiKey = process.env.LAZADA_APP_KEY.trim();
-        const appSecret = process.env.LAZADA_APP_SECRET.trim();
-
-        // 🔹 Ambil package_id dari body
-        const { package_id } = req.body;
-        if (!package_id) {
+        if (!packageId) {
             return res.status(400).json({
                 success: false,
-                message: "package_id wajib dikirim di body",
+                message: "Parameter packageId wajib diisi",
             });
         }
 
-        // === Lazada API info ===
         const apiPath = "/order/package/rts";
-        const timestamp = Date.now().toString();
+        const appKey = process.env.LAZADA_APP_KEY;
+        const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // === System params ===
-        const sysParams = {
-            app_key: apiKey,
-            access_token: accessToken,
+        const [lazadaAccount] = await Lazada.findAll();
+        if (!lazadaAccount) {
+            return res.status(400).json({
+                success: false,
+                message: "Tidak ada akun Lazada ditemukan di database",
+            });
+        }
+
+        const access_token = lazadaAccount.access_token;
+        const timestamp = Date.now();
+
+        // 🧩 Common params
+        const params = {
+            access_token,
+            app_key: appKey,
             sign_method: "sha256",
             timestamp,
         };
 
-        // === Payload (body) ===
-        const payloadObj = {
-            readyToShipReq: {
-                packages: [
-                    { package_id: package_id }
-                ]
-            }
-        };
-
-        // === Untuk signature: gabungkan sysParams + payload ===
-        const allParamsForSign = {
-            ...sysParams,
-            payload: JSON.stringify(payloadObj)
-        };
-
-        // === Generate signature ===
-        const sign = generateSign(apiPath, allParamsForSign, appSecret);
-
-        // === URL API ===
-        const url = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
-            ...sysParams,
-            sign,
-        }).toString()}`;
-
-        // === Body request ===
-        const bodyForRequest = new URLSearchParams({
-            payload: JSON.stringify(payloadObj)
+        // 🧾 Body request sesuai dokumentasi Lazada
+        const readyToShipReq = JSON.stringify({
+            packages: [{ package_id: packageId }],
         });
 
-        console.log("🚀 Mengirim ReadyToShip:", payloadObj.readyToShipReq.packages);
+        // 🔐 Generate sign
+        const signParams = { ...params, readyToShipReq };
+        const sortedKeys = Object.keys(signParams).sort();
+        let baseStr = apiPath;
+        for (const key of sortedKeys) baseStr += key + signParams[key];
 
-        // === Kirim request ke Lazada ===
-        const response = await axios.post(url, bodyForRequest, {
+        const sign = crypto
+            .createHmac("sha256", appSecret)
+            .update(baseStr, "utf8")
+            .digest("hex")
+            .toUpperCase();
+
+        // 🔗 Build final URL
+        const queryParams = new URLSearchParams({ ...params, sign }).toString();
+        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
+
+        // 📨 Body dikirim x-www-form-urlencoded
+        const bodyData = `readyToShipReq=${readyToShipReq}`;
+
+        console.log("DEBUG READY_TO_SHIP:", {
+            finalUrl,
+            baseStr,
+            bodyData,
+            sign,
+        });
+
+        const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
-        const lazadaResponse = response.data;
+        const data = lazadaRes.data;
 
-        // === Validasi sukses ===
-        if (lazadaResponse?.result?.success) {
+        // ✅ Cek hasil sukses atau gagal
+        if (data.success) {
             return res.json({
                 success: true,
-                message: "Berhasil mengatur paket ReadyToShip di Lazada",
-                lazada_response: lazadaResponse,
-                debug: {
-                    url,
-                    baseStr: apiPath + Object.keys(allParamsForSign).sort().map(k => k + allParamsForSign[k]).join(""),
-                    sign,
-                },
+                message: "Order berhasil ditandai sebagai Ready To Ship",
+                data: data.result?.data || data,
+                debug: { finalUrl, bodyData },
             });
         } else {
             return res.status(400).json({
                 success: false,
-                message: lazadaResponse?.error_msg || "Gagal mengatur ReadyToShip",
-                lazada_response: lazadaResponse,
-                debug: {
-                    url,
-                    sign,
-                },
+                message: "Gagal menandai order sebagai Ready To Ship",
+                error: data.error_msg || data,
+                debug: { finalUrl, bodyData },
             });
         }
+    } catch (error) {
+        const errData =
+            error.response && error.response.data
+                ? error.response.data
+                : error.message;
 
-    } catch (err) {
-        console.error("❌ ReadyToShip Error:", err.response?.data || err.message);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Gagal mengatur paket ReadyToShip di Lazada.",
-            error: err.response?.data || err.message,
+            message: "Gagal request Ready To Ship ke Lazada",
+            error: errData,
         });
     }
 };
+
 
 const printLazadaResi = async (req, res) => {
     try {
