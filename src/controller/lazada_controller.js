@@ -1580,26 +1580,17 @@ const printLazadaResi = async (req, res) => {
             }
         };
 
-        const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
-
+        const { sign } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
         const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
+        // Request PDF
         const headers = { "Content-Type": "application/json" };
         const response = await axios.post(finalUrl, bodyForSign, { headers, responseType: "arraybuffer", timeout: 30000 });
 
-        // simpan PDF jika server mengirimkan file
-        const pdfFolder = path.resolve("./awb");
-        if (!fs.existsSync(pdfFolder)) fs.mkdirSync(pdfFolder, { recursive: true });
-
-        const filePath = path.join(pdfFolder, `AWB_${package_id}.pdf`);
-        fs.writeFileSync(filePath, response.data);
-
-        return res.json({
-            success: true,
-            message: "AWB PDF berhasil di-download",
-            file: filePath,
-            debug: { finalUrl, baseStr, bodyStr, sign }
-        });
+        // Kirim langsung PDF ke Postman/browser
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
+        return res.send(response.data);
 
     } catch (err) {
         console.error("PRINT AWB ERROR:", err.response?.data || err.message);
@@ -1610,6 +1601,7 @@ const printLazadaResi = async (req, res) => {
         });
     }
 };
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
