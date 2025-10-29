@@ -1537,118 +1537,89 @@ function generateSignWithBodyString(apiPath, sysParams, bodyString, appSecret) {
  * Express controller: POST /api/lazada/print-awb
  * Body JSON: { package_id: "FP....", region?: "id" }
  */
-const printLazadaResi = async (req, res) => {
-    try {
-        const { package_id, region = "id" } = req.body;
-        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
+async function printLazadaResi(packageId) {
+  const apiPath = "/order/package/document/get";
+  const appKey = process.env.LAZADA_APP_KEY;
+  const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // ambil access token dari DB
-        const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token) {
-            return res.status(400).json({ success: false, message: "Access token Lazada tidak ditemukan di DB" });
-        }
-        const access_token = tokenRow.access_token.trim();
+  // 🧠 ambil token dari database lazada_routes
+  const { Lazada } = require("../models/lazada");
+  const lazadaAccount = await Lazada.findOne({ where: { account: "default" } });
+  const access_token = lazadaAccount.access_token;
 
-        const app_key = (process.env.LAZADA_APP_KEY || "").trim();
-        const app_secret = (process.env.LAZADA_APP_SECRET || "").trim();
-        if (!app_key || !app_secret) return res.status(500).json({ success: false, message: "LAZADA_APP_KEY/SECRET belum diset" });
+  // 🧩 parameter utama
+  const timestamp = Date.now();
+  const params = {
+    access_token,
+    app_key: appKey,
+    sign_method: "sha256",
+    timestamp,
+  };
 
-        const apiBaseByRegion = {
-            id: "https://api.lazada.co.id/rest",
-            sg: "https://api.lazada.sg/rest",
-            th: "https://api.lazada.co.th/rest",
-            my: "https://api.lazada.com.my/rest",
-            ph: "https://api.lazada.com.ph/rest",
-            vn: "https://api.lazada.vn/rest",
-        };
-        const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
-        const apiPath = "/order/package/document/get";
+  // 🧩 body dalam format key-value pair
+  const getDocumentReq = JSON.stringify({
+    doc_type: "PDF",
+    print_item_list: false,
+    packages: [{ package_id: packageId }],
+  });
 
-        // system params
-        const sysParams = {
-            access_token,
-            app_key,
-            sign_method: "sha256",
-            timestamp: Date.now().toString(),
-        };
+  // 🧮 langkah penting: ikutkan body param dalam signature
+  const sortedKeys = Object.keys(params).sort();
+  let baseStr = apiPath;
+  for (const key of sortedKeys) {
+    baseStr += key + params[key];
+  }
+  // tambahkan parameter body di akhir — TIDAK URL-encoded
+  baseStr += "getDocumentReq" + getDocumentReq;
 
-        // getDocumentReq object (compact)
-        const getDocumentReq = {
-            doc_type: "PDF",
-            print_item_list: false,
-            packages: [{ package_id: String(package_id) }],
-        };
+  const sign = crypto
+    .createHmac("sha256", appSecret)
+    .update(baseStr)
+    .digest("hex")
+    .toUpperCase();
 
-        // --- IMPORTANT: build form-urlencoded body using URLSearchParams ---
-        // This produces: "getDocumentReq=%7B%22doc_type%22%3A%22PDF%22%2C...%7D"
-        // We will use the exact same string BOTH for signing and for sending.
-        const urlSearch = new URLSearchParams({ getDocumentReq: JSON.stringify(getDocumentReq) });
-        const bodyStringToSend = urlSearch.toString(); // e.g. "getDocumentReq=%7B...%7D"
+  // 🧾 kirim request POST
+  const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+    ...params,
+    sign,
+  }).toString()}`;
 
-        // For signature: Lazada expects the body string concatenated exactly as sent.
-        // Many servers expect raw (not decoded) urlencoded string. We must sign the same exact string.
-        const { sign, baseStr } = generateSignWithBodyString(apiPath, sysParams, bodyStringToSend, app_secret);
+  const body = new URLSearchParams({ getDocumentReq }).toString();
 
-        // Build final URL with query params + sign
-        const query = new URLSearchParams({ ...sysParams, sign }).toString();
-        const finalUrl = `${baseApi}${apiPath}?${query}`;
+  console.log("DEBUG:", { finalUrl, body, baseStr });
 
-        // Send POST as application/x-www-form-urlencoded with the exact same body string
-        const response = await axios.post(finalUrl, bodyStringToSend, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            responseType: "arraybuffer",
-            timeout: 30000,
-            validateStatus: status => true, // we'll handle non-200 manually
-        });
+  try {
+    const res = await axios.post(finalUrl, body, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      responseType: "arraybuffer", // supaya bisa nerima PDF
+    });
 
-        // Try detect content-type
-        const contentType = (response.headers && response.headers["content-type"]) || "";
-
-        // If Lazada returned PDF
-        if (contentType.includes("application/pdf")) {
-            const buf = Buffer.from(response.data);
-            // Optional: save to file
-            const awbDir = path.resolve(process.cwd(), "awb");
-            if (!fs.existsSync(awbDir)) fs.mkdirSync(awbDir, { recursive: true });
-            const filePath = path.join(awbDir, `AWB_${package_id}.pdf`);
-            fs.writeFileSync(filePath, buf);
-
-            // Send PDF to client (preview in Postman/browser)
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
-            return res.send(buf);
-        }
-
-        // If not PDF: try parse response as text/JSON for debug (likely error)
-        let rawText;
-        try {
-            rawText = Buffer.from(response.data).toString("utf8");
-            // try JSON parse
-            const parsed = JSON.parse(rawText);
-            return res.status(400).json({
-                success: false,
-                message: "Lazada tidak mengirim PDF (error dari Lazada)",
-                raw: parsed,
-                debug: { finalUrl, bodyStringToSend, baseStr },
-            });
-        } catch (e) {
-            // not JSON: return raw text
-            return res.status(400).json({
-                success: false,
-                message: "Lazada tidak mengirim PDF (raw text)",
-                raw: rawText,
-                debug: { finalUrl, bodyStringToSend, baseStr },
-            });
-        }
-    } catch (err) {
-        console.error("PRINT AWB ERROR:", err.response?.data || err.message || err);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal print AWB Lazada (exception)",
-            error: err.response?.data || err.message || String(err),
-        });
+    const contentType = res.headers["content-type"];
+    if (contentType && contentType.includes("application/pdf")) {
+      const fs = require("fs");
+      const path = `/home/alphaomega2/alphaomega-backend/awb/AWB_${packageId}.pdf`;
+      fs.writeFileSync(path, res.data);
+      return {
+        success: true,
+        message: "Berhasil ambil AWB PDF dari Lazada",
+        file: path,
+      };
+    } else {
+      const raw = Buffer.from(res.data).toString("utf8");
+      return {
+        success: false,
+        message: "Lazada tidak mengirim PDF (kemungkinan package_id salah atau token expired)",
+        raw: raw,
+      };
     }
-};
+  } catch (err) {
+    return {
+      success: false,
+      message: "Gagal ambil AWB dari Lazada",
+      error: err.response ? err.response.data.toString() : err.message,
+    };
+  }
+}
 
 module.exports = {
     generateLoginUrl,
