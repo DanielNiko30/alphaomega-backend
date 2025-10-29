@@ -1518,113 +1518,56 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function canonicalize(obj, disableSort = false) {
-    if (Array.isArray(obj)) return `[${obj.map(o => canonicalize(o, disableSort)).join(",")}]`;
-    else if (obj && typeof obj === "object") {
-        const keys = disableSort ? Object.keys(obj) : Object.keys(obj).sort();
-        return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalize(obj[k], k === "getDocumentReq")}`).join(",")}}`;
-    } else if (typeof obj === "string") return JSON.stringify(obj);
-    else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
-    else return "null";
-}
-
-function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
-    const sortedKeys = Object.keys(sysParams).sort();
+const generateSignLazadaAWB = (apiPath, params, bodyStr, appSecret) => {
+    const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
-    for (const k of sortedKeys) baseStr += k + sysParams[k];
-
-    const bodyStr = canonicalize(bodyObj);
-    baseStr += bodyStr;
-
-    const sign = crypto.createHmac("sha256", appSecret)
-        .update(baseStr, "utf8")
-        .digest("hex")
-        .toUpperCase();
-
-    return { sign, baseStr, bodyStr };
-}
-
-const printLazadaResi = async (req, res) => {
-    try {
-        const { package_id, region = "id" } = req.body;
-        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
-
-        const apiBaseByRegion = {
-            id: "https://api.lazada.co.id/rest",
-            sg: "https://api.lazada.sg/rest",
-            th: "https://api.lazada.co.th/rest",
-            my: "https://api.lazada.com.my/rest",
-            ph: "https://api.lazada.com.ph/rest",
-            vn: "https://api.lazada.vn/rest",
-        };
-        const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
-        const apiPath = "/order/package/document/get";
-
-        const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token)
-            throw new Error("Access token Lazada tidak ditemukan");
-
-        const access_token = tokenRow.access_token.trim();
-        const app_key = process.env.LAZADA_APP_KEY.trim();
-        const app_secret = process.env.LAZADA_APP_SECRET.trim();
-
-        const timestamp = Date.now().toString();
-        const sysParams = {
-            access_token,
-            app_key,
-            sign_method: "sha256",
-            timestamp,
-        };
-
-        // ⚙️ PENTING: urutan key HARUS sama dengan dokumentasi Lazada
-        const bodyForSign = {
-            getDocumentReq: {
-                packages: [{ package_id: String(package_id) }],
-                doc_type: "PDF",
-                print_item_list: false
-            }
-        };
-
-        const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
-
-        const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({
-            ...sysParams,
-            sign,
-        }).toString()}`;
-
-        const headers = { "Content-Type": "application/json" };
-        const response = await axios.post(finalUrl, bodyForSign, {
-            headers,
-            responseType: "arraybuffer",
-            timeout: 30000,
-        });
-
-        const buf = Buffer.from(response.data);
-
-        // Cek apakah hasil benar-benar PDF
-        if (buf.slice(0, 4).toString() !== "%PDF") {
-            const raw = buf.toString();
-            return res.status(500).json({
-                success: false,
-                message: "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
-                raw,
-                debug: { baseStr, bodyStr, finalUrl },
-            });
-        }
-
-        // Tampilkan PDF langsung
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
-        return res.send(buf);
-    } catch (err) {
-        console.error("PRINT AWB ERROR:", err.response?.data || err.message);
-        return res.status(500).json({
-            success: false,
-            message: "Gagal print AWB Lazada",
-            error: err.response?.data || err.message,
-        });
+    for (const key of sortedKeys) {
+        baseStr += key + params[key];
     }
+    baseStr += bodyStr; // <== tetap tambahkan ke baseStr untuk sign
+    return crypto.createHmac("sha256", appSecret).update(baseStr).digest("hex").toUpperCase();
 };
+
+const printAWB = async () => {
+    const apiPath = "/order/package/document/get";
+    const params = {
+        access_token: "50000900530VjUeqMIVDqlS2mqhD6IYEHygtSCegBq1442ba37hq0tfnf5vtRBzK",
+        app_key: "131919",
+        sign_method: "sha256",
+        timestamp: Date.now(),
+    };
+
+    const getDocumentReq = {
+        doc_type: "PDF",
+        packages: [{ package_id: "FP007528536352493" }],
+        print_item_list: false,
+    };
+
+    // ⚙️ Body harus dalam format key=value, bukan JSON
+    const bodyStr = `getDocumentReq=${JSON.stringify(getDocumentReq)}`;
+
+    // 🔐 Generate signature pakai string body di atas
+    const sign = generateSignLazadaAWB(apiPath, params, bodyStr, "appSecretKamu");
+
+    const url =
+        "https://api.lazada.co.id/rest" +
+        apiPath +
+        "?" +
+        Object.entries(params)
+            .map(([k, v]) => `${k}=${v}`)
+            .join("&") +
+        `&sign=${sign}`;
+
+    const response = await axios.post(url, bodyStr, {
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    });
+
+    console.log(response.data);
+};
+
+printAWB();
 
 module.exports = {
     generateLoginUrl,
