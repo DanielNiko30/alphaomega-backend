@@ -1519,10 +1519,7 @@ const aturPickup = async (req, res) => {
 
 // ======================================
 function generateSignLazadaAWB(apiPath, params, body, appSecret) {
-    // 1️⃣ Urutkan semua parameter ASCII (kecuali sign)
     const sortedKeys = Object.keys(params).sort();
-
-    // 2️⃣ Susun base string dimulai dari API path
     let baseStr = apiPath;
 
     for (const key of sortedKeys) {
@@ -1532,33 +1529,25 @@ function generateSignLazadaAWB(apiPath, params, body, appSecret) {
         }
     }
 
-    // 3️⃣ Jika ada body, tambahkan di akhir (tanpa spasi / newline)
     let bodyStr = "";
-    if (body && Object.keys(body).length > 0) {
-        // 🧩 Lazada khusus endpoint print AWB ingin isi dari getDocumentReq
-        const rawBodyForSign = body.getDocumentReq ?? body;
-        bodyStr = JSON.stringify(rawBodyForSign);
+    if (body && body.getDocumentReq) {
+        // MUST stringify compact JSON, no space/newline
+        bodyStr = JSON.stringify(body.getDocumentReq);
+        // replace escaped backslashes jika ada (Node sometimes escape quotes)
+        bodyStr = bodyStr.replace(/\\/g, "");
         baseStr += bodyStr;
     }
 
-    // 4️⃣ Buat signature HMAC SHA256 → HEX uppercase
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
 
-    // 5️⃣ Debug log biar kelihatan prosesnya
-    console.log("\n========= [LAZADA SIGN DEBUG] =========");
-    console.log("API PATH :", apiPath);
-    console.log("PARAMS   :", JSON.stringify(params, null, 2));
-    console.log("BODY RAW :", JSON.stringify(body, null, 2));
-    console.log("BODY STR :", bodyStr);
-    console.log("BASE STR :", baseStr);
-    console.log("SIGN     :", sign);
-    console.log("=======================================\n");
+    console.log("BASE STR FOR SIGN:", baseStr);
+    console.log("SIGNATURE GENERATED:", sign);
 
-    return { apiPath, params, body, bodyStr, baseStr, sign };
+    return { sign, baseStr, bodyStr };
 }
 
 // =======================================================
