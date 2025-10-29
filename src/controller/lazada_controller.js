@@ -1528,6 +1528,7 @@ function canonicalize(obj) {
     else return "null";
 }
 
+// Generate Lazada signature
 function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
     const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
@@ -1587,10 +1588,23 @@ const printLazadaResi = async (req, res) => {
         const headers = { "Content-Type": "application/json" };
         const response = await axios.post(finalUrl, bodyForSign, { headers, responseType: "arraybuffer", timeout: 30000 });
 
+        const buf = Buffer.from(response.data);
+
+        // Validasi apakah benar PDF
+        if (buf.slice(0, 4).toString() !== '%PDF') {
+            // Jika bukan PDF, kemungkinan Lazada balikin JSON error
+            const text = buf.toString();
+            return res.status(500).json({
+                success: false,
+                message: "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
+                raw: text
+            });
+        }
+
         // Kirim langsung PDF ke Postman/browser
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
-        return res.send(response.data);
+        return res.send(buf);
 
     } catch (err) {
         console.error("PRINT AWB ERROR:", err.response?.data || err.message);
