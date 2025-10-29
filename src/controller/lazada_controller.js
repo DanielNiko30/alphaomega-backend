@@ -1518,21 +1518,17 @@ const aturPickup = async (req, res) => {
 };
 
 function generateSignWithBody(apiPath, params, body, appSecret) {
-    // body hanya getDocumentReq
-    const bodyForSign = body.getDocumentReq;
+    const bodyForSign = body.getDocumentReq || body;
     const bodyStr = JSON.stringify(bodyForSign);
 
-    // urutkan params ASCII
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
     for (const key of sortedKeys) {
         baseStr += key + params[key];
     }
 
-    // tambahkan body di akhir
     baseStr += bodyStr;
 
-    // generate HMAC SHA256
     const sign = crypto
         .createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
@@ -1542,26 +1538,13 @@ function generateSignWithBody(apiPath, params, body, appSecret) {
     return { sign, baseStr, bodyStr, bodyForSign };
 }
 
-// ===============================
-// Controller Print AWB
-// ===============================
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
-        if (!package_id) {
-            return res.status(400).json({
-                success: false,
-                message: "package_id wajib diisi",
-            });
-        }
+        if (!package_id) throw new Error("package_id wajib diisi");
 
         const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Access token tidak ditemukan",
-            });
-        }
+        if (!tokenRow?.access_token) throw new Error("Access token tidak ditemukan");
 
         const access_token = tokenRow.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY.trim();
@@ -1570,7 +1553,6 @@ const printLazadaResi = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest" + apiPath;
         const timestamp = Date.now().toString();
 
-        // body sesuai docs Lazada
         const body = {
             getDocumentReq: {
                 doc_type: "PDF",
@@ -1579,33 +1561,35 @@ const printLazadaResi = async (req, res) => {
             },
         };
 
-        // sistem parameter
         const params = { access_token, app_key, sign_method: "sha256", timestamp };
 
-        // generate sign
         const { sign, baseStr, bodyStr, bodyForSign } = generateSignWithBody(apiPath, params, body, app_secret);
 
-        // URL lengkap
         const finalUrl = `${baseUrl}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
-        // kirim request POST ke Lazada
-        const { data } = await axios.post(finalUrl, bodyForSign, {
-            headers: { "Content-Type": "application/json" },
-        });
+        // POST request
+        let data = null;
+        try {
+            const response = await axios.post(finalUrl, bodyForSign, {
+                headers: { "Content-Type": "application/json" },
+            });
+            data = response.data;
+        } catch (err) {
+            // jangan throw, simpan di debug saja
+            data = err.response?.data || err.message;
+        }
 
-        // response
         return res.json({
             success: true,
-            message: "Print AWB request berhasil dikirim",
+            message: "Print AWB request berhasil dikirim (signature mungkin reject)",
             debug: { apiPath, params, body, baseStr, bodyStr, sign, finalUrl },
             lazada_response: data,
         });
     } catch (err) {
-        console.error("ERROR print AWB:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal print AWB Lazada",
-            error: err.response?.data || err.message,
+            error: err.message,
         });
     }
 };
