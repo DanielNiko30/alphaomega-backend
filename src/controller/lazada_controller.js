@@ -1534,7 +1534,7 @@ const printLazadaResi = async (req, res) => {
         const appKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // 🔹 Ambil token dari DB (asumsi cuma 1 akun)
+        // 🔹 Ambil access token dari DB
         const [lazadaAccount] = await Lazada.findAll();
         if (!lazadaAccount) {
             return res.status(400).json({
@@ -1542,7 +1542,6 @@ const printLazadaResi = async (req, res) => {
                 message: "Tidak ada akun Lazada ditemukan di database",
             });
         }
-
         const access_token = lazadaAccount.access_token;
 
         // 🔹 Parameter utama
@@ -1554,17 +1553,16 @@ const printLazadaResi = async (req, res) => {
             timestamp,
         };
 
-        // 🔹 Body (RAW JSON)
+        // 🔹 Body yang akan dikirim ke Lazada
         const getDocumentReq = JSON.stringify({
             doc_type: "PDF",
             print_item_list: false,
             packages: [{ package_id: packageId }],
         });
 
-        // 🔹 Gabungkan ke sign params (ikut disortir)
+        // 🔹 Sign harus mencakup getDocumentReq
         const signParams = { ...params, getDocumentReq };
 
-        // 🔐 Generate baseStr (ikutkan getDocumentReq juga)
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
         for (const key of sortedKeys) {
@@ -1577,32 +1575,32 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 Final URL
+        // 🔹 URL akhir
         const queryParams = new URLSearchParams({
             ...params,
             sign,
         }).toString();
         const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
 
-        // 🔹 Body dikirim (encoded)
-        const encodedBody = new URLSearchParams({ getDocumentReq }).toString();
+        // ⚙️ Body HARUS dalam key-value pair (TIDAK di-encode)
+        const bodyData = `getDocumentReq=${getDocumentReq}`;
 
         console.log("DEBUG LAZADA AWB:", {
             finalUrl,
             baseStr,
-            encodedBody,
+            bodyData,
             sign,
         });
 
-        // 🚀 POST ke Lazada
-        const lazadaRes = await axios.post(finalUrl, encodedBody, {
+        // 🚀 Kirim ke Lazada
+        const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             responseType: "arraybuffer",
         });
 
         const contentType = lazadaRes.headers["content-type"];
 
-        // ✅ Jika Lazada kirim PDF langsung tampilkan
+        // ✅ Jika PDF
         if (contentType && contentType.includes("application/pdf")) {
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader(
@@ -1612,7 +1610,7 @@ const printLazadaResi = async (req, res) => {
             return res.send(lazadaRes.data);
         }
 
-        // ❌ Jika bukan PDF → tampilkan error jelas dari Lazada
+        // ❌ Jika bukan PDF
         const raw = Buffer.from(lazadaRes.data).toString("utf8");
         let parsed;
         try {
@@ -1626,12 +1624,7 @@ const printLazadaResi = async (req, res) => {
             message:
                 "Lazada tidak mengirim PDF (kemungkinan signature salah atau package_id tidak valid)",
             raw: parsed,
-            debug: {
-                finalUrl,
-                baseStr,
-                encodedBody,
-                sign,
-            },
+            debug: { finalUrl, baseStr, bodyData, sign },
         });
     } catch (error) {
         const errData =
