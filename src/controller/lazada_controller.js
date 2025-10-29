@@ -1534,7 +1534,6 @@ const printLazadaResi = async (req, res) => {
         const appKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // 🔹 Ambil access token dari DB
         const [lazadaAccount] = await Lazada.findAll();
         if (!lazadaAccount) {
             return res.status(400).json({
@@ -1542,10 +1541,10 @@ const printLazadaResi = async (req, res) => {
                 message: "Tidak ada akun Lazada ditemukan di database",
             });
         }
-        const access_token = lazadaAccount.access_token;
 
-        // 🔹 Parameter utama
+        const access_token = lazadaAccount.access_token;
         const timestamp = Date.now();
+
         const params = {
             access_token,
             app_key: appKey,
@@ -1553,21 +1552,17 @@ const printLazadaResi = async (req, res) => {
             timestamp,
         };
 
-        // 🔹 Body yang akan dikirim ke Lazada
         const getDocumentReq = JSON.stringify({
             doc_type: "PDF",
             print_item_list: false,
             packages: [{ package_id: packageId }],
         });
 
-        // 🔹 Sign harus mencakup getDocumentReq
+        // 🔹 Sign process
         const signParams = { ...params, getDocumentReq };
-
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
-        for (const key of sortedKeys) {
-            baseStr += key + signParams[key];
-        }
+        for (const key of sortedKeys) baseStr += key + signParams[key];
 
         const sign = crypto
             .createHmac("sha256", appSecret)
@@ -1575,14 +1570,9 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        // 🔹 URL akhir
-        const queryParams = new URLSearchParams({
-            ...params,
-            sign,
-        }).toString();
+        const queryParams = new URLSearchParams({ ...params, sign }).toString();
         const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
 
-        // ⚙️ Body HARUS dalam key-value pair (TIDAK di-encode)
         const bodyData = `getDocumentReq=${getDocumentReq}`;
 
         console.log("DEBUG LAZADA AWB:", {
@@ -1592,7 +1582,7 @@ const printLazadaResi = async (req, res) => {
             sign,
         });
 
-        // 🚀 Kirim ke Lazada
+        // 🔹 Request ke Lazada
         const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             responseType: "arraybuffer",
@@ -1600,8 +1590,39 @@ const printLazadaResi = async (req, res) => {
 
         const contentType = lazadaRes.headers["content-type"];
 
-        // ✅ Jika PDF
-        if (contentType && contentType.includes("application/pdf")) {
+        // Lazada kadang kirim JSON (bukan langsung PDF)
+        if (contentType.includes("application/json")) {
+            const raw = Buffer.from(lazadaRes.data).toString("utf8");
+            const parsed = JSON.parse(raw);
+
+            // 🔍 Jika response berisi URL PDF
+            if (parsed.result?.data?.pdf_url) {
+                const pdfUrl = parsed.result.data.pdf_url;
+
+                // Ambil file PDF dari URL tersebut
+                const pdfRes = await axios.get(pdfUrl, {
+                    responseType: "arraybuffer",
+                });
+
+                res.setHeader("Content-Type", "application/pdf");
+                res.setHeader(
+                    "Content-Disposition",
+                    `inline; filename="AWB_${packageId}.pdf"`
+                );
+                return res.send(pdfRes.data);
+            }
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Lazada mengembalikan JSON tanpa file PDF (mungkin package_id salah)",
+                raw: parsed,
+                debug: { finalUrl, baseStr, bodyData, sign },
+            });
+        }
+
+        // ✅ Jika langsung PDF
+        if (contentType.includes("application/pdf")) {
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader(
                 "Content-Disposition",
@@ -1610,21 +1631,10 @@ const printLazadaResi = async (req, res) => {
             return res.send(lazadaRes.data);
         }
 
-        // ❌ Jika bukan PDF
-        const raw = Buffer.from(lazadaRes.data).toString("utf8");
-        let parsed;
-        try {
-            parsed = JSON.parse(raw);
-        } catch (e) {
-            parsed = { raw };
-        }
-
+        // Fallback jika bukan PDF / JSON
         return res.status(400).json({
             success: false,
-            message:
-                "Lazada tidak mengirim PDF (kemungkinan signature salah atau package_id tidak valid)",
-            raw: parsed,
-            debug: { finalUrl, baseStr, bodyData, sign },
+            message: "Respons dari Lazada tidak diketahui",
         });
     } catch (error) {
         const errData =
