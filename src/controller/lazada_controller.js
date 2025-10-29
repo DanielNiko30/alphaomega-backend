@@ -1519,18 +1519,11 @@ const aturPickup = async (req, res) => {
 
 function generateSignWithBody(apiPath, params, body, appSecret) {
     // 1. Urutkan semua parameter ASCII
-    const bodyForSign = body.getDocumentReq; // Hanya isi getDocumentReq
-    const bodyStr = JSON.stringify(bodyForSign); // minified
+    const bodyForSign = body.getDocumentReq; // hanya object getDocumentReq
+    const bodyStr = JSON.stringify(bodyForSign); // untuk sign
+    baseStr += bodyStr;
 
-    let baseStr = apiPath;
-    const sortedKeys = Object.keys(params).sort();
-    for (const key of sortedKeys) {
-        baseStr += key + params[key];
-    }
-    baseStr += bodyStr; // tambahkan body minified di akhir
-
-    const sign = crypto
-        .createHmac("sha256", appSecret)  // <-- pakai appSecret bukan app_secret
+    const sign = crypto.createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
@@ -1564,8 +1557,8 @@ const printLazadaResi = async (req, res) => {
         const finalUrl = `${baseUrl}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
         // POST request
-        const { data } = await axios.post(finalUrl, body.getDocumentReq, {
-            headers: { "Content-Type": "application/json" }
+        const { data } = await axios.post(finalUrl, bodyForSign, {
+            headers: { "Content-Type": "application/json" },
         });
 
         return res.json({
