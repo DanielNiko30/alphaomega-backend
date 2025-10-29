@@ -1518,108 +1518,90 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function generateSignWithBodyString(apiPath, sysParams, bodyString, appSecret) {
-    const sortedKeys = Object.keys(sysParams).sort();
-    let baseStr = apiPath;
-    for (const k of sortedKeys) {
-        baseStr += k + sysParams[k];
-    }
-    baseStr += bodyString;
-    const sign = crypto
-        .createHmac("sha256", appSecret)
-        .update(baseStr, "utf8")
-        .digest("hex")
-        .toUpperCase();
-    return { sign, baseStr };
-}
-
 const printLazadaResi = async (req, res) => {
     try {
-        // 🔹 Ambil packageId dari body / params / query
-        const packageId =
-            req.body.packageId || req.params.packageId || req.query.packageId;
-
-        if (!packageId) {
+        const packageId = req.body.packageId || req.query.packageId;
+        if (!packageId)
             return res.status(400).json({
                 success: false,
                 message: "Parameter packageId wajib diisi",
             });
-        }
 
         const apiPath = "/order/package/document/get";
         const appKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // 🔹 Ambil access token dari database Lazada
+        // 🔹 Ambil token (hanya satu akun)
         const allAccounts = await Lazada.findAll();
-        if (!allAccounts || allAccounts.length === 0) {
+        if (!allAccounts.length)
             return res.status(400).json({
                 success: false,
-                message: "Tidak ada akun Lazada ditemukan di database",
+                message: "Token Lazada tidak ditemukan",
             });
-        }
+        const access_token = allAccounts[0].access_token;
 
-        const lazadaAccount = allAccounts[0];
-        const access_token = lazadaAccount.access_token;
-
-        // 🔹 Parameter utama
+        // 🔹 Param sistem
         const timestamp = Date.now();
-        const params = {
+        const sysParams = {
             access_token,
             app_key: appKey,
             sign_method: "sha256",
             timestamp,
         };
 
-        // 🔹 Body dalam format key=value pair
-        const getDocumentReq = JSON.stringify({
+        // 🔹 Body dalam bentuk key-value (urlencoded)
+        const getDocumentReqObj = {
             doc_type: "PDF",
             print_item_list: false,
             packages: [{ package_id: packageId }],
-        });
+        };
 
-        // 🔐 Generate signature (termasuk getDocumentReq)
-        const sortedKeys = Object.keys(params).sort();
+        const getDocumentReqJson = JSON.stringify(getDocumentReqObj);
+        const encodedBody = new URLSearchParams({
+            getDocumentReq: getDocumentReqJson,
+        }).toString(); // hasilnya: getDocumentReq=%7B%22doc_type...
+
+        // 🔹 Base string untuk signature
+        const sortedKeys = Object.keys(sysParams).sort();
         let baseStr = apiPath;
-        for (const key of sortedKeys) {
-            baseStr += key + params[key];
-        }
-        baseStr += "getDocumentReq" + getDocumentReq;
+        for (const key of sortedKeys) baseStr += key + sysParams[key];
+
+        // 🔥 tambahkan body EXACTLY seperti dikirim di request (URL-encoded)
+        baseStr += encodedBody;
 
         const sign = crypto
             .createHmac("sha256", appSecret)
-            .update(baseStr)
+            .update(baseStr, "utf8")
             .digest("hex")
             .toUpperCase();
 
         // 🔹 Final URL
-        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
-            ...params,
-            sign,
-        }).toString()}`;
+        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams(
+            { ...sysParams, sign }
+        ).toString()}`;
 
-        // 🔹 Body x-www-form-urlencoded
-        const bodyString = new URLSearchParams({ getDocumentReq }).toString();
-
-        console.log("DEBUG LAZADA AWB:", { finalUrl, bodyString, baseStr });
-
-        // 🔹 Kirim POST ke Lazada
-        const lazadaRes = await axios.post(finalUrl, bodyString, {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        // 🔹 POST request
+        const lazadaRes = await axios.post(finalUrl, encodedBody, {
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
             responseType: "arraybuffer",
+            timeout: 30000,
         });
 
         const contentType = lazadaRes.headers["content-type"];
+
         if (contentType && contentType.includes("application/pdf")) {
-            const filePath = path.join(
+            const savePath = path.join(
                 "/home/alphaomega2/alphaomega-backend/awb/",
                 `AWB_${packageId}.pdf`
             );
-            fs.writeFileSync(filePath, lazadaRes.data);
+            fs.writeFileSync(savePath, lazadaRes.data);
             return res.json({
                 success: true,
-                message: "Berhasil ambil AWB PDF dari Lazada",
-                file: filePath,
+                message: "Berhasil download AWB PDF dari Lazada",
+                file: savePath,
+                debug: { finalUrl, baseStr, encodedBody },
             });
         } else {
             const raw = Buffer.from(lazadaRes.data).toString("utf8");
@@ -1628,16 +1610,15 @@ const printLazadaResi = async (req, res) => {
                 message:
                     "Lazada tidak mengirim PDF (kemungkinan signature salah atau package_id tidak valid)",
                 raw: JSON.parse(raw),
+                debug: { finalUrl, baseStr, encodedBody },
             });
         }
-    } catch (error) {
+    } catch (err) {
+        console.error("PRINT AWB ERROR:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal ambil AWB dari Lazada",
-            error:
-                error.response && error.response.data
-                    ? error.response.data.toString()
-                    : error.message,
+            error: err.response?.data || err.message,
         });
     }
 };
