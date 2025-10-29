@@ -1518,7 +1518,7 @@ const aturPickup = async (req, res) => {
 };
 
 function generateSignPrintAWB(apiPath, params, body, appSecret) {
-    // 1️⃣ Urutkan semua query params ASCII (tanpa 'sign')
+    // 1️⃣ Sort params ASCII (tanpa 'sign')
     const sortedKeys = Object.keys(params).sort();
     let baseStr = apiPath;
 
@@ -1529,9 +1529,10 @@ function generateSignPrintAWB(apiPath, params, body, appSecret) {
         }
     }
 
-    // 2️⃣ Tambahkan body getDocumentReq (compact JSON)
+    // 2️⃣ Body getDocumentReq sebagai compact JSON
     let bodyStr = "";
     if (body && body.getDocumentReq) {
+        // Pastikan property urut sama persis di JSON Lazada
         bodyStr = JSON.stringify(body.getDocumentReq);
         baseStr += bodyStr;
     }
@@ -1557,7 +1558,7 @@ function generateSignPrintAWB(apiPath, params, body, appSecret) {
 // =======================================================
 // 🧾 Controller Print AWB
 // =======================================================
-const printLazadaResi = async (req, res) => {
+async function printLazadaResi(req, res) {
     try {
         const { package_id } = req.body;
         if (!package_id) {
@@ -1637,7 +1638,7 @@ const printLazadaResi = async (req, res) => {
             error: err.response?.data || err.message,
         });
     }
-};
+}
 
 module.exports = {
     generateLoginUrl,
