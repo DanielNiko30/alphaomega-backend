@@ -1517,15 +1517,6 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function canonicalize(obj) {
-    if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
-    else if (obj && typeof obj === "object") {
-        const keys = Object.keys(obj).sort();
-        return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
-    } else if (typeof obj === "string") return `"${obj}"`;
-    else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
-    else return "null";
-}
 
 function makeSign(apiPath, sysParams, bodyToSign, appSecret) {
     const sortedKeys = Object.keys(sysParams).sort();
@@ -1534,7 +1525,25 @@ function makeSign(apiPath, sysParams, bodyToSign, appSecret) {
         const v = sysParams[k];
         baseStr += k + v;
     }
-    const bodyStr = canonicalize({ getDocumentReq });
+    const body = {
+        getDocumentReq: {
+            doc_type: "PDF",
+            print_item_list: false,
+            packages: [{ package_id }]
+        }
+    };
+
+    function canonicalize(obj) {
+        if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
+        else if (obj && typeof obj === "object") {
+            const keys = Object.keys(obj).sort();
+            return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
+        } else if (typeof obj === "string") return `"${obj}"`;
+        else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
+        else return "null";
+    }
+
+    const bodyStr = canonicalize(body);
     baseStr += bodyStr;
     const sign = crypto.createHmac("sha256", appSecret).update(baseStr, "utf8").digest("hex").toUpperCase();
     return { sign, baseStr, bodyStr };
