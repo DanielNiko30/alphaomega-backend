@@ -1534,17 +1534,18 @@ const printLazadaResi = async (req, res) => {
         const appKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
 
-        // ambil token lazada
-        const allAccounts = await Lazada.findAll();
-        if (!allAccounts || allAccounts.length === 0) {
+        // 🔹 Ambil token dari DB (asumsi cuma 1 akun)
+        const [lazadaAccount] = await Lazada.findAll();
+        if (!lazadaAccount) {
             return res.status(400).json({
                 success: false,
                 message: "Tidak ada akun Lazada ditemukan di database",
             });
         }
 
-        const access_token = allAccounts[0].access_token;
+        const access_token = lazadaAccount.access_token;
 
+        // 🔹 Parameter utama
         const timestamp = Date.now();
         const params = {
             access_token,
@@ -1553,20 +1554,26 @@ const printLazadaResi = async (req, res) => {
             timestamp,
         };
 
-        // 🧩 body request
+        // 🔹 Body (RAW JSON)
         const getDocumentReq = JSON.stringify({
             doc_type: "PDF",
             print_item_list: false,
             packages: [{ package_id: packageId }],
         });
 
-        // 🔐 SIGNATURE – TANPA `=` DAN TANPA ENCODE
-        const sortedKeys = Object.keys(params).sort();
+        // 🔹 Masukkan body param ke object untuk penandatanganan
+        const signParams = { ...params, getDocumentReq };
+
+        // 🔐 Generate baseStr dengan semua param (diurutkan by key)
+        const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
         for (const key of sortedKeys) {
-            baseStr += key + params[key];
+            if (key === "getDocumentReq") {
+                baseStr += key + getDocumentReq; // raw JSON
+            } else {
+                baseStr += key + signParams[key];
+            }
         }
-        baseStr += "getDocumentReq" + getDocumentReq; // <── raw JSON, no '='
 
         const sign = crypto
             .createHmac("sha256", appSecret)
@@ -1574,18 +1581,24 @@ const printLazadaResi = async (req, res) => {
             .digest("hex")
             .toUpperCase();
 
-        // 🔗 Final URL
-        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${new URLSearchParams({
+        // 🔹 Final URL
+        const queryParams = new URLSearchParams({
             ...params,
             sign,
-        }).toString()}`;
+        }).toString();
+        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
 
-        // 📨 Body dalam format x-www-form-urlencoded (ini baru di-encode)
+        // 🔹 Body dikirim (encoded)
         const encodedBody = new URLSearchParams({ getDocumentReq }).toString();
 
-        console.log("DEBUG LAZADA AWB:", { finalUrl, baseStr, encodedBody });
+        console.log("DEBUG FINAL:", {
+            finalUrl,
+            baseStr,
+            encodedBody,
+            sign,
+        });
 
-        // 🚀 Request ke Lazada
+        // 🚀 POST ke Lazada
         const lazadaRes = await axios.post(finalUrl, encodedBody, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             responseType: "arraybuffer",
