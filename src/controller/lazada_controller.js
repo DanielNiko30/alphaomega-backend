@@ -1563,7 +1563,7 @@ function generateSignLazadaAWB(apiPath, params, body, appSecret) {
 // ======================================
 // 🧾 PRINT AWB LAZADA (FULL DEBUG MODE)
 // ======================================
-export const printLazadaResi = async (req, res) => {
+const printLazadaResi = async (req, res) => {
     try {
         const { package_id } = req.body;
         if (!package_id)
