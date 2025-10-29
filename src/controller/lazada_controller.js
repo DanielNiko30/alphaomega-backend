@@ -1530,7 +1530,7 @@ function generateSignWithBody(apiPath, params, body, appSecret) {
     baseStr += bodyStr; // tambahkan body minified di akhir
 
     const sign = crypto
-        .createHmac("sha256", app_secret)
+        .createHmac("sha256", appSecret)  // <-- pakai appSecret bukan app_secret
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
