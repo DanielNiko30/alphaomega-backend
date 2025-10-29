@@ -1518,88 +1518,97 @@ const aturPickup = async (req, res) => {
 };
 
 function canonicalize(obj) {
-    if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
-    else if (obj && typeof obj === "object") {
-        const keys = Object.keys(obj).sort();
-        return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
-    } else if (typeof obj === "string") return `"${obj}"`;
-    else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
-    else return "null";
+  if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
+  else if (obj && typeof obj === "object") {
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
+  } else if (typeof obj === "string") return `"${obj}"`;
+  else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
+  else return "null";
 }
 
-// Generate Lazada signature for AWB
 function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
-    const sortedKeys = Object.keys(sysParams).sort();
-    let baseStr = apiPath;
-    for (const k of sortedKeys) {
-        baseStr += k + sysParams[k];
-    }
+  const sortedKeys = Object.keys(sysParams).sort();
+  let baseStr = apiPath;
+  for (const k of sortedKeys) baseStr += k + sysParams[k];
 
-    const bodyStr = canonicalize(bodyObj);
-    baseStr += bodyStr;
+  const bodyStr = canonicalize(bodyObj);
+  baseStr += bodyStr;
 
-    const sign = crypto
-        .createHmac("sha256", appSecret)
-        .update(baseStr, "utf8")
-        .digest("hex")
-        .toUpperCase();
+  const sign = crypto
+    .createHmac("sha256", appSecret)
+    .update(baseStr, "utf8")
+    .digest("hex")
+    .toUpperCase();
 
-    return { sign, baseStr, bodyStr };
+  return { sign, baseStr, bodyStr };
 }
 
 // Express controller
 const printLazadaResi = async (req, res) => {
-    try {
-        const { package_id, region } = req.body;
-        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
+  try {
+    const { package_id, region = "id" } = req.body;
+    if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
 
-        const apiBaseByRegion = {
-            id: "https://api.lazada.co.id/rest",
-            sg: "https://api.lazada.sg/rest",
-            th: "https://api.lazada.co.th/rest",
-            my: "https://api.lazada.com.my/rest",
-            ph: "https://api.lazada.com.ph/rest",
-            vn: "https://api.lazada.vn/rest",
-        };
-        const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
-        const apiPath = "/order/package/document/get";
+    const apiBaseByRegion = {
+      id: "https://api.lazada.co.id/rest",
+      sg: "https://api.lazada.sg/rest",
+      th: "https://api.lazada.co.th/rest",
+      my: "https://api.lazada.com.my/rest",
+      ph: "https://api.lazada.com.ph/rest",
+      vn: "https://api.lazada.vn/rest",
+    };
+    const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
+    const apiPath = "/order/package/document/get";
 
-        // Ambil token & app key/secret dari DB / env
-        const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token)
-            return res.status(400).json({ success: false, message: "Access token Lazada tidak ditemukan" });
+    // Ambil token & app key/secret dari DB/env
+    const tokenRow = await Lazada.findOne();
+    if (!tokenRow || !tokenRow.access_token) throw new Error("Access token Lazada tidak ditemukan");
+    const access_token = tokenRow.access_token.trim();
+    const app_key = process.env.LAZADA_APP_KEY.trim();
+    const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
-        const access_token = tokenRow.access_token.trim();
-        const app_key = process.env.LAZADA_APP_KEY.trim();
-        const app_secret = process.env.LAZADA_APP_SECRET.trim();
+    const timestamp = Date.now().toString();
+    const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
 
-        const timestamp = Date.now().toString();
-        const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
+    const bodyForSign = {
+      getDocumentReq: {
+        doc_type: "PDF",
+        print_item_list: false,
+        packages: [{ package_id: String(package_id) }]
+      }
+    };
 
-        // Body wrapped sesuai Lazada
-        const bodyForSign = {
-            getDocumentReq: {
-                doc_type: "PDF",
-                print_item_list: false,
-                packages: [{ package_id: String(package_id) }],
-            },
-        };
+    const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
 
-        const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
+    const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
 
-        const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+    const headers = { "Content-Type": "application/json" };
+    const response = await axios.post(finalUrl, bodyForSign, { headers, responseType: "arraybuffer", timeout: 30000 });
 
-        // POST request
-        const headers = { "Content-Type": "application/json" };
-        const { data } = await axios.post(finalUrl, bodyForSign, { headers, timeout: 30000 });
+    // simpan PDF jika server mengirimkan file
+    const pdfFolder = path.resolve("./awb");
+    if (!fs.existsSync(pdfFolder)) fs.mkdirSync(pdfFolder, { recursive: true });
 
-        return res.json({ success: true, message: "Print AWB request berhasil dikirim", debug: { finalUrl, baseStr, bodyStr, sign }, lazada_response: data });
-    } catch (err) {
-        console.error("ERROR print AWB:", err.response?.data || err.message);
-        return res.status(500).json({ success: false, message: "Gagal print AWB Lazada", error: err.response?.data || err.message });
-    }
+    const filePath = path.join(pdfFolder, `AWB_${package_id}.pdf`);
+    fs.writeFileSync(filePath, response.data);
+
+    return res.json({
+      success: true,
+      message: "AWB PDF berhasil di-download",
+      file: filePath,
+      debug: { finalUrl, baseStr, bodyStr, sign }
+    });
+
+  } catch (err) {
+    console.error("PRINT AWB ERROR:", err.response?.data || err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal print AWB Lazada",
+      error: err.response?.data || err.message
+    });
+  }
 };
-
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
