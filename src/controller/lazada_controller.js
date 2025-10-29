@@ -1534,6 +1534,7 @@ const readyToShipLazada = async (req, res) => {
         const appKey = process.env.LAZADA_APP_KEY;
         const appSecret = process.env.LAZADA_APP_SECRET;
 
+        // Ambil akun Lazada (karena cuma 1 akun)
         const [lazadaAccount] = await Lazada.findAll();
         if (!lazadaAccount) {
             return res.status(400).json({
@@ -1558,9 +1559,10 @@ const readyToShipLazada = async (req, res) => {
             packages: [{ package_id: packageId }],
         });
 
-        // 🔐 Generate sign
+        // 🔐 Generate signature
         const signParams = { ...params, readyToShipReq };
         const sortedKeys = Object.keys(signParams).sort();
+
         let baseStr = apiPath;
         for (const key of sortedKeys) baseStr += key + signParams[key];
 
@@ -1574,7 +1576,7 @@ const readyToShipLazada = async (req, res) => {
         const queryParams = new URLSearchParams({ ...params, sign }).toString();
         const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
 
-        // 📨 Body dikirim x-www-form-urlencoded
+        // 📨 Body dikirim dengan format x-www-form-urlencoded
         const bodyData = `readyToShipReq=${readyToShipReq}`;
 
         console.log("DEBUG READY_TO_SHIP:", {
@@ -1584,28 +1586,35 @@ const readyToShipLazada = async (req, res) => {
             sign,
         });
 
+        // 🚀 Request ke Lazada
         const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
 
         const data = lazadaRes.data;
 
-        // ✅ Cek hasil sukses atau gagal
-        if (data.success) {
+        // 🧠 Lazada return structure: { result: { success: true, data: { packages: [...] } } }
+        const successFlag =
+            data?.result?.success === true &&
+            Array.isArray(data?.result?.data?.packages) &&
+            data.result.data.packages.every((p) => p.item_err_code === "0");
+
+        if (successFlag) {
             return res.json({
                 success: true,
-                message: "Order berhasil ditandai sebagai Ready To Ship",
-                data: data.result?.data || data,
-                debug: { finalUrl, bodyData },
-            });
-        } else {
-            return res.status(400).json({
-                success: false,
-                message: "Gagal menandai order sebagai Ready To Ship",
-                error: data.error_msg || data,
+                message: "✅ Order berhasil ditandai sebagai Ready To Ship di Lazada",
+                data: data.result.data.packages,
                 debug: { finalUrl, bodyData },
             });
         }
+
+        // ❌ Kalau ada item gagal
+        return res.status(400).json({
+            success: false,
+            message: "❌ Gagal menandai order sebagai Ready To Ship",
+            error: data,
+            debug: { finalUrl, bodyData },
+        });
     } catch (error) {
         const errData =
             error.response && error.response.data
@@ -1619,7 +1628,6 @@ const readyToShipLazada = async (req, res) => {
         });
     }
 };
-
 
 const printLazadaResi = async (req, res) => {
     try {
