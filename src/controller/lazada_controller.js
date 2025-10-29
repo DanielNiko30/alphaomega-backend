@@ -1522,18 +1522,19 @@ function canonicalize(obj) {
     if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
     else if (obj && typeof obj === "object") {
         const keys = Object.keys(obj).sort();
-        return `{${keys.map(k => `"${k}":${canonicalize(obj[k])}`).join(",")}}`;
-    } else if (typeof obj === "string") return `"${obj}"`;
+        return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalize(obj[k])}`).join(",")}}`;
+    } else if (typeof obj === "string") return JSON.stringify(obj);
     else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
     else return "null";
 }
 
-// Generate Lazada signature
 function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
+    // Sort query params
     const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
     for (const k of sortedKeys) baseStr += k + sysParams[k];
 
+    // Compact JSON body
     const bodyStr = canonicalize(bodyObj);
     baseStr += bodyStr;
 
@@ -1546,11 +1547,11 @@ function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
     return { sign, baseStr, bodyStr };
 }
 
-// Express controller
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id, region = "id" } = req.body;
-        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
+        if (!package_id)
+            return res.status(400).json({ success: false, message: "package_id wajib" });
 
         const apiBaseByRegion = {
             id: "https://api.lazada.co.id/rest",
@@ -1563,55 +1564,77 @@ const printLazadaResi = async (req, res) => {
         const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
         const apiPath = "/order/package/document/get";
 
-        // Ambil token & app key/secret dari DB/env
+        // 🔑 Ambil token & app key/secret
         const tokenRow = await Lazada.findOne();
-        if (!tokenRow || !tokenRow.access_token) throw new Error("Access token Lazada tidak ditemukan");
+        if (!tokenRow || !tokenRow.access_token)
+            throw new Error("Access token Lazada tidak ditemukan");
+
         const access_token = tokenRow.access_token.trim();
         const app_key = process.env.LAZADA_APP_KEY.trim();
         const app_secret = process.env.LAZADA_APP_SECRET.trim();
 
         const timestamp = Date.now().toString();
-        const sysParams = { access_token, app_key, sign_method: "sha256", timestamp };
+        const sysParams = {
+            access_token,
+            app_key,
+            sign_method: "sha256",
+            timestamp,
+        };
 
         const bodyForSign = {
             getDocumentReq: {
                 doc_type: "PDF",
                 print_item_list: false,
-                packages: [{ package_id: String(package_id) }]
-            }
+                packages: [{ package_id: String(package_id) }],
+            },
         };
 
-        const { sign } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
-        const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+        const { sign, baseStr, bodyStr } = generateSignAWB(
+            apiPath,
+            sysParams,
+            bodyForSign,
+            app_secret
+        );
 
-        // Request PDF
+        const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({
+            ...sysParams,
+            sign,
+        }).toString()}`;
+
         const headers = { "Content-Type": "application/json" };
-        const response = await axios.post(finalUrl, bodyForSign, { headers, responseType: "arraybuffer", timeout: 30000 });
+        const response = await axios.post(finalUrl, bodyForSign, {
+            headers,
+            responseType: "arraybuffer",
+            timeout: 30000,
+        });
 
         const buf = Buffer.from(response.data);
 
-        // Validasi apakah benar PDF
-        if (buf.slice(0, 4).toString() !== '%PDF') {
-            // Jika bukan PDF, kemungkinan Lazada balikin JSON error
+        // ✅ Validasi apakah benar PDF
+        if (buf.slice(0, 4).toString() !== "%PDF") {
             const text = buf.toString();
             return res.status(500).json({
                 success: false,
-                message: "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
-                raw: text
+                message:
+                    "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
+                raw: text,
+                debug: { baseStr, bodyStr, finalUrl },
             });
         }
 
-        // Kirim langsung PDF ke Postman/browser
+        // ✅ Kirim PDF langsung
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
+        res.setHeader(
+            "Content-Disposition",
+            `inline; filename=AWB_${package_id}.pdf`
+        );
         return res.send(buf);
-
     } catch (err) {
         console.error("PRINT AWB ERROR:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal print AWB Lazada",
-            error: err.response?.data || err.message
+            error: err.response?.data || err.message,
         });
     }
 };
