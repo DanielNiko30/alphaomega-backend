@@ -1518,28 +1518,25 @@ const aturPickup = async (req, res) => {
     }
 };
 
-function canonicalize(obj) {
-    if (Array.isArray(obj)) return `[${obj.map(canonicalize).join(",")}]`;
+function canonicalize(obj, disableSort = false) {
+    if (Array.isArray(obj)) return `[${obj.map(o => canonicalize(o, disableSort)).join(",")}]`;
     else if (obj && typeof obj === "object") {
-        const keys = Object.keys(obj).sort();
-        return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalize(obj[k])}`).join(",")}}`;
+        const keys = disableSort ? Object.keys(obj) : Object.keys(obj).sort();
+        return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalize(obj[k], k === "getDocumentReq")}`).join(",")}}`;
     } else if (typeof obj === "string") return JSON.stringify(obj);
     else if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
     else return "null";
 }
 
 function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
-    // Sort query params
     const sortedKeys = Object.keys(sysParams).sort();
     let baseStr = apiPath;
     for (const k of sortedKeys) baseStr += k + sysParams[k];
 
-    // Compact JSON body
     const bodyStr = canonicalize(bodyObj);
     baseStr += bodyStr;
 
-    const sign = crypto
-        .createHmac("sha256", appSecret)
+    const sign = crypto.createHmac("sha256", appSecret)
         .update(baseStr, "utf8")
         .digest("hex")
         .toUpperCase();
@@ -1550,8 +1547,7 @@ function generateSignAWB(apiPath, sysParams, bodyObj, appSecret) {
 const printLazadaResi = async (req, res) => {
     try {
         const { package_id, region = "id" } = req.body;
-        if (!package_id)
-            return res.status(400).json({ success: false, message: "package_id wajib" });
+        if (!package_id) return res.status(400).json({ success: false, message: "package_id wajib" });
 
         const apiBaseByRegion = {
             id: "https://api.lazada.co.id/rest",
@@ -1564,7 +1560,6 @@ const printLazadaResi = async (req, res) => {
         const baseApi = apiBaseByRegion[region] || apiBaseByRegion.id;
         const apiPath = "/order/package/document/get";
 
-        // 🔑 Ambil token & app key/secret
         const tokenRow = await Lazada.findOne();
         if (!tokenRow || !tokenRow.access_token)
             throw new Error("Access token Lazada tidak ditemukan");
@@ -1581,20 +1576,16 @@ const printLazadaResi = async (req, res) => {
             timestamp,
         };
 
+        // ⚙️ PENTING: urutan key HARUS sama dengan dokumentasi Lazada
         const bodyForSign = {
             getDocumentReq: {
-                doc_type: "PDF",
-                print_item_list: false,
                 packages: [{ package_id: String(package_id) }],
-            },
+                doc_type: "PDF",
+                print_item_list: false
+            }
         };
 
-        const { sign, baseStr, bodyStr } = generateSignAWB(
-            apiPath,
-            sysParams,
-            bodyForSign,
-            app_secret
-        );
+        const { sign, baseStr, bodyStr } = generateSignAWB(apiPath, sysParams, bodyForSign, app_secret);
 
         const finalUrl = `${baseApi}${apiPath}?${new URLSearchParams({
             ...sysParams,
@@ -1610,24 +1601,20 @@ const printLazadaResi = async (req, res) => {
 
         const buf = Buffer.from(response.data);
 
-        // ✅ Validasi apakah benar PDF
+        // Cek apakah hasil benar-benar PDF
         if (buf.slice(0, 4).toString() !== "%PDF") {
-            const text = buf.toString();
+            const raw = buf.toString();
             return res.status(500).json({
                 success: false,
-                message:
-                    "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
-                raw: text,
+                message: "Lazada tidak mengirim PDF, kemungkinan signature atau package_id salah",
+                raw,
                 debug: { baseStr, bodyStr, finalUrl },
             });
         }
 
-        // ✅ Kirim PDF langsung
+        // Tampilkan PDF langsung
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `inline; filename=AWB_${package_id}.pdf`
-        );
+        res.setHeader("Content-Disposition", `inline; filename=AWB_${package_id}.pdf`);
         return res.send(buf);
     } catch (err) {
         console.error("PRINT AWB ERROR:", err.response?.data || err.message);
