@@ -1551,14 +1551,15 @@ const printLazadaResi = async (req, res) => {
         const appSecret = process.env.LAZADA_APP_SECRET;
 
         // 🔹 Ambil access token dari database Lazada
-        const lazadaAccount = await Lazada.findOne({ where: { account: "default" } });
-        if (!lazadaAccount) {
+        const allAccounts = await Lazada.findAll();
+        if (!allAccounts || allAccounts.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: "Tidak ada akun Lazada ditemukan di database",
             });
         }
 
+        const lazadaAccount = allAccounts[0];
         const access_token = lazadaAccount.access_token;
 
         // 🔹 Parameter utama
