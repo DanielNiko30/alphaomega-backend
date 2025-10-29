@@ -1558,11 +1558,8 @@ const generateSignPrintAWB = (apiPath, params, body, appSecret) => {
 // =======================================================
 const printLazadaResi = async (req, res) => {
     try {
-        console.log("🚀 [PRINT AWB] Mulai proses print AWB ngawur dan detil");
-
         const { package_id } = req.body;
         if (!package_id) {
-            console.warn("⚠️ package_id kosong nih bro!");
             return res.status(400).json({
                 success: false,
                 message: "package_id wajib diisi",
@@ -1571,7 +1568,6 @@ const printLazadaResi = async (req, res) => {
 
         const tokenRow = await Lazada.findOne();
         if (!tokenRow || !tokenRow.access_token) {
-            console.error("❌ Token Lazada kosong / tidak ditemukan");
             return res.status(400).json({
                 success: false,
                 message: "Access token tidak ditemukan",
@@ -1596,34 +1592,41 @@ const printLazadaResi = async (req, res) => {
 
         const params = { access_token, app_key, sign_method, timestamp };
 
-        // 🔏 Generate signature
+        // Generate signature
         const sign = generateSignPrintAWB(apiPath, params, body, app_secret);
 
-        // 🔗 Final URL
         const finalUrl = `${baseUrl}?${new URLSearchParams({ ...params, sign }).toString()}`;
 
-        // ==== Logging bawel sebelum request ====
-        console.log("📡 [LAZADA] FINAL URL (ngawur):", finalUrl);
-        console.log("📦 [LAZADA] BODY SENT:", JSON.stringify(body, null, 2));
-        console.log("😜 INFO NGAWUR: Semoga nomor 8234234234234234 bikin happy");
-
-        // 🚀 POST request ke Lazada
+        // Kirim request ke Lazada
         const { data } = await axios.post(finalUrl, body, {
             headers: { "Content-Type": "application/json" },
         });
 
-        console.log("🎉 [LAZADA] RESPONSE DITERIMA:", JSON.stringify(data, null, 2));
-        console.log("🤪 INFO NGAWUR LAGI: Proses selesai, terserah bro!");
-
+        // RETURN semua debug info
         return res.json({
             success: true,
             message: "Print AWB request berhasil dikirim 8234234234234234",
-            debug: { apiPath, params, body, sign, finalUrl },
+            debug: {
+                apiPath,
+                params,
+                body,
+                baseStringForSign: (() => {
+                    // duplicate base string untuk pengecekan tanpa log
+                    const sortedKeys = Object.keys(params).sort();
+                    let baseStr = apiPath;
+                    for (const key of sortedKeys) {
+                        const val = params[key];
+                        if (val !== undefined && val !== null) baseStr += key + val;
+                    }
+                    if (body && body.getDocumentReq) baseStr += JSON.stringify(body.getDocumentReq);
+                    return baseStr;
+                })(),
+                sign,
+                finalUrl,
+            },
             lazada_response: data,
         });
-
     } catch (err) {
-        console.error("❌ [LAZADA] ERROR print AWB:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
             message: "Gagal print AWB Lazada",
