@@ -1605,7 +1605,7 @@ const printLazadaResi = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "Print AWB request berhasil dikirim",
+            message: "Print AWB request berhasil dikirim 8234234234234234",
             debug: { apiPath, params, body, sign, finalUrl },
             lazada_response: data,
         });
