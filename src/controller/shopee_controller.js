@@ -2250,19 +2250,16 @@ const updateStockShopee = async (req, res) => {
             });
         }
 
-        // Ambil access token & shop id dari database (contoh sementara)
-        const ShopeeAccount = db.shopee; // sesuaikan dengan model kamu
-        const account = await ShopeeAccount.findOne({ where: { account: "default" } });
-
-        if (!account) {
-            return res.status(404).json({
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({
                 success: false,
-                message: "Akun Shopee tidak ditemukan",
+                message: "Shopee token not found. Please authorize first.",
             });
         }
 
-        const access_token = account.access_token;
-        const shop_id = account.shop_id;
+        const access_token = shopeeData.access_token;
+        const shop_id = shopeeData.shop_id;
 
         // === SIGNING SHOPEE REQUEST ===
         const path = "/api/v2/product/update_stock";
