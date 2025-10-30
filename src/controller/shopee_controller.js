@@ -2241,46 +2241,35 @@ const printShopeeResi = async (req, res) => {
 
 const getWarehouseDetail = async (req, res) => {
     try {
-        const { shop_id, warehouse_type } = req.query;
-
-        if (!shop_id) {
-            return res.status(400).json({
+        // 🔹 Ambil data Shopee (shop_id & access_token) dari DB
+        const shop = await Shopee.findOne();
+        if (!shop) {
+            return res.status(404).json({
                 success: false,
-                message: "Parameter shop_id wajib diisi",
+                message: "Data Shopee belum dikaitkan. Mohon lakukan authorize dulu.",
             });
         }
 
-        const partner_id = process.env.SHOPEE_PARTNER_ID;
-        const partner_key = process.env.SHOPEE_PARTNER_KEY;
-        const base_url = "https://partner.shopeemobile.com/api/v2";
+        const { shop_id, access_token } = shop;
+        const warehouse_type = req.query.warehouse_type || 1; // default pickup
+
         const path = "/api/v2/shop/get_warehouse_detail";
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // 🔹 Ambil access token dari database
-        const tokenData = await ShopeeToken.findOne({ where: { shop_id } });
-        if (!tokenData) {
-            return res.status(404).json({
-                success: false,
-                message: "Access token tidak ditemukan untuk shop_id ini",
-            });
-        }
-
-        const access_token = tokenData.access_token;
-
-        // 🔹 Generate signature (HMAC-SHA256)
+        // 🔹 Generate signature HMAC-SHA256
         const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
         const sign = crypto
             .createHmac("sha256", partner_key)
             .update(baseString)
             .digest("hex");
 
-        // 🔹 Siapkan URL Shopee
-        let url = `${base_url}${path}?partner_id=${partner_id}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-        if (warehouse_type) url += `&warehouse_type=${warehouse_type}`;
+        // 🔹 Bangun URL request ke Shopee
+        const url = `${base_url}${path}?partner_id=${partner_id}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&warehouse_type=${warehouse_type}`;
 
         // 🔹 Panggil API Shopee
         const response = await axios.get(url);
 
+        // 🔹 Kirim hasil ke frontend
         return res.status(200).json({
             success: true,
             message: "Berhasil mengambil warehouse detail dari Shopee",
