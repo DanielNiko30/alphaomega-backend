@@ -2239,59 +2239,73 @@ const printShopeeResi = async (req, res) => {
     }
 };
 
-getWarehouseDetail = async (req, res) => {
+const updateStockShopee = async (req, res) => {
     try {
-        // 🔹 Ambil data shop Shopee dari database
-        const shop = await Shopee.findOne();
-        if (!shop) {
-            return res.status(404).json({
-                success: false,
-                message: "Data Shopee belum terhubung. Silakan authorize akun Shopee dulu.",
-            });
-        }
+        const { item_id, stock } = req.body;
 
-        const { shop_id, access_token } = shop;
-        const warehouse_type = req.query.warehouse_type || 1; // default pickup warehouse
-
-        const path = "/api/v2/shop/get_warehouse_detail";
-        const timestamp = Math.floor(Date.now() / 1000);
-
-        // 🔹 Generate sign pakai helper kamu
-        const sign = generateSign(path, timestamp, access_token, shop_id);
-
-        // 🔹 Build full URL
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&warehouse_type=${warehouse_type}`;
-
-        // 🔹 Panggil Shopee API pakai helper getJSON
-        const result = await getJSON(url);
-
-        // 🔹 Handle error dari Shopee
-        if (result.error) {
-            let message = result.message || result.error;
-            if (result.error.includes("not_in_whitelist")) {
-                message = "Toko kamu belum diaktifkan untuk fitur multi-warehouse Shopee.";
-            }
-
+        if (!item_id || stock === undefined) {
             return res.status(400).json({
                 success: false,
-                message,
-                raw: result,
+                message: "item_id dan stock wajib diisi",
             });
         }
 
-        // ✅ Berhasil ambil data warehouse
+        // Ambil access token & shop id dari database (contoh sementara)
+        const db = require("../models");
+        const ShopeeAccount = db.shopee; // sesuaikan dengan model kamu
+        const account = await ShopeeAccount.findOne({ where: { account: "default" } });
+
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: "Akun Shopee tidak ditemukan",
+            });
+        }
+
+        const access_token = account.access_token;
+        const shop_id = account.shop_id;
+
+        // === SIGNING SHOPEE REQUEST ===
+        const path = "/api/v2/product/update_stock";
+        const timestamp = Math.floor(Date.now() / 1000);
+        const baseString = `${PARTNER_ID}${path}${timestamp}${access_token}${shop_id}`;
+        const sign = crypto
+            .createHmac("sha256", PARTNER_KEY)
+            .update(baseString)
+            .digest("hex");
+
+        // === REQUEST BODY ===
+        const body = {
+            item_id: Number(item_id),
+            stock_list: [
+                {
+                    model_id: 0, // tidak digunakan (default)
+                    seller_stock: [{ stock: Number(stock) }],
+                },
+            ],
+        };
+
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&sign=${sign}&access_token=${access_token}&shop_id=${shop_id}`;
+
+        const response = await axios.post(url, body, {
+            headers: { "Content-Type": "application/json" },
+        });
+
         return res.status(200).json({
             success: true,
-            message: "Berhasil mengambil warehouse Shopee",
-            data: result.response,
+            message: "Berhasil update stok Shopee",
+            data: response.data,
+            debug: {
+                url,
+                body,
+            },
         });
     } catch (err) {
-        console.error("❌ Error getWarehouseDetail:", err);
-
+        console.error("❌ Gagal update stok Shopee:", err.response?.data || err.message);
         return res.status(500).json({
             success: false,
-            message: "Gagal mengambil warehouse dari Shopee",
-            raw: err.message || err,
+            message: "Gagal update stok Shopee",
+            error: err.response?.data || err.message,
         });
     }
 };
@@ -2320,5 +2334,5 @@ module.exports = {
     createShopeeShippingDocument,
     downloadShippingDocumentController,
     printShopeeResi,
-    getWarehouseDetail
+    updateStockShopee
 };
