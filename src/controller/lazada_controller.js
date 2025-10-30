@@ -1545,7 +1545,7 @@ const readyToShipLazada = async (req, res) => {
         // ====================================================
         // 🧩 1️⃣ Ambil package_id dulu dari detail order
         // ====================================================
-        const detailUrl = `${process.env.BASE_URL}/api/lazada/order/detail?order_id=${orderId}`;
+        const detailUrl = `https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`;
         const detailRes = await axios.get(detailUrl);
         const detailData = detailRes.data?.data;
 
