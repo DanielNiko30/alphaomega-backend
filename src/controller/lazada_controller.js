@@ -1635,29 +1635,53 @@ const readyToShipLazada = async (req, res) => {
 
 const printLazadaResi = async (req, res) => {
     try {
-        const packageId =
-            req.body.packageId || req.params.packageId || req.query.packageId;
+        const orderId = req.body.order_id || req.query.order_id;
+        if (!orderId) {
+            return res.status(400).json({
+                success: false,
+                message: "Parameter 'order_id' wajib diisi",
+            });
+        }
 
+        const lazadaAccount = await Lazada.findOne();
+        if (!lazadaAccount?.access_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Token Lazada tidak ditemukan di DB",
+            });
+        }
+
+        const access_token = lazadaAccount.access_token.trim();
+        const appKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+        const apiBaseUrl = "https://api.lazada.co.id/rest";
+
+        // ====================================================
+        // 1️⃣ Ambil package_id dari order_id
+        // ====================================================
+        const detailUrl = `https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`;
+        const detailRes = await axios.get(detailUrl);
+        const detailData = detailRes.data?.data;
+
+        if (!detailData || !Array.isArray(detailData.items) || detailData.items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Gagal ambil data order dari Lazada — items kosong",
+            });
+        }
+
+        const packageId = detailData.items[0].package_id;
         if (!packageId) {
             return res.status(400).json({
                 success: false,
-                message: "Parameter packageId wajib diisi",
+                message: "Tidak menemukan package_id di data order Lazada",
             });
         }
 
+        // ====================================================
+        // 2️⃣ Generate signature dan request getDocumentReq
+        // ====================================================
         const apiPath = "/order/package/document/get";
-        const appKey = process.env.LAZADA_APP_KEY;
-        const appSecret = process.env.LAZADA_APP_SECRET;
-
-        const [lazadaAccount] = await Lazada.findAll();
-        if (!lazadaAccount) {
-            return res.status(400).json({
-                success: false,
-                message: "Tidak ada akun Lazada ditemukan di database",
-            });
-        }
-
-        const access_token = lazadaAccount.access_token;
         const timestamp = Date.now();
 
         const params = {
@@ -1673,7 +1697,6 @@ const printLazadaResi = async (req, res) => {
             packages: [{ package_id: packageId }],
         });
 
-        // 🔹 Generate signature
         const signParams = { ...params, getDocumentReq };
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
@@ -1686,13 +1709,9 @@ const printLazadaResi = async (req, res) => {
             .toUpperCase();
 
         const queryParams = new URLSearchParams({ ...params, sign }).toString();
-        const finalUrl = `https://api.lazada.co.id/rest${apiPath}?${queryParams}`;
-
+        const finalUrl = `${apiBaseUrl}${apiPath}?${queryParams}`;
         const bodyData = `getDocumentReq=${getDocumentReq}`;
 
-        console.log("📦 Lazada AWB Request:", { packageId, finalUrl });
-
-        // 🔹 Request ke Lazada
         const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             responseType: "arraybuffer",
@@ -1700,22 +1719,20 @@ const printLazadaResi = async (req, res) => {
 
         const contentType = lazadaRes.headers["content-type"] || "";
 
-        // 🔸 Jika Lazada kirim JSON dulu (berisi pdf_url)
+        // 🔹 Jika JSON dulu (dapat pdf_url)
         if (contentType.includes("application/json")) {
             const raw = Buffer.from(lazadaRes.data).toString("utf8");
             const parsed = JSON.parse(raw);
 
             if (parsed.result?.data?.pdf_url) {
                 const pdfUrl = parsed.result.data.pdf_url;
-                console.log(`✅ Dapat PDF URL dari Lazada: ${pdfUrl}`);
-
-                // Download file PDF dari URL
                 const pdfRes = await axios.get(pdfUrl, { responseType: "arraybuffer" });
                 const pdfBase64 = Buffer.from(pdfRes.data).toString("base64");
 
                 return res.status(200).json({
                     success: true,
-                    message: `Resi Lazada untuk package_id ${packageId}`,
+                    message: `Resi Lazada untuk order_id ${orderId}`,
+                    order_id: orderId,
                     package_id: packageId,
                     pdf_base64: pdfBase64,
                 });
@@ -1723,23 +1740,23 @@ const printLazadaResi = async (req, res) => {
 
             return res.status(400).json({
                 success: false,
-                message: "Lazada mengembalikan JSON tanpa PDF URL (cek package_id)",
+                message: "Lazada mengembalikan JSON tanpa PDF URL",
                 raw: parsed,
             });
         }
 
-        // 🔸 Jika Lazada langsung kirim PDF
+        // 🔹 Jika langsung PDF
         if (contentType.includes("application/pdf")) {
             const pdfBase64 = Buffer.from(lazadaRes.data).toString("base64");
             return res.status(200).json({
                 success: true,
-                message: `Resi Lazada untuk package_id ${packageId}`,
+                message: `Resi Lazada untuk order_id ${orderId}`,
+                order_id: orderId,
                 package_id: packageId,
                 pdf_base64: pdfBase64,
             });
         }
 
-        // 🔸 Fallback jika format tak dikenal
         return res.status(400).json({
             success: false,
             message: "Respons dari Lazada tidak diketahui formatnya",
@@ -1747,14 +1764,13 @@ const printLazadaResi = async (req, res) => {
     } catch (error) {
         console.error("❌ Error printLazadaResi:", error.response?.data || error.message);
 
-        const errData =
-            error.response?.data
-                ? Buffer.from(error.response.data).toString("utf8")
-                : error.message;
+        const errData = error.response?.data
+            ? Buffer.from(error.response.data).toString("utf8")
+            : error.message;
 
         return res.status(500).json({
             success: false,
-            message: "Gagal ambil AWB dari Lazada",
+            message: "Gagal ambil resi dari Lazada",
             error: errData,
         });
     }
