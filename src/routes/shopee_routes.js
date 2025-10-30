@@ -24,7 +24,7 @@ const {
     createShopeeShippingDocument,
     downloadShippingDocumentController,
     printShopeeResi,
-
+    getWarehouseDetail
 } = require('../controller/shopee_controller');
 
 // Shopee basic
@@ -58,5 +58,7 @@ router.post("/shipping-document/status", getShippingDocumentResultController);
 router.post("/download-resi", downloadShippingDocumentController);
 router.post("/print-resi", printShopeeResi);
 
+//update stok
+router.get("/warehouse", getWarehouseDetail);
 
 module.exports = router;
