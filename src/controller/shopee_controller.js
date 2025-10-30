@@ -2239,51 +2239,59 @@ const printShopeeResi = async (req, res) => {
     }
 };
 
-const getWarehouseDetail = async (req, res) => {
+getWarehouseDetail = async (req, res) => {
     try {
-        // 🔹 Ambil data Shopee (shop_id & access_token) dari DB
+        // 🔹 Ambil data shop Shopee dari database
         const shop = await Shopee.findOne();
         if (!shop) {
             return res.status(404).json({
                 success: false,
-                message: "Data Shopee belum dikaitkan. Mohon lakukan authorize dulu.",
+                message: "Data Shopee belum terhubung. Silakan authorize akun Shopee dulu.",
             });
         }
 
         const { shop_id, access_token } = shop;
-        const warehouse_type = req.query.warehouse_type || 1; // default pickup
+        const warehouse_type = req.query.warehouse_type || 1; // default pickup warehouse
 
         const path = "/api/v2/shop/get_warehouse_detail";
         const timestamp = Math.floor(Date.now() / 1000);
 
-        // 🔹 Generate signature HMAC-SHA256
-        const baseString = `${partner_id}${path}${timestamp}${access_token}${shop_id}`;
-        const sign = crypto
-            .createHmac("sha256", partner_key)
-            .update(baseString)
-            .digest("hex");
+        // 🔹 Generate sign pakai helper kamu
+        const sign = generateSign(path, timestamp, access_token, shop_id);
 
-        // 🔹 Bangun URL request ke Shopee
-        const url = `${base_url}${path}?partner_id=${partner_id}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&warehouse_type=${warehouse_type}`;
+        // 🔹 Build full URL
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&warehouse_type=${warehouse_type}`;
 
-        // 🔹 Panggil API Shopee
-        const response = await axios.get(url);
+        // 🔹 Panggil Shopee API pakai helper getJSON
+        const result = await getJSON(url);
 
-        // 🔹 Kirim hasil ke frontend
+        // 🔹 Handle error dari Shopee
+        if (result.error) {
+            let message = result.message || result.error;
+            if (result.error.includes("not_in_whitelist")) {
+                message = "Toko kamu belum diaktifkan untuk fitur multi-warehouse Shopee.";
+            }
+
+            return res.status(400).json({
+                success: false,
+                message,
+                raw: result,
+            });
+        }
+
+        // ✅ Berhasil ambil data warehouse
         return res.status(200).json({
             success: true,
-            message: "Berhasil mengambil warehouse detail dari Shopee",
-            shopee_response: response.data,
+            message: "Berhasil mengambil warehouse Shopee",
+            data: result.response,
         });
     } catch (err) {
-        console.error("❌ Error getWarehouseDetail:", err.response?.data || err.message);
+        console.error("❌ Error getWarehouseDetail:", err);
 
         return res.status(500).json({
             success: false,
-            message:
-                err.response?.data?.message ||
-                "Gagal mengambil warehouse detail dari Shopee",
-            raw: err.response?.data || err.message,
+            message: "Gagal mengambil warehouse dari Shopee",
+            raw: err.message || err,
         });
     }
 };
