@@ -2251,7 +2251,6 @@ const updateStockShopee = async (req, res) => {
         }
 
         // Ambil access token & shop id dari database (contoh sementara)
-        const db = require("../models");
         const ShopeeAccount = db.shopee; // sesuaikan dengan model kamu
         const account = await ShopeeAccount.findOne({ where: { account: "default" } });
 
