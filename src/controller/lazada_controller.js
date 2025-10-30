@@ -1669,7 +1669,7 @@ const printLazadaResi = async (req, res) => {
             packages: [{ package_id: packageId }],
         });
 
-        // 🔹 Sign process
+        // 🔹 Generate signature
         const signParams = { ...params, getDocumentReq };
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
@@ -1686,12 +1686,7 @@ const printLazadaResi = async (req, res) => {
 
         const bodyData = `getDocumentReq=${getDocumentReq}`;
 
-        console.log("DEBUG LAZADA AWB:", {
-            finalUrl,
-            baseStr,
-            bodyData,
-            sign,
-        });
+        console.log("📦 Lazada AWB Request:", { packageId, finalUrl });
 
         // 🔹 Request ke Lazada
         const lazadaRes = await axios.post(finalUrl, bodyData, {
@@ -1699,57 +1694,57 @@ const printLazadaResi = async (req, res) => {
             responseType: "arraybuffer",
         });
 
-        const contentType = lazadaRes.headers["content-type"];
+        const contentType = lazadaRes.headers["content-type"] || "";
 
-        // Lazada kadang kirim JSON (bukan langsung PDF)
+        // 🔸 Jika Lazada kirim JSON dulu (berisi pdf_url)
         if (contentType.includes("application/json")) {
             const raw = Buffer.from(lazadaRes.data).toString("utf8");
             const parsed = JSON.parse(raw);
 
-            // 🔍 Jika response berisi URL PDF
             if (parsed.result?.data?.pdf_url) {
                 const pdfUrl = parsed.result.data.pdf_url;
+                console.log(`✅ Dapat PDF URL dari Lazada: ${pdfUrl}`);
 
-                // Ambil file PDF dari URL tersebut
-                const pdfRes = await axios.get(pdfUrl, {
-                    responseType: "arraybuffer",
+                // Download file PDF dari URL
+                const pdfRes = await axios.get(pdfUrl, { responseType: "arraybuffer" });
+                const pdfBase64 = Buffer.from(pdfRes.data).toString("base64");
+
+                return res.status(200).json({
+                    success: true,
+                    message: `Resi Lazada untuk package_id ${packageId}`,
+                    package_id: packageId,
+                    pdf_base64: pdfBase64,
                 });
-
-                res.setHeader("Content-Type", "application/pdf");
-                res.setHeader(
-                    "Content-Disposition",
-                    `inline; filename="AWB_${packageId}.pdf"`
-                );
-                return res.send(pdfRes.data);
             }
 
             return res.status(400).json({
                 success: false,
-                message:
-                    "Lazada mengembalikan JSON tanpa file PDF (mungkin package_id salah)",
+                message: "Lazada mengembalikan JSON tanpa PDF URL (cek package_id)",
                 raw: parsed,
-                debug: { finalUrl, baseStr, bodyData, sign },
             });
         }
 
-        // ✅ Jika langsung PDF
+        // 🔸 Jika Lazada langsung kirim PDF
         if (contentType.includes("application/pdf")) {
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader(
-                "Content-Disposition",
-                `inline; filename="AWB_${packageId}.pdf"`
-            );
-            return res.send(lazadaRes.data);
+            const pdfBase64 = Buffer.from(lazadaRes.data).toString("base64");
+            return res.status(200).json({
+                success: true,
+                message: `Resi Lazada untuk package_id ${packageId}`,
+                package_id: packageId,
+                pdf_base64: pdfBase64,
+            });
         }
 
-        // Fallback jika bukan PDF / JSON
+        // 🔸 Fallback jika format tak dikenal
         return res.status(400).json({
             success: false,
-            message: "Respons dari Lazada tidak diketahui",
+            message: "Respons dari Lazada tidak diketahui formatnya",
         });
     } catch (error) {
+        console.error("❌ Error printLazadaResi:", error.response?.data || error.message);
+
         const errData =
-            error.response && error.response.data
+            error.response?.data
                 ? Buffer.from(error.response.data).toString("utf8")
                 : error.message;
 
