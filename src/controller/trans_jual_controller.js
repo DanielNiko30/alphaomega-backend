@@ -355,20 +355,16 @@ const TransJualController = {
             (async () => {
                 for (const stok of stokUpdateList) {
                     try {
-                        if (stok.id_product_shopee && stok.stok >= 0) {
-                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                item_id: stok.id_product_shopee,
-                                stock: stok.stok
-                            });
-                        }
+                        await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
+                            item_id: stok.id_product_shopee,
+                            stock: stok.stok
+                        });
 
-                        if (stok.id_product_lazada && stok.sku_lazada) {
-                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                item_id: String(stok.id_product_lazada),
-                                sku_id: String(stok.sku_lazada),
-                                quantity: stok.stok
-                            });
-                        }
+                        await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
+                            item_id: String(stok.id_product_lazada),
+                            sku_id: String(stok.sku_lazada),
+                            quantity: stok.stok
+                        });
                     } catch (err) {
                         console.error("❌ Gagal update stok marketplace (setelah updateTransaction):", {
                             produk: stok.id_product_stok,
