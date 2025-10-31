@@ -51,56 +51,144 @@ const TransBeliController = {
 
     // Membuat transaksi pembelian baru dengan auto-generated ID
     createTransaction: async (req, res) => {
+        const t = await HTransBeli.sequelize.transaction();
         try {
-            const { id_supplier, tanggal, total_harga, metode_pembayaran, nomor_invoice, ppn, detail } = req.body;
-
-            // Generate ID untuk htrans_beli
-            const id_htrans_beli = await generateHTransBeliId();
-
-            // Buat transaksi utama
-            const newTransaction = await HTransBeli.create({
-                id_htrans_beli,
+            const {
                 id_supplier,
                 tanggal,
                 total_harga,
                 metode_pembayaran,
                 nomor_invoice,
-                ppn
-            });
+                ppn,
+                detail
+            } = req.body;
 
-            // Looping untuk setiap detail transaksi
-            for (const item of detail) {
-                const id_dtrans_beli = await generateDTransBeliId(); // Generate ID untuk detail transaksi
+            // 1️⃣ Generate ID Header Transaksi
+            const id_htrans_beli = await generateHTransBeliId();
 
-                await DTransBeli.create({
-                    id_dtrans_beli,
+            // 2️⃣ Buat Header Transaksi
+            await HTransBeli.create(
+                {
                     id_htrans_beli,
-                    id_produk: item.id_produk,
-                    jumlah_barang: item.jumlah_barang,
-                    harga_satuan: item.harga_satuan,
-                    diskon_barang: item.diskon_barang,
-                    subtotal: item.subtotal,
+                    id_supplier,
+                    tanggal,
+                    total_harga: Math.floor(Number(total_harga)),
+                    metode_pembayaran,
+                    nomor_invoice,
+                    ppn: Number(ppn) || 0,
+                },
+                { transaction: t }
+            );
+
+            // 3️⃣ Penampung untuk sinkron stok nanti
+            const stokUpdateList = [];
+
+            // 4️⃣ Proses detail transaksi pembelian
+            for (const item of detail) {
+                const id_dtrans_beli = await generateDTransBeliId();
+
+                // Simpan detail transaksi
+                await DTransBeli.create(
+                    {
+                        id_dtrans_beli,
+                        id_htrans_beli,
+                        id_produk: item.id_produk,
+                        jumlah_barang: Number(item.jumlah_barang),
+                        harga_satuan: Number(item.harga_satuan),
+                        diskon_barang: Number(item.diskon_barang) || 0,
+                        subtotal: Math.floor(Number(item.subtotal)),
+                    },
+                    { transaction: t }
+                );
+
+                // 🧮 Update atau buat stok
+                let stok = await Stok.findOne({
+                    where: { id_product_stok: item.id_produk, satuan: item.satuan },
+                    transaction: t,
                 });
 
-                // Update stok di tabel stok
-                const stock = await Stok.findOne({ where: { id_product_stok: item.id_produk } });
-                if (stock) {
-                    await stock.update({ stok: stock.stok + item.jumlah_barang });
+                if (stok) {
+                    const stokBaru = stok.stok + Number(item.jumlah_barang);
+                    await stok.update(
+                        { stok: stokBaru, harga: Number(item.harga_satuan) },
+                        { transaction: t }
+                    );
+                    stokUpdateList.push(stok);
                 } else {
-                    // Jika stok belum ada, tambahkan data stok baru
-                    await Stok.create({
-                        id_stok: await generateStokId(),
-                        id_product_stok: item.id_produk,
-                        satuan: item.satuan, // Pastikan satuan dikirim dari frontend
-                        stok: item.jumlah_barang,
-                        harga: item.harga_satuan
-                    });
+                    // Jika stok belum ada
+                    const id_stok = await generateStokId();
+                    stok = await Stok.create(
+                        {
+                            id_stok,
+                            id_product_stok: item.id_produk,
+                            satuan: item.satuan,
+                            stok: Number(item.jumlah_barang),
+                            harga: Number(item.harga_satuan),
+                        },
+                        { transaction: t }
+                    );
+                    stokUpdateList.push(stok);
                 }
             }
 
-            res.status(201).json({ message: "Transaction created successfully" });
+            // ✅ Commit transaksi lokal
+            await t.commit();
+
+            // 🔄 Ambil stok terbaru
+            const freshStokList = await Promise.all(
+                stokUpdateList.map(async (s) => await Stok.findByPk(s.id_stok))
+            );
+
+            // 🚀 Sinkron ke marketplace (Shopee & Lazada)
+            (async () => {
+                for (const stok of freshStokList) {
+                    if (!stok) continue;
+
+                    try {
+                        // 🟠 Shopee
+                        if (stok.id_product_shopee && stok.id_product_shopee !== '' && !isNaN(stok.stok)) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
+                                item_id: Number(stok.id_product_shopee),
+                                stock: Number(stok.stok)
+                            });
+                            console.log(`🟢 Shopee stok updated [${stok.id_product_stok}] → ${stok.stok}`);
+                        } else {
+                            console.log(`⏭️ Skip Shopee: produk ${stok.id_product_stok} belum punya id_product_shopee`);
+                        }
+
+                        // 🔵 Lazada
+                        if (stok.id_product_lazada && stok.sku_lazada && !isNaN(stok.stok)) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
+                                item_id: String(stok.id_product_lazada),
+                                sku_id: String(stok.sku_lazada),
+                                quantity: Number(stok.stok)
+                            });
+                            console.log(`🟣 Lazada stok updated [${stok.id_product_stok}] → ${stok.stok}`);
+                        } else {
+                            console.log(`⏭️ Skip Lazada: produk ${stok.id_product_stok} belum punya id_product_lazada/sku_lazada`);
+                        }
+                    } catch (err) {
+                        console.error("❌ Gagal update stok marketplace (createTransactionBeli):", {
+                            produk: stok.id_product_stok,
+                            error: err.response?.data || err.message,
+                        });
+                    }
+                }
+            })();
+
+            // ✅ Response sukses
+            res.status(201).json({
+                success: true,
+                message: "Transaksi pembelian berhasil dibuat dan stok diperbarui",
+                id_htrans_beli,
+            });
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            await t.rollback();
+            console.error("❌ Gagal createTransactionBeli:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Gagal membuat transaksi pembelian",
+            });
         }
     },
 };
