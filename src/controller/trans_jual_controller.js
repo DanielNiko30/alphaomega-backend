@@ -2,7 +2,6 @@ const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Stok } = require("../model/stok_model");
 const { User } = require('../model/user_model');
-const { getDB } = require("../config/sequelize");
 const { Op } = require("sequelize");
 const axios = require("axios");
 const NOTIF_URL = "https://tokalphaomegaploso.my.id/api/notifikasi/send";
@@ -224,121 +223,201 @@ const TransJualController = {
     },
 
     updateTransaction: async (req, res) => {
-        const t = await HTransJual.sequelize.transaction(); // ✅ gunakan instance sequelize dari model
-
+        const t = await HTransJual.sequelize.transaction();
         try {
-            const { id_htrans_jual, detail, total_bayar, metode_bayar } = req.body;
+            const { id_htrans_jual } = req.params;
+            const {
+                id_user,
+                id_user_penjual,
+                nama_pembeli,
+                tanggal,
+                total_harga,
+                metode_pembayaran,
+                detail
+            } = req.body;
 
             console.log("🟡 Update Transaction ID:", id_htrans_jual);
 
-            // 🧾 Update header transaksi
-            const htrans = await HTransJual.findByPk(id_htrans_jual, { transaction: t });
-            if (!htrans) throw new Error("Transaksi tidak ditemukan");
+            // 1️⃣ Ambil detail lama
+            const oldDetails = await DTransJual.findAll({
+                where: { id_htrans_jual },
+                transaction: t
+            });
 
-            htrans.total_bayar = total_bayar;
-            htrans.metode_bayar = metode_bayar;
-            await htrans.save({ transaction: t });
+            // 2️⃣ Buat map detail lama
+            const oldDetailMap = {};
+            oldDetails.forEach(item => {
+                const key = `${item.id_produk}_${item.satuan}`;
+                oldDetailMap[key] = item;
+            });
 
+            // 3️⃣ Update header transaksi
+            await HTransJual.update(
+                {
+                    id_user,
+                    id_user_penjual,
+                    nama_pembeli,
+                    tanggal,
+                    total_harga,
+                    metode_pembayaran
+                },
+                { where: { id_htrans_jual }, transaction: t }
+            );
+
+            // 4️⃣ Set penampung stok yang perlu disinkron ke marketplace nanti
             const stokUpdateList = [];
 
-            // 🔁 Loop detail transaksi
-            for (const item of detail) {
-                const dtrans = await DTransJual.findOne({
-                    where: {
-                        id_htrans_jual,
-                        id_produk: item.id_product,
-                    },
-                    transaction: t,
-                });
+            // 5️⃣ Hapus item yang sudah tidak ada di detail baru → stok dikembalikan
+            for (const oldItem of oldDetails) {
+                const key = `${oldItem.id_produk}_${oldItem.satuan}`;
+                const stillExists = detail.find(d => `${d.id_produk}_${d.satuan}` === key);
 
-                if (dtrans) {
-                    dtrans.jumlah_barang = item.qty;
-                    dtrans.harga_satuan = item.harga;
-                    dtrans.subtotal = item.qty * item.harga;
-                    await dtrans.save({ transaction: t });
+                if (!stillExists) {
+                    const stok = await Stok.findOne({
+                        where: {
+                            id_product_stok: oldItem.id_produk,
+                            satuan: oldItem.satuan
+                        },
+                        transaction: t
+                    });
+
+                    if (stok) {
+                        const stokBaru = stok.stok + oldItem.jumlah_barang;
+                        await stok.update({ stok: stokBaru }, { transaction: t });
+                        stokUpdateList.push(stok);
+                    }
+
+                    await DTransJual.destroy({
+                        where: { id_dtrans_jual: oldItem.id_dtrans_jual },
+                        transaction: t
+                    });
                 }
+            }
 
-                // 🧮 Update stok lokal
+            // 6️⃣ Tambah atau ubah item di detail baru
+            for (const item of detail) {
+                const key = `${item.id_produk}_${item.satuan}`;
+                const oldItem = oldDetailMap[key];
+                const jumlahBaru = Number(item.jumlah_barang);
+
                 const stok = await Stok.findOne({
-                    where: { id_product_stok: item.id_product },
-                    transaction: t,
+                    where: {
+                        id_product_stok: item.id_produk,
+                        satuan: item.satuan
+                    },
+                    transaction: t
                 });
 
-                if (stok) {
-                    const stokBaru = stok.stok - item.qty;
-                    if (stokBaru < 0) throw new Error(`Stok tidak cukup untuk produk ${item.id_product}`);
+                if (!stok) throw new Error(`Stok tidak ditemukan untuk ${item.id_produk} (${item.satuan})`);
+
+                if (oldItem) {
+                    const selisih = jumlahBaru - oldItem.jumlah_barang;
+                    if (selisih !== 0) {
+                        const stokBaru = stok.stok - selisih;
+                        if (stokBaru < 0) throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
+                        await stok.update({ stok: stokBaru }, { transaction: t });
+                        stokUpdateList.push(stok);
+                    }
+
+                    await DTransJual.update(
+                        {
+                            jumlah_barang: jumlahBaru,
+                            harga_satuan: Number(item.harga_satuan),
+                            subtotal: Math.floor(Number(item.subtotal))
+                        },
+                        { where: { id_dtrans_jual: oldItem.id_dtrans_jual }, transaction: t }
+                    );
+                } else {
+                    if (stok.stok < jumlahBaru) throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
+                    const stokBaru = stok.stok - jumlahBaru;
                     await stok.update({ stok: stokBaru }, { transaction: t });
                     stokUpdateList.push(stok);
+
+                    const id_dtrans_jual = await generateDTransJualId();
+                    await DTransJual.create(
+                        {
+                            id_dtrans_jual,
+                            id_htrans_jual,
+                            id_produk: item.id_produk,
+                            satuan: item.satuan,
+                            jumlah_barang: jumlahBaru,
+                            harga_satuan: Number(item.harga_satuan),
+                            subtotal: Math.floor(Number(item.subtotal))
+                        },
+                        { transaction: t }
+                    );
                 }
             }
 
             // ✅ Commit transaksi lokal
             await t.commit();
 
-            // 🚀 Sinkron stok ke marketplace
+            // 🔄 Refresh stok biar data terbaru setelah commit
+            const freshStokList = await Promise.all(
+                stokUpdateList.map(async s => await Stok.findByPk(s.id_product_stok))
+            );
+
+            // ✅ Sinkron ke Shopee & Lazada
             (async () => {
-                for (const stok of stokUpdateList) {
-                    if (!stok) continue;
-                    if (stok.stok == null || isNaN(stok.stok)) {
-                        console.warn("⚠️ Skip stok tidak valid:", stok.id_product_stok);
-                        continue;
-                    }
-
+                for (const stok of freshStokList) {
                     try {
-                        // 🛍️ Shopee
-                        if (stok.id_product_shopee && stok.id_product_shopee !== "") {
-                            console.log("🟢 Update Shopee:", {
-                                item_id: stok.id_product_shopee,
-                                stock: stok.stok,
-                            });
-
+                        // 🛍️ Update ke Shopee
+                        if (
+                            stok?.id_product_shopee != null &&
+                            stok?.id_product_shopee !== '' &&
+                            !isNaN(stok?.stok)
+                        ) {
                             await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
                                 item_id: Number(stok.id_product_shopee),
-                                stock: Number(stok.stok),
+                                stock: Number(stok.stok)
                             });
-                        } else {
-                            console.log("⏭️ Skip Shopee (id_product_shopee kosong):", stok.id_product_stok);
                         }
 
-                        // 🛒 Lazada
-                        if (stok.id_product_lazada && stok.sku_lazada && stok.id_product_lazada !== "") {
-                            console.log("🟣 Update Lazada:", {
-                                item_id: stok.id_product_lazada,
-                                sku_id: stok.sku_lazada,
-                                quantity: stok.stok,
-                            });
-
+                        // 🛒 Update ke Lazada
+                        if (stok?.id_product_lazada && stok?.sku_lazada) {
                             await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
                                 item_id: String(stok.id_product_lazada),
                                 sku_id: String(stok.sku_lazada),
-                                quantity: Number(stok.stok),
+                                quantity: Number(stok.stok)
                             });
-                        } else {
-                            console.log("⏭️ Skip Lazada (id_product_lazada kosong):", stok.id_product_stok);
                         }
-
                     } catch (err) {
-                        console.error("❌ Gagal update stok marketplace:", {
+                        console.error("❌ Gagal update stok marketplace (setelah updateTransaction):", {
                             produk: stok.id_product_stok,
-                            error: err.response?.data || err.message,
+                            error: err.response?.data || err.message
                         });
                     }
                 }
             })();
 
+            // 🔔 Emit notifikasi realtime
+            if (global.io && id_user_penjual) {
+                global.io.to(String(id_user_penjual)).emit("updateTransaction", {
+                    id_htrans_jual,
+                    nama_pembeli,
+                    total_harga,
+                    detail,
+                    message: `Transaksi ${id_htrans_jual} telah diperbarui`
+                });
+            }
+
             // ✅ Response sukses
-            res.json({
+            res.status(200).json({
                 success: true,
-                message: "Transaksi berhasil diperbarui dan stok disinkronkan ke marketplace",
+                message: "Transaksi berhasil diperbarui",
+                id_htrans_jual
             });
+
+            // 🔔 Notifikasi eksternal (async)
+            axios.post(NOTIF_URL, {
+                title: "Pesanan Diperbarui",
+                message: `Pesanan ${nama_pembeli} telah diperbarui. Mohon segera dicek.`
+            }).catch(err => console.error("Gagal kirim notifikasi eksternal:", err.message));
 
         } catch (error) {
             await t.rollback();
-            console.error("❌ Gagal update transaksi:", error);
-            res.status(500).json({
-                success: false,
-                message: error.message || "Gagal update transaksi",
-            });
+            console.error("❌ Update Transaction Error:", error);
+            res.status(500).json({ success: false, message: error.message });
         }
     },
 
