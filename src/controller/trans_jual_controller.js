@@ -244,7 +244,7 @@ const TransJualController = {
                 transaction: t
             });
 
-            // 2️⃣ Buat map detail lama
+            // 2️⃣ Map detail lama untuk perbandingan
             const oldDetailMap = {};
             oldDetails.forEach(item => {
                 const key = `${item.id_produk}_${item.satuan}`;
@@ -258,31 +258,28 @@ const TransJualController = {
                     id_user_penjual,
                     nama_pembeli,
                     tanggal,
-                    total_harga,
+                    total_harga: Math.floor(Number(total_harga)),
                     metode_pembayaran
                 },
                 { where: { id_htrans_jual }, transaction: t }
             );
 
-            // 4️⃣ Set penampung stok yang perlu disinkron ke marketplace nanti
+            // 4️⃣ Siapkan list stok untuk update marketplace
             const stokUpdateList = [];
 
-            // 5️⃣ Hapus item yang sudah tidak ada di detail baru → stok dikembalikan
+            // 5️⃣ Hapus item lama yang tidak ada di detail baru (restore stok)
             for (const oldItem of oldDetails) {
                 const key = `${oldItem.id_produk}_${oldItem.satuan}`;
                 const stillExists = detail.find(d => `${d.id_produk}_${d.satuan}` === key);
 
                 if (!stillExists) {
                     const stok = await Stok.findOne({
-                        where: {
-                            id_product_stok: oldItem.id_produk,
-                            satuan: oldItem.satuan
-                        },
+                        where: { id_product_stok: oldItem.id_produk, satuan: oldItem.satuan },
                         transaction: t
                     });
 
                     if (stok) {
-                        const stokBaru = stok.stok + oldItem.jumlah_barang;
+                        const stokBaru = stok.stok + Number(oldItem.jumlah_barang);
                         await stok.update({ stok: stokBaru }, { transaction: t });
                         stokUpdateList.push(stok);
                     }
@@ -294,23 +291,21 @@ const TransJualController = {
                 }
             }
 
-            // 6️⃣ Tambah atau ubah item di detail baru
+            // 6️⃣ Tambah / ubah item di detail baru
             for (const item of detail) {
                 const key = `${item.id_produk}_${item.satuan}`;
                 const oldItem = oldDetailMap[key];
                 const jumlahBaru = Number(item.jumlah_barang);
 
                 const stok = await Stok.findOne({
-                    where: {
-                        id_product_stok: item.id_produk,
-                        satuan: item.satuan
-                    },
+                    where: { id_product_stok: item.id_produk, satuan: item.satuan },
                     transaction: t
                 });
 
-                if (!stok) throw new Error(`Stok tidak ditemukan untuk ${item.id_produk} (${item.satuan})`);
+                if (!stok) throw new Error(`Stok tidak ditemukan untuk produk ${item.id_produk} (${item.satuan})`);
 
                 if (oldItem) {
+                    // Update stok berdasarkan selisih
                     const selisih = jumlahBaru - oldItem.jumlah_barang;
                     if (selisih !== 0) {
                         const stokBaru = stok.stok - selisih;
@@ -319,6 +314,7 @@ const TransJualController = {
                         stokUpdateList.push(stok);
                     }
 
+                    // Update DTrans
                     await DTransJual.update(
                         {
                             jumlah_barang: jumlahBaru,
@@ -327,8 +323,11 @@ const TransJualController = {
                         },
                         { where: { id_dtrans_jual: oldItem.id_dtrans_jual }, transaction: t }
                     );
+
                 } else {
-                    if (stok.stok < jumlahBaru) throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
+                    // Item baru → kurangi stok + buat DTrans baru
+                    if (stok.stok < jumlahBaru)
+                        throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
                     const stokBaru = stok.stok - jumlahBaru;
                     await stok.update({ stok: stokBaru }, { transaction: t });
                     stokUpdateList.push(stok);
@@ -349,40 +348,42 @@ const TransJualController = {
                 }
             }
 
-            // ✅ Commit transaksi lokal
+            // ✅ Commit transaksi database
             await t.commit();
 
-            // 🔄 Refresh stok biar data terbaru setelah commit
+            // 🔁 Ambil stok terbaru untuk sinkronisasi
             const freshStokList = await Promise.all(
-                stokUpdateList.map(async s => await Stok.findByPk(s.id_product_stok))
+                stokUpdateList.map(async s => await Stok.findByPk(s.id_stok))
             );
 
-            // ✅ Sinkron ke Shopee & Lazada
+            // 🔄 Update ke marketplace (Shopee + Lazada)
             (async () => {
                 for (const stok of freshStokList) {
+                    if (!stok) continue;
+
                     try {
-                        // 🛍️ Update ke Shopee
-                        if (
-                            stok?.id_product_shopee != null &&
-                            stok?.id_product_shopee !== '' &&
-                            !isNaN(stok?.stok)
-                        ) {
+                        // 🟠 Shopee
+                        if (stok.id_product_shopee && stok.id_product_shopee !== '' && !isNaN(stok.stok)) {
                             await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
                                 item_id: Number(stok.id_product_shopee),
                                 stock: Number(stok.stok)
                             });
+                        } else {
+                            console.log(`⏭️ Skip Shopee: produk ${stok.id_product_stok} tidak punya id_product_shopee`);
                         }
 
-                        // 🛒 Update ke Lazada
-                        if (stok?.id_product_lazada && stok?.sku_lazada) {
+                        // 🔵 Lazada
+                        if (stok.id_product_lazada && stok.sku_lazada && !isNaN(stok.stok)) {
                             await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
                                 item_id: String(stok.id_product_lazada),
                                 sku_id: String(stok.sku_lazada),
                                 quantity: Number(stok.stok)
                             });
+                        } else {
+                            console.log(`⏭️ Skip Lazada: produk ${stok.id_product_stok} tidak punya id_product_lazada/sku_lazada`);
                         }
                     } catch (err) {
-                        console.error("❌ Gagal update stok marketplace (setelah updateTransaction):", {
+                        console.error("❌ Gagal update stok marketplace (updateTransaction):", {
                             produk: stok.id_product_stok,
                             error: err.response?.data || err.message
                         });
@@ -390,7 +391,7 @@ const TransJualController = {
                 }
             })();
 
-            // 🔔 Emit notifikasi realtime
+            // 🔔 Emit notifikasi realtime ke penjual
             if (global.io && id_user_penjual) {
                 global.io.to(String(id_user_penjual)).emit("updateTransaction", {
                     id_htrans_jual,
@@ -408,7 +409,7 @@ const TransJualController = {
                 id_htrans_jual
             });
 
-            // 🔔 Notifikasi eksternal (async)
+            // 🔔 Kirim notifikasi eksternal (opsional)
             axios.post(NOTIF_URL, {
                 title: "Pesanan Diperbarui",
                 message: `Pesanan ${nama_pembeli} telah diperbarui. Mohon segera dicek.`
