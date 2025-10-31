@@ -157,7 +157,7 @@ const TransBeliController = {
                         }
 
                         // 🔵 Lazada
-                        if (stok.id_product_lazada && stok.sku_lazada && !isNaN(stok.stok)) {
+                        if (stok.id_product_lazada && stok.id_product_lazada !== '' && !isNaN(stok.stok)) {
                             await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
                                 item_id: String(stok.id_product_lazada),
                                 sku_id: String(stok.sku_lazada),
