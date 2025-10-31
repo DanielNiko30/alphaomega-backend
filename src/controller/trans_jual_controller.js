@@ -149,16 +149,46 @@ const TransJualController = {
                     subtotal: Math.floor(Number(item.subtotal)),
                 });
 
+                // 🔻 Update stok lokal
                 const stock = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
                         satuan: item.satuan,
                     }
                 });
-                await stock.update({ stok: stock.stok - jumlahKurangi });
+
+                const stokBaru = stock.stok - jumlahKurangi;
+                await stock.update({ stok: stokBaru });
+
+                // 🔁 Update ke Shopee & Lazada (async, tidak ganggu flow)
+                (async () => {
+                    try {
+                        // 🟠 Shopee
+                        if (stock.id_product_shopee) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
+                                item_id: stock.id_product_shopee,
+                                stock: stokBaru
+                            });
+                        }
+
+                        // 🔵 Lazada
+                        if (stock.id_product_lazada && stock.sku_lazada) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
+                                item_id: String(stock.id_product_lazada),
+                                sku_id: String(stock.sku_lazada),
+                                quantity: stokBaru
+                            });
+                        }
+                    } catch (err) {
+                        console.error("❌ Gagal update stok marketplace:", {
+                            produk: item.id_produk,
+                            error: err.response?.data || err.message
+                        });
+                    }
+                })();
             }
 
-            // 5️⃣ Emit notifikasi realtime ke pegawai yang ditugaskan
+            // 5️⃣ Emit notifikasi realtime
             if (global.io && id_user_penjual) {
                 global.io.to(String(id_user_penjual)).emit("newTransaction", {
                     id_htrans_jual,
@@ -168,6 +198,7 @@ const TransJualController = {
                     message: `Ada transaksi baru untuk ${nama_pembeli}`
                 });
             }
+
             // 6️⃣ Response sukses
             const response = res.status(201).json({
                 message: "Transaksi jual berhasil dibuat",
@@ -175,7 +206,7 @@ const TransJualController = {
                 id_htrans_jual,
             });
 
-            // 🔔 Kirim notifikasi ke endpoint eksternal (tidak ganggu flow utama)
+            // 🔔 Notifikasi eksternal (async)
             axios.post(NOTIF_URL, {
                 title: "Pesanan Baru",
                 message: `Ada pesanan baru dari ${nama_pembeli}. Mohon segera dikonfirmasi!`
