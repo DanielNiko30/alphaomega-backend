@@ -1776,6 +1776,120 @@ const printLazadaResi = async (req, res) => {
     }
 };
 
+const updatePriceQuantity = async (req, res) => {
+    try {
+        // Body dapat single object { item_id, sku_id, quantity }
+        // atau multiple SKUs: { item_id, skus: [{ sku_id, quantity }, ...] }
+        const { item_id, sku_id, quantity, skus } = req.body;
+
+        if (!item_id) {
+            return res.status(400).json({ success: false, message: "item_id wajib diisi" });
+        }
+
+        // Normalize skus into array of { ItemId, SkuId, Quantity }
+        let skuArray = [];
+
+        if (Array.isArray(skus) && skus.length > 0) {
+            // multiple skus supplied
+            for (const s of skus) {
+                if (!s.sku_id || s.quantity === undefined) {
+                    return res.status(400).json({ success: false, message: "Untuk setiap sku harus ada sku_id dan quantity" });
+                }
+                skuArray.push({
+                    ItemId: String(item_id),
+                    SkuId: String(s.sku_id),
+                    Quantity: String(s.quantity),
+                });
+            }
+        } else {
+            // single sku flow
+            if (!sku_id || quantity === undefined) {
+                return res.status(400).json({ success: false, message: "sku_id dan quantity wajib diisi (atau gunakan skus array)" });
+            }
+            skuArray.push({
+                ItemId: String(item_id),
+                SkuId: String(sku_id),
+                Quantity: String(quantity),
+            });
+        }
+
+        // Ambil akun Lazada dari DB
+        const account = await Lazada.findOne();
+        if (!account) {
+            return res.status(400).json({ success: false, message: "Account Lazada tidak ditemukan di DB. Silakan authorize dulu." });
+        }
+
+        const accessToken = account.access_token.trim();
+        const apiKey = process.env.LAZADA_APP_KEY.trim();
+        const appSecret = process.env.LAZADA_APP_SECRET.trim();
+
+        const apiPath = '/product/price_quantity/update';
+        const endpointBase = process.env.LAZADA_ENDPOINT || 'https://api.lazada.co.id/rest'; // gunakan env jika beda region
+        const timestamp = Date.now().toString();
+
+        // Build XML payload sesuai contoh Lazada
+        // Structure: <Request><Product><Skus><Sku>...</Sku></Skus></Product></Request>
+        const builder = new Builder({ headless: true, renderOpts: { pretty: false } });
+        const xmlObj = {
+            Request: {
+                Product: {
+                    Skus: {
+                        Sku: skuArray.map(s => ({
+                            ItemId: s.ItemId,
+                            SkuId: s.SkuId,
+                            Quantity: s.Quantity
+                        }))
+                    }
+                }
+            }
+        };
+
+        const xmlPayload = builder.buildObject(xmlObj);
+
+        // System params
+        const sysParams = {
+            app_key: apiKey,
+            access_token: accessToken,
+            sign_method: 'sha256',
+            timestamp,
+            v: '1.0'
+        };
+
+        // Generate sign including payload (Lazada requires payload included in signing)
+        const sign = generateSign(apiPath, { ...sysParams, payload: xmlPayload }, appSecret);
+
+        // Build final URL
+        const url = `${endpointBase}${apiPath}?${new URLSearchParams({ ...sysParams, sign }).toString()}`;
+
+        // Send request as application/x-www-form-urlencoded with payload=<xml>
+        const bodyForRequest = new URLSearchParams({ payload: xmlPayload });
+
+        const lazadaRes = await axios.post(url, bodyForRequest.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 15000
+        });
+
+        // Return response langsung ke frontend (sertakan debug jika perlu)
+        return res.status(200).json({
+            success: true,
+            message: 'Request update stock dikirim ke Lazada',
+            request: {
+                url,
+                payload: xmlPayload
+            },
+            lazada_response: lazadaRes.data
+        });
+
+    } catch (err) {
+        console.error('❌ Lazada updatePriceQuantity Error:', err.response?.data || err.message);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal update stock ke Lazada',
+            error: err.response?.data || err.message
+        });
+    }
+};
+
 module.exports = {
     generateLoginUrl,
     lazadaCallback,
@@ -1796,5 +1910,6 @@ module.exports = {
     getWarehouseBySeller,
     aturPickup,
     printLazadaResi,
-    readyToShipLazada
+    readyToShipLazada,
+    updatePriceQuantity
 };

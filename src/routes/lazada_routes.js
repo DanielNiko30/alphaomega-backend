@@ -20,7 +20,8 @@ const {
     getWarehouseBySeller,
     aturPickup,
     printLazadaResi,
-    readyToShipLazada
+    readyToShipLazada,
+    updatePriceQuantity
 } = require('../controller/lazada_controller');
 
 router.get('/generate-login-url', generateLoginUrl);
@@ -44,5 +45,6 @@ router.get("/warehouse", getWarehouseBySeller);
 router.post("/atur-pickup", aturPickup);
 router.post("/print-resi", printLazadaResi);
 router.post("/ready-to-ship", readyToShipLazada);
+router.post('/update-stock', updatePriceQuantity);
 
 module.exports = router;
