@@ -223,118 +223,59 @@ const TransJualController = {
         }
     },
 
-    updateTransaction: async (req, res) => {
-        const t = await getDB().transaction();
+    createTransaction: async (req, res) => {
+        const t = await HTransJual.sequelize.transaction(); // ✅ ambil transaction dari model
+
         try {
-            const { id_htrans_jual, detail, total_bayar, metode_bayar } = req.body;
+            const { id_user, id_user_penjual, nama_pembeli, tanggal, total_harga, metode_pembayaran, detail } = req.body;
 
-            // 🧾 Update header transaksi
-            const htrans = await HTransJual.findByPk(id_htrans_jual, { transaction: t });
-            if (!htrans) throw new Error("Transaksi tidak ditemukan");
+            const id_htrans_jual = await generateHTransJualId();
+            const nomor_invoice = await generateInvoiceNumber();
 
-            htrans.total_bayar = total_bayar;
-            htrans.metode_bayar = metode_bayar;
-            await htrans.save({ transaction: t });
+            const newTransaction = await HTransJual.create({
+                id_htrans_jual,
+                id_user,
+                id_user_penjual,
+                nama_pembeli,
+                tanggal,
+                total_harga,
+                metode_pembayaran,
+                nomor_invoice,
+                status: "Pending"
+            }, { transaction: t });
 
-            const stokUpdateList = [];
-
-            // 🔁 Update detail transaksi
             for (const item of detail) {
-                const dtrans = await DTransJual.findOne({
-                    where: { id_htrans_jual, id_product: item.id_product },
-                    transaction: t,
+                const id_dtrans_jual = await generateDTransJualId();
+
+                await DTransJual.create({
+                    id_dtrans_jual,
+                    id_htrans_jual,
+                    id_produk: item.id_produk,
+                    satuan: item.satuan,
+                    jumlah_barang: item.jumlah_barang,
+                    harga_satuan: item.harga_satuan,
+                    subtotal: item.subtotal
+                }, { transaction: t });
+
+                // Update stok juga di dalam transaction
+                const stock = await Stok.findOne({
+                    where: { id_product_stok: item.id_produk, satuan: item.satuan },
+                    transaction: t
                 });
 
-                if (dtrans) {
-                    dtrans.qty = item.qty;
-                    dtrans.harga = item.harga;
-                    await dtrans.save({ transaction: t });
-                }
-
-                // 🧮 Update stok lokal
-                const stok = await Stok.findOne({
-                    where: { id_product_stok: item.id_product },
-                    transaction: t,
-                });
-
-                if (stok) {
-                    stok.stok = stok.stok - item.qty;
-                    await stok.save({ transaction: t });
-                    stokUpdateList.push(stok);
+                if (stock) {
+                    const stokBaru = stock.stok - item.jumlah_barang;
+                    await stock.update({ stok: stokBaru }, { transaction: t });
                 }
             }
 
-            // ✅ Commit transaksi lokal
             await t.commit();
+            res.status(201).json({ success: true, message: "Transaksi berhasil dibuat" });
 
-            // 🔄 Ambil stok terbaru
-            const freshStokList = await Promise.all(
-                stokUpdateList.map(async (s) => await Stok.findByPk(s.id_stok))
-            );
-
-            // 🚀 Sinkron stok ke marketplace
-            (async () => {
-                for (const stok of freshStokList) {
-                    if (!stok) continue;
-
-                    // ⚠️ Skip jika stok 0 (optional)
-                    if (stok.stok == null || isNaN(stok.stok)) {
-                        console.warn("⚠️ Skip stok tidak valid:", stok.id_product_stok);
-                        continue;
-                    }
-
-                    try {
-                        // 🛍️ Update Shopee
-                        if (stok.id_product_shopee && stok.id_product_shopee !== "") {
-                            console.log("🟢 Update Shopee:", {
-                                item_id: stok.id_product_shopee,
-                                stock: stok.stok,
-                            });
-
-                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                item_id: Number(stok.id_product_shopee),
-                                stock: Number(stok.stok),
-                            });
-                        } else {
-                            console.log("⏭️ Skip Shopee (id_product_shopee kosong):", stok.id_product_stok);
-                        }
-
-                        // 🛒 Update Lazada
-                        if (stok.id_product_lazada && stok.sku_lazada) {
-                            console.log("🟣 Update Lazada:", {
-                                item_id: stok.id_product_lazada,
-                                sku_id: stok.sku_lazada,
-                                quantity: stok.stok,
-                            });
-
-                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                item_id: String(stok.id_product_lazada),
-                                sku_id: String(stok.sku_lazada),
-                                quantity: Number(stok.stok),
-                            });
-                        } else {
-                            console.log("⏭️ Skip Lazada (id_product_lazada kosong):", stok.id_product_stok);
-                        }
-                    } catch (err) {
-                        console.error("❌ Gagal update stok marketplace:", {
-                            produk: stok.id_product_stok,
-                            error: err.response?.data || err.message,
-                        });
-                    }
-                }
-            })();
-
-            res.json({
-                success: true,
-                message: "Transaksi berhasil diupdate dan stok disinkronkan",
-            });
-        } catch (error) {
+        } catch (err) {
             await t.rollback();
-            console.error("❌ Gagal update transaksi:", error);
-            res.status(500).json({
-                success: false,
-                message: error.message || "Gagal update transaksi",
-            });
+            console.error("❌ Gagal create transaction:", err.message);
+            res.status(500).json({ success: false, message: err.message });
         }
     },
 
