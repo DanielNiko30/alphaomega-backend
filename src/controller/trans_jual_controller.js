@@ -6,6 +6,8 @@ const { Op } = require("sequelize");
 const axios = require("axios");
 const NOTIF_URL = "https://tokalphaomegaploso.my.id/api/notifikasi/send";
 
+const db = getDB();
+
 async function generateHTransJualId() {
     const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
     let newId = "HTJ000001";
@@ -223,7 +225,7 @@ const TransJualController = {
     },
 
     updateTransaction: async (req, res) => {
-        const t = await getDB().transaction();
+        const t = db.transaction();
         try {
             const { id_htrans_jual, detail, total_bayar, metode_bayar } = req.body;
 
