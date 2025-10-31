@@ -1,6 +1,7 @@
 const { HTransBeli } = require("../model/htrans_beli_model");
 const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Stok } = require("../model/stok_model");
+const axios = require("axios");
 
 // Fungsi untuk generate ID htrans_beli (HTR000001)
 async function generateHTransBeliId() {
