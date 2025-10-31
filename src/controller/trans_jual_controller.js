@@ -251,14 +251,7 @@ const TransJualController = {
                 oldDetailMap[key] = item;
             });
 
-            // 3️⃣ Buat map detail baru
-            const newDetailMap = {};
-            detail.forEach(item => {
-                const key = `${item.id_produk}_${item.satuan}`;
-                newDetailMap[key] = item;
-            });
-
-            // 4️⃣ Update header transaksi
+            // 3️⃣ Update header transaksi
             await HTransJual.update(
                 {
                     id_user,
@@ -271,12 +264,15 @@ const TransJualController = {
                 { where: { id_htrans_jual }, transaction: t }
             );
 
-            // 5️⃣ Hapus produk yang sudah tidak ada di detail baru
+            // 4️⃣ Set penampung stok yang perlu disinkron ke marketplace nanti
+            const stokUpdateList = [];
+
+            // 5️⃣ Hapus item yang sudah tidak ada di detail baru → stok dikembalikan
             for (const oldItem of oldDetails) {
                 const key = `${oldItem.id_produk}_${oldItem.satuan}`;
-                const newItem = newDetailMap[key];
+                const stillExists = detail.find(d => `${d.id_produk}_${d.satuan}` === key);
 
-                if (!newItem) {
+                if (!stillExists) {
                     const stok = await Stok.findOne({
                         where: {
                             id_product_stok: oldItem.id_produk,
@@ -288,30 +284,7 @@ const TransJualController = {
                     if (stok) {
                         const stokBaru = stok.stok + oldItem.jumlah_barang;
                         await stok.update({ stok: stokBaru }, { transaction: t });
-
-                        // 🔁 Update marketplace (async)
-                        (async () => {
-                            try {
-                                if (stok.id_product_shopee && stokBaru > 0) {
-                                    await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                        item_id: stok.id_product_shopee,
-                                        stock: stokBaru
-                                    });
-                                }
-                                if (stok.id_product_lazada && stok.sku_lazada) {
-                                    await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                        item_id: String(stok.id_product_lazada),
-                                        sku_id: String(stok.sku_lazada),
-                                        quantity: stokBaru
-                                    });
-                                }
-                            } catch (err) {
-                                console.error("❌ Gagal update stok marketplace (hapus item):", {
-                                    produk: oldItem.id_produk,
-                                    error: err.response?.data || err.message
-                                });
-                            }
-                        })();
+                        stokUpdateList.push(stok);
                     }
 
                     await DTransJual.destroy({
@@ -321,7 +294,7 @@ const TransJualController = {
                 }
             }
 
-            // 6️⃣ Tambah atau ubah produk yang ada di detail baru
+            // 6️⃣ Tambah atau ubah item di detail baru
             for (const item of detail) {
                 const key = `${item.id_produk}_${item.satuan}`;
                 const oldItem = oldDetailMap[key];
@@ -343,33 +316,9 @@ const TransJualController = {
                         const stokBaru = stok.stok - selisih;
                         if (stokBaru < 0) throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
                         await stok.update({ stok: stokBaru }, { transaction: t });
-
-                        // 🔁 Update marketplace (async)
-                        (async () => {
-                            try {
-                                if (stok.id_product_shopee && stokBaru > 0) {
-                                    await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                        item_id: stok.id_product_shopee,
-                                        stock: stokBaru
-                                    });
-                                }
-                                if (stok.id_product_lazada && stok.sku_lazada) {
-                                    await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                        item_id: String(stok.id_product_lazada),
-                                        sku_id: String(stok.sku_lazada),
-                                        quantity: stokBaru
-                                    });
-                                }
-                            } catch (err) {
-                                console.error("❌ Gagal update stok marketplace (ubah item):", {
-                                    produk: item.id_produk,
-                                    error: err.response?.data || err.message
-                                });
-                            }
-                        })();
+                        stokUpdateList.push(stok);
                     }
 
-                    // update detail lama
                     await DTransJual.update(
                         {
                             jumlah_barang: jumlahBaru,
@@ -382,8 +331,8 @@ const TransJualController = {
                     if (stok.stok < jumlahBaru) throw new Error(`Stok tidak cukup untuk ${item.id_produk} (${item.satuan})`);
                     const stokBaru = stok.stok - jumlahBaru;
                     await stok.update({ stok: stokBaru }, { transaction: t });
+                    stokUpdateList.push(stok);
 
-                    // buat detail baru
                     const id_dtrans_jual = await generateDTransJualId();
                     await DTransJual.create(
                         {
@@ -397,34 +346,37 @@ const TransJualController = {
                         },
                         { transaction: t }
                     );
-
-                    // 🔁 Update marketplace (async)
-                    (async () => {
-                        try {
-                            if (stok.id_product_shopee && stokBaru > 0) {
-                                await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                    item_id: stok.id_product_shopee,
-                                    stock: stokBaru
-                                });
-                            }
-                            if (stok.id_product_lazada && stok.sku_lazada) {
-                                await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                    item_id: String(stok.id_product_lazada),
-                                    sku_id: String(stok.sku_lazada),
-                                    quantity: stokBaru
-                                });
-                            }
-                        } catch (err) {
-                            console.error("❌ Gagal update stok marketplace (tambah item):", {
-                                produk: item.id_produk,
-                                error: err.response?.data || err.message
-                            });
-                        }
-                    })();
                 }
             }
 
             await t.commit();
+
+            // ✅ Setelah semua stok lokal beres → update Shopee & Lazada
+            (async () => {
+                for (const stok of stokUpdateList) {
+                    try {
+                        if (stok.id_product_shopee && stok.stok >= 0) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
+                                item_id: stok.id_product_shopee,
+                                stock: stok.stok
+                            });
+                        }
+
+                        if (stok.id_product_lazada && stok.sku_lazada) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
+                                item_id: String(stok.id_product_lazada),
+                                sku_id: String(stok.sku_lazada),
+                                quantity: stok.stok
+                            });
+                        }
+                    } catch (err) {
+                        console.error("❌ Gagal update stok marketplace (setelah updateTransaction):", {
+                            produk: stok.id_product_stok,
+                            error: err.response?.data || err.message
+                        });
+                    }
+                }
+            })();
 
             // 🔔 Emit notifikasi realtime
             if (global.io && id_user_penjual) {
@@ -437,7 +389,7 @@ const TransJualController = {
                 });
             }
 
-            // ✅ Respon sukses
+            // ✅ Response sukses
             res.status(200).json({
                 success: true,
                 message: "Transaksi berhasil diperbarui",
@@ -448,9 +400,7 @@ const TransJualController = {
             axios.post(NOTIF_URL, {
                 title: "Pesanan Diperbarui",
                 message: `Pesanan ${nama_pembeli} telah diperbarui. Mohon segera dicek.`
-            }).catch(err => {
-                console.error("Gagal kirim notifikasi eksternal:", err.message);
-            });
+            }).catch(err => console.error("Gagal kirim notifikasi eksternal:", err.message));
 
         } catch (error) {
             await t.rollback();
