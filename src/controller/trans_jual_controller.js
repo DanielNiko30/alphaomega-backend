@@ -349,22 +349,38 @@ const TransJualController = {
                 }
             }
 
+            // ✅ Commit transaksi lokal
             await t.commit();
 
-            // ✅ Setelah semua stok lokal beres → update Shopee & Lazada
-            (async () => {
-                for (const stok of stokUpdateList) {
-                    try {
-                        await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                            item_id: stok.id_product_shopee,
-                            stock: stok.stok
-                        });
+            // 🔄 Refresh stok biar data terbaru setelah commit
+            const freshStokList = await Promise.all(
+                stokUpdateList.map(async s => await Stok.findByPk(s.id_product_stok))
+            );
 
-                        await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                            item_id: String(stok.id_product_lazada),
-                            sku_id: String(stok.sku_lazada),
-                            quantity: stok.stok
-                        });
+            // ✅ Sinkron ke Shopee & Lazada
+            (async () => {
+                for (const stok of freshStokList) {
+                    try {
+                        // 🛍️ Update ke Shopee
+                        if (
+                            stok?.id_product_shopee != null &&
+                            stok?.id_product_shopee !== '' &&
+                            !isNaN(stok?.stok)
+                        ) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
+                                item_id: Number(stok.id_product_shopee),
+                                stock: Number(stok.stok)
+                            });
+                        }
+
+                        // 🛒 Update ke Lazada
+                        if (stok?.id_product_lazada && stok?.sku_lazada) {
+                            await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
+                                item_id: String(stok.id_product_lazada),
+                                sku_id: String(stok.sku_lazada),
+                                quantity: Number(stok.stok)
+                            });
+                        }
                     } catch (err) {
                         console.error("❌ Gagal update stok marketplace (setelah updateTransaction):", {
                             produk: stok.id_product_stok,
