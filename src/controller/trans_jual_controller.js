@@ -2,11 +2,10 @@ const { HTransJual } = require("../model/htrans_jual_model");
 const { DTransJual } = require("../model/dtrans_jual_model");
 const { Stok } = require("../model/stok_model");
 const { User } = require('../model/user_model');
+const { getDB } = require("../config/sequelize");
 const { Op } = require("sequelize");
 const axios = require("axios");
 const NOTIF_URL = "https://tokalphaomegaploso.my.id/api/notifikasi/send";
-
-const db = getDB();
 
 async function generateHTransJualId() {
     const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
@@ -225,7 +224,7 @@ const TransJualController = {
     },
 
     updateTransaction: async (req, res) => {
-        const t = db.transaction();
+        const t = await getDB().transaction();
         try {
             const { id_htrans_jual, detail, total_bayar, metode_bayar } = req.body;
 
