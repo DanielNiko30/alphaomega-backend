@@ -101,7 +101,7 @@ const ProductController = {
                     satuan: item.satuan,
                     jumlah: item.stok,
                     harga: item.harga,
-                    hargaBeli: item.hargaBeli,
+                    hargaBeli: item.harga_beli,
                     id_product_shopee: item.id_product_shopee,
                     id_product_lazada: item.id_product_lazada,
                     aktif: item.aktif, // ✅ boleh ikut ditampilkan agar frontend tahu status
@@ -263,7 +263,7 @@ const ProductController = {
                 satuan: item.satuan ?? "",
                 stok: parseInt(item.jumlah) || 0,
                 harga: parseInt(item.harga) || 0,
-                hargaBeli: parseInt(item.hargaBeli) || 0
+                hargaBeli: parseInt(item.harga_beli) || 0
             }));
 
             // 🔎 Pastikan kategori ada
@@ -565,7 +565,7 @@ const ProductController = {
                 satuan: s.satuan,
                 jumlah: s.stok,
                 harga: s.harga,
-                hargaBeli: s.hargaBeli,
+                hargaBeli: s.harga_beli,
                 aktif: s.aktif, // boleh ikut ditampilkan agar frontend tahu statusnya
             }));
 
@@ -608,7 +608,7 @@ const ProductController = {
                 stok: product.stok?.map((item) => ({
                     satuan: item.satuan,
                     harga: item.harga,
-                    hargaBeli: item.hargaBeli,
+                    hargaBeli: item.harga_beli,
                     jumlah: item.stok
                 })) || []
             }));
@@ -730,7 +730,7 @@ const ProductController = {
                         id_stok: s.id_stok,
                         satuan: s.satuan,
                         harga: s.harga,
-                        hargaBeli: s.hargaBeli,
+                        hargaBeli: s.harga_beli,
                         stokQty: s.stok,
                         id_product_shopee: s.id_product_shopee
                     }))
@@ -786,7 +786,7 @@ const ProductController = {
                     id_stok: s.id_stok,
                     satuan: s.satuan,
                     harga: s.harga,
-                    hargaBeli: s.hargaBeli,
+                    hargaBeli: s.harga_beli,
                     stok: s.stok,
                 })),
             }));
