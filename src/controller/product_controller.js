@@ -162,8 +162,6 @@ const ProductController = {
 
     createProduct: async (req, res) => {
         try {
-            const newId = await generateProductId();
-
             if (!req.file) {
                 return res.status(400).json({ message: "Gambar produk wajib diunggah!" });
             }
@@ -181,6 +179,8 @@ const ProductController = {
             if (!product_kategori || !nama_product || !deskripsi_product || !satuan_stok || !harga) {
                 return res.status(400).json({ message: "Semua field wajib diisi!" });
             }
+
+            const newId = await generateProductId(nama_product);
 
             // Parse array
             let satuanArray, hargaArray;
