@@ -111,7 +111,11 @@ const TransBeliController = {
                 if (stok) {
                     const stokBaru = stok.stok + Number(item.jumlah_barang);
                     await stok.update(
-                        { stok: stokBaru, harga: Number(item.harga_satuan) },
+                        {
+                            stok: stokBaru,
+                            harga: Number(item.harga_satuan),
+                            harga_beli: Number(item.harga_satuan), // 🆕 Tambahan harga_beli
+                        },
                         { transaction: t }
                     );
                     stokUpdateList.push(stok);
@@ -125,6 +129,7 @@ const TransBeliController = {
                             satuan: item.satuan,
                             stok: Number(item.jumlah_barang),
                             harga: Number(item.harga_satuan),
+                            harga_beli: Number(item.harga_satuan), // 🆕 Tambahan harga_beli
                         },
                         { transaction: t }
                     );
@@ -192,6 +197,7 @@ const TransBeliController = {
             });
         }
     },
+
 };
 
 module.exports = TransBeliController;
