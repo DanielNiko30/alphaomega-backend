@@ -1543,7 +1543,7 @@ const readyToShipLazada = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
 
         // ====================================================
-        // 🧩 1️⃣ Ambil package_id dulu dari detail order
+        // 🧩 1️⃣ Ambil package_id & detail order dari API lokal
         // ====================================================
         const detailUrl = `https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`;
         const detailRes = await axios.get(detailUrl);
@@ -1565,7 +1565,75 @@ const readyToShipLazada = async (req, res) => {
         }
 
         // ====================================================
-        // 🧩 2️⃣ Eksekusi Ready To Ship API
+        // 🧩 2️⃣ Buat transaksi jual ke DB
+        // ====================================================
+
+        const id_htrans_jual = await generateHTransJualId();
+        const nomor_invoice = await generateInvoiceNumber();
+
+        // Hitung total harga dari semua item
+        const totalHarga = detailData.items.reduce(
+            (sum, i) => sum + (parseFloat(i.item_price) || 0) * (parseInt(i.quantity) || 0),
+            0
+        );
+
+        // 🔹 Buat header transaksi
+        await HTransJual.create({
+            id_htrans_jual,
+            id_user: "USR001", // bisa ganti ke user login nanti
+            id_user_penjual: "USR001",
+            nama_pembeli: detailData.address_shipping?.first_name || "Pembeli Lazada",
+            tanggal: new Date(),
+            total_harga: Math.floor(totalHarga),
+            metode_pembayaran: "Lazada Payment",
+            nomor_invoice,
+            order_sn: detailData.order_number || orderId,
+            package_number: packageId,
+            status: "Pending",
+            sumber_transaksi: "lazada",
+        });
+
+        // 🔹 Insert detail transaksi & update stok
+        const stokTidakCukup = [];
+        for (const item of detailData.items) {
+            const stok = await Stok.findOne({
+                where: { id_product_stok: item.id_product_stok, satuan: item.satuan },
+            });
+
+            if (!stok || stok.stok < item.quantity) {
+                stokTidakCukup.push({
+                    id_produk: item.id_product_stok,
+                    satuan: item.satuan,
+                    stok_tersedia: stok ? stok.stok : 0,
+                    jumlah_diminta: item.quantity,
+                });
+                continue;
+            }
+
+            const id_dtrans_jual = await generateDTransJualId();
+            await DTransJual.create({
+                id_dtrans_jual,
+                id_htrans_jual,
+                id_produk: item.id_product_stok,
+                satuan: item.satuan,
+                jumlah_barang: item.quantity,
+                harga_satuan: item.item_price,
+                subtotal: parseInt(item.quantity) * parseFloat(item.item_price),
+            });
+
+            await stok.update({ stok: stok.stok - item.quantity });
+        }
+
+        if (stokTidakCukup.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Stok tidak cukup untuk beberapa item",
+                stok_tidak_cukup: stokTidakCukup,
+            });
+        }
+
+        // ====================================================
+        // 🧩 3️⃣ Ready To Ship API ke Lazada
         // ====================================================
         const apiPath = "/order/package/rts";
         const timestamp = Date.now();
@@ -1611,8 +1679,11 @@ const readyToShipLazada = async (req, res) => {
         if (successFlag) {
             return res.json({
                 success: true,
-                message: "✅ Order berhasil ditandai sebagai Ready To Ship di Lazada",
+                message: "✅ Order berhasil Ready To Ship di Lazada",
+                invoice: nomor_invoice,
+                id_htrans_jual,
                 package_id: packageId,
+                total_harga: totalHarga,
                 data: data.result.data.packages,
             });
         }
@@ -1625,6 +1696,7 @@ const readyToShipLazada = async (req, res) => {
         });
     } catch (error) {
         const errData = error.response?.data || error.message;
+        console.error("❌ Error ReadyToShip Lazada:", errData);
         return res.status(500).json({
             success: false,
             message: "Gagal request Ready To Ship ke Lazada",

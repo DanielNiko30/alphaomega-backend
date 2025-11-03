@@ -1534,11 +1534,12 @@ const setShopeePickup = async (req, res) => {
             nama_pembeli: order.buyer_username,
             tanggal: new Date(),
             total_harga: Math.floor(order.total_amount),
-            metode_pembayaran: "Shopee",
+            metode_pembayaran: "Debit",
             nomor_invoice,
             order_sn: order.order_sn,
             package_number: null, // ⬅️ di-update setelah dapat dari Shopee
             status: "Pending",
+            sumber_transaksi: "offline",
         });
 
         // 4️⃣ Insert detail transaksi & update stok
@@ -1709,11 +1710,12 @@ const setShopeeDropoff = async (req, res) => {
                 nama_pembeli: order.buyer_username,
                 tanggal: new Date(),
                 total_harga: Math.floor(order.total_amount),
-                metode_pembayaran: "Shopee",
+                metode_pembayaran: "Debit",
                 nomor_invoice,
                 order_sn: order.order_sn,
                 package_number: null, // akan diupdate nanti
                 status: "Pending",
+                sumber_transaksi: "offline",
             });
 
             // Simpan item dan kurangi stok

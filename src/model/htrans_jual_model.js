@@ -52,11 +52,15 @@ const HTransJual = db.define(
       type: DataTypes.STRING(10),
       allowNull: true,
     },
+    sumber_transaksi: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
   },
   {
     tableName: "htrans_penjualan",
     timestamps: false,
-  }
+  },
 );
 
 // Relasi ke DTransJual
