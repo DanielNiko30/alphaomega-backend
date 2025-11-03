@@ -1613,39 +1613,40 @@ const readyToShipLazada = async (req, res) => {
         }
 
         // ====================================================
-        // 🧾 2️⃣ Simpan transaksi ke HTransJual dan DTransJual
+        // 🧾 2️⃣ Simpan transaksi ke HTransJual & DTransJual
         // ====================================================
         const id_htrans_jual = await generateHTransJualId();
         const nomor_invoice = await generateInvoiceNumber();
 
         const totalHarga = detailData.items.reduce(
-            (sum, item) => sum + (parseFloat(item.item_price) || 0) * (parseInt(item.quantity) || 0),
+            (sum, item) =>
+                sum +
+                (parseFloat(item.item_price) || 0) * (parseInt(item.quantity || 1)),
             0
         );
 
-        // 🟩 Buat header transaksi jual
+        // 🔸 Buat header transaksi
         await HTransJual.create({
             id_htrans_jual,
-            id_user: "USR001", // nanti bisa ganti ke user login
+            id_user: "USR001", // bisa diganti ke user login
             id_user_penjual: "USR001",
-            nama_pembeli: detailData.address_shipping?.first_name || "Pembeli Lazada",
+            nama_pembeli:
+                detailData.address_shipping?.first_name || "Pembeli Lazada",
             tanggal: new Date(),
             total_harga: Math.floor(totalHarga),
-            metode_pembayaran: "Lazada Payment",
+            metode_pembayaran: detailData.order?.payment_method || "Lazada Payment",
             nomor_invoice,
-            order_sn: detailData.order_number || orderId,
+            order_sn: detailData.order?.order_number || orderId,
             package_number: packageId,
             status: "Pending",
             sumber_transaksi: "lazada",
         });
 
-        // 🟩 Simpan detail item
+        // 🔸 Buat detail transaksi
         for (const item of detailData.items) {
-            // Cari stok berdasarkan id_product_lazada atau sku_lazada
+            // cari stok berdasar sku_lazada = item.sku_id
             const stok = await Stok.findOne({
-                where: {
-                    id_product_lazada: item.item_id,
-                },
+                where: { sku_lazada: item.sku_id },
             });
 
             const id_dtrans_jual = await generateDTransJualId();
@@ -1655,19 +1656,20 @@ const readyToShipLazada = async (req, res) => {
                 id_htrans_jual,
                 id_produk: stok ? stok.id_product_stok : null,
                 satuan: stok ? stok.satuan : "-",
-                jumlah_barang: item.quantity,
+                jumlah_barang: item.quantity || 1,
                 harga_satuan: item.item_price,
-                subtotal: parseInt(item.quantity) * parseFloat(item.item_price),
+                subtotal:
+                    parseInt(item.quantity || 1) * parseFloat(item.item_price),
             });
 
-            // Kurangi stok jika ditemukan
+            // Kurangi stok kalau ditemukan
             if (stok && stok.stok >= item.quantity) {
                 await stok.update({ stok: stok.stok - item.quantity });
             }
         }
 
         // ====================================================
-        // 🧩 3️⃣ Eksekusi Ready To Ship API
+        // 🧩 3️⃣ Eksekusi Ready To Ship API (TIDAK DIUBAH)
         // ====================================================
         const apiPath = "/order/package/rts";
         const timestamp = Date.now();
@@ -1683,7 +1685,7 @@ const readyToShipLazada = async (req, res) => {
             packages: [{ package_id: packageId }],
         });
 
-        // 🔐 Generate signature (TIDAK DIUBAH)
+        // 🔐 Generate signature (SAMA PERSIS SEPERTI KODEMU)
         const signParams = { ...params, readyToShipReq };
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
@@ -1698,7 +1700,7 @@ const readyToShipLazada = async (req, res) => {
         const finalUrl = `${baseUrl}${apiPath}?${queryParams}`;
         const bodyData = `readyToShipReq=${readyToShipReq}`;
 
-        // 🚀 Request ke Lazada (TIDAK DIUBAH)
+        // 🚀 Request ke Lazada
         const lazadaRes = await axios.post(finalUrl, bodyData, {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
         });
@@ -1708,12 +1710,15 @@ const readyToShipLazada = async (req, res) => {
         const successFlag =
             data?.result?.success === true &&
             Array.isArray(data?.result?.data?.packages) &&
-            data.result.data.packages.every((p) => p.item_err_code === "0");
+            data.result.data.packages.every(
+                (p) => p.item_err_code === "0"
+            );
 
         if (successFlag) {
             return res.json({
                 success: true,
-                message: "✅ Order berhasil ditandai sebagai Ready To Ship di Lazada",
+                message:
+                    "✅ Order berhasil ditandai sebagai Ready To Ship di Lazada",
                 package_id: packageId,
                 invoice: nomor_invoice,
                 id_htrans_jual,
