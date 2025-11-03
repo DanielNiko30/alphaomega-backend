@@ -263,7 +263,7 @@ const ProductController = {
                 satuan: item.satuan ?? "",
                 stok: parseInt(item.jumlah) || 0,
                 harga: parseInt(item.harga) || 0,
-                hargaBeli: parseInt(item.harga_beli) || 0
+                harga_beli: item.harga_beli != null ? parseInt(item.harga_beli) : 0
             }));
 
             // 🔎 Pastikan kategori ada
