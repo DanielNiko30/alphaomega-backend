@@ -422,10 +422,74 @@ const TransJualController = {
         }
     },
 
+    updateStatusTransaction: async (req, res) => {
+        const t = await HTransJual.sequelize.transaction();
+        try {
+            const { id_htrans_jual } = req.params;
+
+            console.log("🔵 Update Status Transaction:", id_htrans_jual, "→ Lunas");
+
+            // 1️⃣ Cari transaksi berdasarkan ID
+            const transaksi = await HTransJual.findByPk(id_htrans_jual, { transaction: t });
+            if (!transaksi) {
+                await t.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: `Transaksi ${id_htrans_jual} tidak ditemukan`,
+                });
+            }
+
+            // 2️⃣ Cegah update jika sudah Lunas
+            if (transaksi.status === "Lunas") {
+                await t.rollback();
+                return res.status(200).json({
+                    success: true,
+                    message: `Status transaksi sudah 'Lunas'`,
+                    id_htrans_jual,
+                });
+            }
+
+            // 3️⃣ Update status jadi Lunas
+            await transaksi.update(
+                { status: "Lunas" },
+                { transaction: t }
+            );
+
+            await t.commit();
+
+            // 4️⃣ Kirim notifikasi realtime ke penjual
+            if (global.io && transaksi.id_user_penjual) {
+                global.io.to(String(transaksi.id_user_penjual)).emit("updateStatusTransaction", {
+                    id_htrans_jual,
+                    status: "Lunas",
+                    message: `Status transaksi ${id_htrans_jual} telah diubah menjadi Lunas`,
+                });
+            }
+
+            // 5️⃣ Response sukses
+            res.status(200).json({
+                success: true,
+                message: `Status transaksi berhasil diubah menjadi 'Lunas'`,
+                id_htrans_jual,
+            });
+
+        } catch (error) {
+            await t.rollback();
+            console.error("❌ Update Status Transaction Error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+            });
+        }
+    },
+
     getPendingTransactions: async (req, res) => {
         try {
             const transaksiPending = await HTransJual.findAll({
-                where: { status: "Pending" },
+                where: {
+                    status: "Pending",
+                    sumber_transaksi: "Offline" // 🔹 Tambahkan filter ini
+                },
                 include: [
                     {
                         model: DTransJual,
@@ -488,7 +552,8 @@ const TransJualController = {
             const transaksiPending = await HTransJual.findAll({
                 where: {
                     status: "Pending",
-                    id_user_penjual: id_user_penjual
+                    sumber_transaksi: "Offline", // 🔹 Tambahkan filter sumber_transaksi
+                    id_user_penjual: id_user_penjual,
                 },
                 include: [
                     {
