@@ -1,6 +1,6 @@
 const { Product } = require("../model/product_model");
 const { Kategori } = require("../model/kategori_model");
-const { Stok } = require("../model/stok_model"); //
+const { Stok } = require("../model/stok_model");
 const { Op } = require('sequelize');
 
 async function generateProductId(productName) {
@@ -64,7 +64,6 @@ async function generateKategoriId() {
     return newId;
 }
 
-const { Op } = require("sequelize");
 let stokCounter = null;
 
 async function generateStokId() {
