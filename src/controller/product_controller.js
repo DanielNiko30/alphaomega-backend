@@ -1,6 +1,31 @@
 const { Product } = require("../model/product_model");
 const { Kategori } = require("../model/kategori_model");
 const { Stok } = require("../model/stok_model"); //
+const { Op } = require('sequelize');
+
+async function generateProductId(productName) {
+    const name = productName.replace(/[^a-zA-Z]/g, '').toUpperCase(); // hapus angka/spasi
+    const prefix = (name[0] || 'X') + (name[1] || 'X'); // ambil 2 huruf pertama
+
+    // Cari produk terakhir dengan prefix yang sama
+    const lastProduct = await Product.findOne({
+        where: {
+            id_product: {
+                [Op.like]: `${prefix}%`,
+            },
+        },
+        order: [['id_product', 'DESC']],
+    });
+
+    let newNumber = 1;
+    if (lastProduct) {
+        const lastIdNum = parseInt(lastProduct.id_product.replace(prefix, ''), 10);
+        newNumber = lastIdNum + 1;
+    }
+
+    return `${prefix}${String(newNumber).padStart(4, '0')}`;
+}
+
 const upload = require("../middleware/upload");
 
 async function generateProductId(productName) {
