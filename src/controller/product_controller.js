@@ -244,7 +244,7 @@ const ProductController = {
         try {
             let { product_kategori, nama_product, deskripsi_product, stok_list } = req.body;
 
-            // Parsing stok_list agar selalu array of objects
+            // 🧩 Pastikan stok_list selalu berupa array of objects
             if (!Array.isArray(stok_list)) {
                 if (typeof stok_list === "string") {
                     try {
@@ -257,7 +257,7 @@ const ProductController = {
                 }
             }
 
-            // Validasi setiap item stok_list
+            // 🔍 Validasi dan normalisasi setiap item
             stok_list = stok_list.map(item => ({
                 satuan: item.satuan ?? "",
                 stok: parseInt(item.jumlah) || 0,
@@ -265,19 +265,19 @@ const ProductController = {
                 hargaBeli: parseInt(item.hargaBeli) || 0
             }));
 
-            // Pastikan kategori ada
+            // 🔎 Pastikan kategori ada
             const kategori = await Kategori.findOne({ where: { id_kategori: product_kategori } });
             if (!kategori) {
                 return res.status(400).json({ message: "Kategori tidak ditemukan!" });
             }
 
-            // Pastikan produk ada
+            // 🔎 Pastikan produk ada
             const product = await Product.findOne({ where: { id_product: req.params.id } });
             if (!product) {
                 return res.status(404).json({ message: "Produk tidak ditemukan!" });
             }
 
-            // Handle gambar
+            // 🖼️ Handle gambar
             let newImageBuffer = product.gambar_product;
             let imageUrl = "";
             if (req.file) {
@@ -287,27 +287,36 @@ const ProductController = {
                 imageUrl = `data:image/png;base64,${product.gambar_product.toString("base64")}`;
             }
 
-            // Update data produk
+            // ✏️ Update data produk utama
             await Product.update(
                 { product_kategori, nama_product, deskripsi_product, gambar_product: newImageBuffer },
                 { where: { id_product: req.params.id } }
             );
 
-            // Ambil stok yang sudah ada
+            // 📦 Ambil stok yang sudah ada
             const existingStok = await Stok.findAll({ where: { id_product_stok: req.params.id } });
             const stokMap = {};
             existingStok.forEach(item => {
-                stokMap[item.satuan] = { id: item.id_stok, stok: item.stok, harga: item.harga };
+                stokMap[item.satuan] = {
+                    id: item.id_stok,
+                    stok: item.stok,
+                    harga: item.harga,
+                    harga_beli: item.harga_beli
+                };
             });
 
-            // Update stok lama / create stok baru
+            // 🔄 Update stok lama / buat stok baru
             for (let stokItem of stok_list) {
-                const { satuan, harga, stok, harga_beli: hargaBeli } = stokItem;
+                const { satuan, harga, stok, hargaBeli } = stokItem;
+
                 if (stokMap[satuan]) {
                     // Update stok lama
-                    await Stok.update({ stok, harga, hargaBeli }, { where: { id_stok: stokMap[satuan].id } });
+                    await Stok.update(
+                        { stok, harga, harga_beli: hargaBeli },
+                        { where: { id_stok: stokMap[satuan].id } }
+                    );
                 } else {
-                    // Buat stok baru dengan ID unik
+                    // Buat stok baru
                     const id_stok = await generateStokId();
                     await Stok.create({
                         id_stok,
@@ -320,7 +329,7 @@ const ProductController = {
                 }
             }
 
-            // Ambil data produk terbaru + stok lengkap
+            // 🔁 Ambil data produk terbaru + stok lengkap
             const updatedProduct = await Product.findOne({
                 where: { id_product: req.params.id },
                 include: [
@@ -340,7 +349,7 @@ const ProductController = {
                 ]
             });
 
-            // Response untuk Flutter
+            // 📤 Response ke Flutter
             return res.status(200).json({
                 idProduct: updatedProduct.id_product,
                 productKategori: updatedProduct.product_kategori,
