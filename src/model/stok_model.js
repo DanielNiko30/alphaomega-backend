@@ -37,6 +37,10 @@ const Stok = db.define(
             type: DataTypes.INTEGER,
             allowNull: false,
         },
+        harga_beli: {           // 🆕 Tambahan kolom baru
+            type: DataTypes.INTEGER,
+            allowNull: true,     // ✅ boleh kosong
+        },
         aktif: {
             type: DataTypes.BOOLEAN,
             defaultValue: true,
