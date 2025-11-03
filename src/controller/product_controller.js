@@ -261,7 +261,8 @@ const ProductController = {
             stok_list = stok_list.map(item => ({
                 satuan: item.satuan ?? "",
                 stok: parseInt(item.jumlah) || 0,
-                harga: parseInt(item.harga) || 0
+                harga: parseInt(item.harga) || 0,
+                hargaBeli: parseInt(item.hargaBeli) || 0
             }));
 
             // Pastikan kategori ada
@@ -301,10 +302,10 @@ const ProductController = {
 
             // Update stok lama / create stok baru
             for (let stokItem of stok_list) {
-                const { satuan, harga, stok } = stokItem;
+                const { satuan, harga, stok, hargaBeli } = stokItem;
                 if (stokMap[satuan]) {
                     // Update stok lama
-                    await Stok.update({ stok, harga }, { where: { id_stok: stokMap[satuan].id } });
+                    await Stok.update({ stok, harga, hargaBeli }, { where: { id_stok: stokMap[satuan].id } });
                 } else {
                     // Buat stok baru dengan ID unik
                     const id_stok = await generateStokId();
@@ -313,7 +314,8 @@ const ProductController = {
                         id_product_stok: req.params.id,
                         satuan,
                         stok,
-                        harga
+                        harga,
+                        harga_beli: 0
                     });
                 }
             }
@@ -331,7 +333,8 @@ const ProductController = {
                             "stok",
                             "harga",
                             "id_product_shopee",
-                            "id_product_lazada"
+                            "id_product_lazada",
+                            "harga_beli"
                         ]
                     }
                 ]
@@ -350,7 +353,8 @@ const ProductController = {
                     jumlah: item.stok,
                     harga: item.harga,
                     idProductShopee: item.id_product_shopee,
-                    idProductLazada: item.id_product_lazada
+                    idProductLazada: item.id_product_lazada,
+                    hargaBeli: item.harga_beli
                 })),
                 kategori: kategori.nama_kategori
             });
