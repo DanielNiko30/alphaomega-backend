@@ -132,6 +132,7 @@ const TransJualController = {
                 metode_pembayaran,
                 nomor_invoice,
                 status: "Pending",
+                sumber_transaksi: "Offline"
             });
 
             // 4️⃣ Loop detail untuk buat DTransJual & update stok
