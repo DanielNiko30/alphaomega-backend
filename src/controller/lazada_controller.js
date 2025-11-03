@@ -13,6 +13,7 @@ const qs = require("qs");
 const { Builder } = require("xml2js");
 const moment = require("moment-timezone");
 const path = require("path");
+const { Op } = require("sequelize");
 
 /**
 * @param {string} apiPath
