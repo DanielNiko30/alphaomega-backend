@@ -101,6 +101,7 @@ const ProductController = {
                     satuan: item.satuan,
                     jumlah: item.stok,
                     harga: item.harga,
+                    hargaBeli: item.hargaBeli,
                     id_product_shopee: item.id_product_shopee,
                     id_product_lazada: item.id_product_lazada,
                     aktif: item.aktif, // ✅ boleh ikut ditampilkan agar frontend tahu status
@@ -607,6 +608,7 @@ const ProductController = {
                 stok: product.stok?.map((item) => ({
                     satuan: item.satuan,
                     harga: item.harga,
+                    hargaBeli: item.hargaBeli,
                     jumlah: item.stok
                 })) || []
             }));
@@ -728,6 +730,7 @@ const ProductController = {
                         id_stok: s.id_stok,
                         satuan: s.satuan,
                         harga: s.harga,
+                        hargaBeli: s.hargaBeli,
                         stokQty: s.stok,
                         id_product_shopee: s.id_product_shopee
                     }))
@@ -783,6 +786,7 @@ const ProductController = {
                     id_stok: s.id_stok,
                     satuan: s.satuan,
                     harga: s.harga,
+                    hargaBeli: s.hargaBeli,
                     stok: s.stok,
                 })),
             }));
