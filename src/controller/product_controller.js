@@ -564,6 +564,7 @@ const ProductController = {
                 satuan: s.satuan,
                 jumlah: s.stok,
                 harga: s.harga,
+                hargaBeli: s.hargaBeli,
                 aktif: s.aktif, // boleh ikut ditampilkan agar frontend tahu statusnya
             }));
 
