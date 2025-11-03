@@ -302,7 +302,7 @@ const ProductController = {
 
             // Update stok lama / create stok baru
             for (let stokItem of stok_list) {
-                const { satuan, harga, stok, hargaBeli } = stokItem;
+                const { satuan, harga, stok, harga_beli: hargaBeli } = stokItem;
                 if (stokMap[satuan]) {
                     // Update stok lama
                     await Stok.update({ stok, harga, hargaBeli }, { where: { id_stok: stokMap[satuan].id } });
@@ -315,7 +315,7 @@ const ProductController = {
                         satuan,
                         stok,
                         harga,
-                        harga_beli: 0
+                        harga_beli: hargaBeli
                     });
                 }
             }
