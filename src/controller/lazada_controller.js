@@ -51,6 +51,53 @@ function generateSign(apiPath, allParams, appSecret) {
         .toUpperCase();
 }
 
+async function generateHTransJualId() {
+    const last = await HTransJual.findOne({ order: [["id_htrans_jual", "DESC"]] });
+    let newId = "HTJ000001";
+    if (last) {
+        const num = parseInt(last.id_htrans_jual.replace("HTJ", ""), 10);
+        newId = `HTJ${String(num + 1).padStart(6, "0")}`;
+    }
+    return newId;
+}
+
+async function generateDTransJualId() {
+    const last = await DTransJual.findOne({ order: [["id_dtrans_jual", "DESC"]] });
+    let newId = "DTJ000001";
+    if (last) {
+        const num = parseInt(last.id_dtrans_jual.replace("DTJ", ""), 10);
+        newId = `DTJ${String(num + 1).padStart(6, "0")}`;
+    }
+    return newId;
+}
+
+async function generateInvoiceNumber() {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+    const prefix = `INV/${dateStr}/`;
+
+    const lastInvoice = await HTransJual.findOne({
+        where: {
+            nomor_invoice: {
+                [Op.like]: `${prefix}%`
+            }
+        },
+        order: [["nomor_invoice", "DESC"]],
+    });
+
+    let nextNumber = 1;
+
+    if (lastInvoice) {
+        const match = lastInvoice.nomor_invoice.match(/INV\/\d{8}\/(\d+)/);
+        if (match) {
+            nextNumber = parseInt(match[1], 10) + 1;
+        }
+    }
+
+    const newInvoice = `${prefix}${nextNumber.toString().padStart(6, "0")}`;
+    return newInvoice;
+}
+
 /**
  * @param {*} req 
  * @param {*} res 
