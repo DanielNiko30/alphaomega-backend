@@ -215,141 +215,90 @@ const LaporanController = {
         }
     },
 
-    getLaporanPembelian: async (req, res) => {
+    getLaporanPembelianHarian: async (req, res) => {
         try {
-            const { startDate, endDate, groupBy } = req.query;
+            const { tanggal } = req.query;
 
-            const today = new Date();
-            const defaultStart = new Date();
-            defaultStart.setMonth(today.getMonth() - 1);
+            if (!tanggal) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
+                });
+            }
 
-            const start = startDate ? new Date(startDate) : defaultStart;
-            const end = endDate ? new Date(endDate) : today;
-
-            let dateFormat = "%Y-%m-%d";
-            if (groupBy === "month") dateFormat = "%Y-%m";
-            if (groupBy === "week") dateFormat = "%x-%v";
-
-            const laporan = await HTransBeli.findAll({
-                attributes: [
-                    [Sequelize.fn("DATE_FORMAT", Sequelize.col("tanggal"), dateFormat), "periode"],
-                    [Sequelize.fn("COUNT", Sequelize.col("id_htrans_beli")), "jumlah_transaksi"],
-                    [Sequelize.fn("SUM", Sequelize.col("total_harga")), "total_pembelian"],
-                ],
-                where: {
-                    tanggal: { [Op.between]: [start, end] },
-                },
-                group: [Sequelize.fn("DATE_FORMAT", Sequelize.col("tanggal"), dateFormat)],
-                order: [[Sequelize.literal("periode"), "ASC"]],
-                raw: true,
-            });
-
-            const totalPengeluaran = laporan.reduce(
-                (acc, item) => acc + parseFloat(item.total_pembelian || 0),
-                0
-            );
-
-            return res.status(200).json({
-                success: true,
-                message: "Laporan pembelian berhasil diambil",
-                data: laporan,
-                summary: {
-                    total_transaksi: laporan.length,
-                    total_pengeluaran: totalPengeluaran,
-                },
-            });
-        } catch (error) {
-            console.error("Error laporan pembelian:", error);
-            return res.status(500).json({
-                success: false,
-                message: "Gagal mengambil laporan pembelian",
-                error: error.message,
-            });
-        }
-    },
-
-    getLaporanPembelianProduk: async (req, res) => {
-        try {
-            const { startDate, endDate, groupBy } = req.query;
-
-            const today = new Date();
-            const defaultStart = new Date();
-            defaultStart.setMonth(today.getMonth() - 1);
-
-            const start = startDate ? new Date(startDate) : defaultStart;
-            const end = endDate ? new Date(endDate) : today;
-
-            let dateFormat = "%Y-%m-%d";
-            if (groupBy === "month") dateFormat = "%Y-%m";
-            if (groupBy === "week") dateFormat = "%x-%v";
-
-            const data = await DTransBeli.findAll({
+            const transaksi = await HTransBeli.findAll({
+                where: { tanggal },
                 include: [
                     {
-                        model: HTransBeli,
-                        as: "HTransBeli",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: [],
+                        model: DTransBeli,
+                        as: "detail_transaksi",
+                        include: [
+                            {
+                                model: Product,
+                                as: "produk",
+                                attributes: ["nama_product"],
+                            },
+                        ],
                     },
                     {
-                        model: Product,
-                        as: "produk",
-                        attributes: ["nama_product"],
+                        model: Supplier,
+                        as: "supplier",
+                        attributes: ["nama_supplier"],
                     },
                 ],
-                attributes: [
-                    "id_produk",
-                    [Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat), "periode"],
-                    [Sequelize.fn("SUM", Sequelize.col("jumlah_barang")), "total_terbeli"],
-                    [Sequelize.fn("SUM", Sequelize.col("subtotal")), "total_pembelian"],
-                ],
-                group: [
-                    "id_produk",
-                    "produk.nama_product",
-                    Sequelize.fn("DATE_FORMAT", Sequelize.col("HTransBeli.tanggal"), dateFormat),
-                ],
-                order: [[Sequelize.literal("periode"), "ASC"]],
-                raw: true,
+                order: [["tanggal", "ASC"]],
             });
 
-            const totalPengeluaran = data.reduce(
-                (acc, item) => acc + parseFloat(item.total_pembelian || 0),
-                0
-            );
+            let laporan = [];
+            let totalPembelian = 0;
 
-            res.status(200).json({
+            transaksi.forEach((trx) => {
+                trx.detail_transaksi.forEach((d) => {
+                    const subtotal = d.harga_satuan * d.jumlah_barang;
+                    totalPembelian += subtotal;
+
+                    laporan.push({
+                        tanggal: trx.tanggal,
+                        no_pesanan: trx.id_htrans_beli,
+                        nama_barang: d.produk?.nama_product || "Tidak Diketahui",
+                        pemasok: trx.supplier?.nama_supplier || "-",
+                        total_pembelian: subtotal,
+                    });
+                });
+            });
+
+            return res.json({
                 success: true,
-                message: "Laporan pembelian per produk berhasil diambil",
-                data,
-                summary: {
-                    total_produk: data.length,
-                    total_pengeluaran: totalPengeluaran,
-                },
+                data: laporan,
+                total: totalPembelian,
             });
-        } catch (error) {
-            console.error("Error laporan pembelian per produk:", error);
-            res.status(500).json({
+        } catch (err) {
+            console.error("❌ Error getLaporanPembelianHarian:", err);
+            return res.status(500).json({
                 success: false,
-                message: "Gagal mengambil laporan pembelian per produk",
-                error: error.message,
+                message: "Gagal memuat laporan pembelian harian",
+                error: err.message,
             });
         }
     },
 
-    getLaporanPembelianDetail: async (req, res) => {
+    getLaporanPembelian: async (req, res) => {
         try {
-            const { startDate, endDate } = req.query;
+            const { tanggal_mulai, tanggal_selesai } = req.query;
 
-            const today = new Date();
-            const defaultStart = new Date();
-            defaultStart.setMonth(today.getMonth() - 1);
+            if (!tanggal_mulai || !tanggal_selesai) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Parameter 'tanggal_mulai' dan 'tanggal_selesai' wajib diisi (format: YYYY-MM-DD)",
+                });
+            }
 
-            const start = startDate ? new Date(startDate) : defaultStart;
-            const end = endDate ? new Date(endDate) : today;
-
-            const data = await HTransBeli.findAll({
+            const transaksi = await HTransBeli.findAll({
                 where: {
-                    tanggal: { [Op.between]: [start, end] },
+                    tanggal: {
+                        [Op.between]: [tanggal_mulai, tanggal_selesai],
+                    },
                 },
                 include: [
                     {
@@ -363,30 +312,45 @@ const LaporanController = {
                             },
                         ],
                     },
+                    {
+                        model: Supplier,
+                        as: "supplier",
+                        attributes: ["nama_supplier"],
+                    },
                 ],
                 order: [["tanggal", "ASC"]],
             });
 
-            const totalPengeluaran = data.reduce(
-                (acc, h) => acc + parseFloat(h.total_harga || 0),
+            const laporan = transaksi.map((trx) => {
+                const totalNota = trx.detail_transaksi.reduce(
+                    (sum, d) => sum + d.harga_satuan * d.jumlah_barang,
+                    0
+                );
+
+                return {
+                    tanggal: trx.tanggal,
+                    no_pesanan: trx.id_htrans_beli,
+                    pemasok: trx.supplier?.nama_supplier || "-",
+                    total_pembelian: totalNota,
+                };
+            });
+
+            const totalKeseluruhan = laporan.reduce(
+                (sum, row) => sum + row.total_pembelian,
                 0
             );
 
-            res.status(200).json({
+            return res.json({
                 success: true,
-                message: "Laporan pembelian detail berhasil diambil",
-                data,
-                summary: {
-                    total_transaksi: data.length,
-                    total_pengeluaran: totalPengeluaran,
-                },
+                data: laporan,
+                total: totalKeseluruhan,
             });
-        } catch (error) {
-            console.error("Error laporan pembelian detail:", error);
-            res.status(500).json({
+        } catch (err) {
+            console.error("❌ Error getLaporanPembelianPerNota:", err);
+            return res.status(500).json({
                 success: false,
-                message: "Gagal mengambil laporan pembelian detail",
-                error: error.message,
+                message: "Gagal memuat laporan pembelian per nota",
+                error: err.message,
             });
         }
     },

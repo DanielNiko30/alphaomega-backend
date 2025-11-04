@@ -48,4 +48,9 @@ HTransBeli.hasMany(DTransBeli, { foreignKey: "id_htrans_beli", as: "detail_trans
 // ✅ Relasi balik dari detail ke header
 DTransBeli.belongsTo(HTransBeli, { foreignKey: "id_htrans_beli", as: "HTransBeli" });
 
+HTransBeli.belongsTo(Supplier, {
+  as: "supplier",
+  foreignKey: "id_supplier",
+});
+
 module.exports = { HTransBeli };

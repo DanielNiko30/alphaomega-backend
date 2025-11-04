@@ -4,14 +4,12 @@ const {
     getLaporanPenjualan,
     getLaporanPenjualanHarian,
     getLaporanPembelian,
-    getLaporanPembelianProduk,
-    getLaporanPembelianDetail,
+    getLaporanPembelianHarian
 } = require("../controller/laporan_controller");
 
 router.get("/penjualan", getLaporanPenjualan);
-router.get("/harian", getLaporanPenjualanHarian);
+router.get("/penjualan/harian", getLaporanPenjualanHarian);
 router.get("/pembelian", getLaporanPembelian);
-router.get("/pembelian-produk", getLaporanPembelianProduk);
-router.get("/pembelian-detail", getLaporanPembelianDetail);
+router.get("/pembelian/harian", getLaporanPembelianHarian);
 
 module.exports = router;

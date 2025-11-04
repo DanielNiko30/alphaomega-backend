@@ -23,4 +23,9 @@ const Supplier = db.define(
     timestamps: false,
 });
 
+Supplier.hasMany(HTransBeli, {
+    as: "transaksi_pembelian",
+    foreignKey: "id_supplier",
+});
+
 module.exports = { Supplier };
