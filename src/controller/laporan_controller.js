@@ -334,24 +334,14 @@ const LaporanController = {
                 });
             }
 
-            // 🔹 Aman untuk DATE & DATETIME
-            const dayStart = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
-            const dayEnd = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
-
             const transaksi = await HTransBeli.findAll({
-                where: {
-                    tanggal: { [Op.between]: [dayStart, dayEnd] },
-                },
+                where: { tanggal }, // langsung cocokkan tanggal string
                 include: [
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                include: [{ model: Stok, as: "stok" }],
-                            },
+                            { model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }
                         ],
                     },
                     { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
