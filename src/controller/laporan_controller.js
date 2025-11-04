@@ -334,19 +334,9 @@ const LaporanController = {
                 });
             }
 
-            const { Op } = require("sequelize");
-
-            // Range waktu satu hari penuh
-            const startOfDay = new Date(`${tanggal}T00:00:00`);
-            const endOfDay = new Date(`${tanggal}T23:59:59`);
-
             // Ambil transaksi pembelian pada tanggal tertentu + relasi detail, produk, dan supplier
             const transaksi = await HTransBeli.findAll({
-                where: {
-                    tanggal: {
-                        [Op.between]: [startOfDay, endOfDay],
-                    },
-                },
+                where: { tanggal }, // cukup pakai equality
                 include: [
                     {
                         model: DTransBeli,
@@ -355,12 +345,7 @@ const LaporanController = {
                             {
                                 model: Product,
                                 as: "produk",
-                                include: [
-                                    {
-                                        model: Stok,
-                                        as: "stok",
-                                    },
-                                ],
+                                include: [{ model: Stok, as: "stok" }],
                             },
                         ],
                     },
@@ -372,6 +357,7 @@ const LaporanController = {
                 ],
                 order: [["id_htrans_beli", "ASC"]],
             });
+
 
             let laporan = [];
             let totalPembelian = 0;
