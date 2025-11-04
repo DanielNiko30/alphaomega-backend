@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
-const { Product } = require("./product_model"); // ⬅️ WAJIB DITAMBAHKAN
+const { Product } = require("./product_model");
+const { Product } = require("./stok_model");
 
 const db = getDB();
 
