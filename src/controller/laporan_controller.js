@@ -336,11 +336,9 @@ const LaporanController = {
 
             const { Op } = require("sequelize");
 
-            // 🔹 Samain cara dengan getLaporanPembelian → pakai string tanggal dalam Op.between
+            // 🔹 Fixed: gunakan tanggal langsung, tanpa jam
             const whereClause = {
-                tanggal: {
-                    [Op.between]: [`${tanggal} 00:00:00`, `${tanggal} 23:59:59`],
-                },
+                tanggal: tanggal, // cocok untuk tipe DATE
             };
 
             // 🔹 Ambil transaksi pembelian lengkap (harian)
@@ -423,7 +421,6 @@ const LaporanController = {
             });
         }
     },
-
 
 };
 
