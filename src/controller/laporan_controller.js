@@ -271,11 +271,8 @@ const LaporanController = {
 
                     // Cari stok buat tau harga beli per satuan (optional)
                     const stok = await Stok.findOne({
-                        where: {
-                            id_product_stok: d.id_produk,
-                            satuan: d.satuan,
-                        },
-                        attributes: ["satuan", "harga_beli"],
+                        where: { id_product_stok: d.id_produk },
+                        attributes: ["satuan", "harga", "harga_beli"],
                     });
 
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
