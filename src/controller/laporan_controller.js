@@ -215,73 +215,6 @@ const LaporanController = {
         }
     },
 
-    getLaporanPembelianHarian: async (req, res) => {
-        try {
-            const { tanggal } = req.query;
-
-            if (!tanggal) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
-                });
-            }
-
-            const transaksi = await HTransBeli.findAll({
-                where: { tanggal },
-                include: [
-                    {
-                        model: DTransBeli,
-                        as: "detail_transaksi",
-                        include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                attributes: ["nama_product"],
-                            },
-                        ],
-                    },
-                    {
-                        model: Supplier,
-                        as: "supplier",
-                        attributes: ["nama_supplier"],
-                    },
-                ],
-                order: [["tanggal", "ASC"]],
-            });
-
-            let laporan = [];
-            let totalPembelian = 0;
-
-            transaksi.forEach((trx) => {
-                trx.detail_transaksi.forEach((d) => {
-                    const subtotal = d.harga_satuan * d.jumlah_barang;
-                    totalPembelian += subtotal;
-
-                    laporan.push({
-                        tanggal: trx.tanggal,
-                        no_pesanan: trx.id_htrans_beli,
-                        nama_barang: d.produk?.nama_product || "Tidak Diketahui",
-                        pemasok: trx.supplier?.nama_supplier || "-",
-                        total_pembelian: subtotal,
-                    });
-                });
-            });
-
-            return res.json({
-                success: true,
-                data: laporan,
-                total: totalPembelian,
-            });
-        } catch (err) {
-            console.error("❌ Error getLaporanPembelianHarian:", err);
-            return res.status(500).json({
-                success: false,
-                message: "Gagal memuat laporan pembelian harian",
-                error: err.message,
-            });
-        }
-    },
-
     getLaporanPembelian: async (req, res) => {
         try {
             const { tanggal_mulai, tanggal_selesai } = req.query;
@@ -321,37 +254,125 @@ const LaporanController = {
                 order: [["tanggal", "ASC"]],
             });
 
-            const laporan = transaksi.map((trx) => {
-                const details = trx.detail_transaksi || [];
+            let laporan = [];
+            let grandTotalPembelian = 0;
 
-                const totalNota = details.reduce(
-                    (sum, d) => sum + (d.harga_satuan * d.jumlah_barang),
-                    0
-                );
+            for (const trx of transaksi) {
+                let totalNota = 0;
+                let detailBarang = [];
 
-                return {
+                for (const d of trx.detail_transaksi) {
+                    const produk = d.produk;
+                    const jumlah = d.jumlah_barang;
+                    const hargaBeli = d.harga_satuan;
+                    const subtotal = hargaBeli * jumlah;
+
+                    totalNota += subtotal;
+
+                    detailBarang.push({
+                        nama_product: produk?.nama_product || "Tidak Diketahui",
+                        jumlah,
+                        harga_beli: hargaBeli,
+                        subtotal,
+                    });
+                }
+
+                grandTotalPembelian += totalNota;
+
+                laporan.push({
+                    id_htrans_beli: trx.id_htrans_beli,
                     tanggal: trx.tanggal,
-                    no_pesanan: trx.id_htrans_beli,
                     pemasok: trx.supplier?.nama_supplier || "-",
-                    total_pembelian: totalNota,
-                };
+                    metode_pembayaran: trx.metode_pembayaran,
+                    nomor_invoice: trx.nomor_invoice,
+                    detail: detailBarang,
+                    total_nota: totalNota,
+                });
+            }
+
+            return res.json({
+                success: true,
+                periode: `${tanggal_mulai} s.d ${tanggal_selesai}`,
+                data: laporan,
+                grand_total: {
+                    total_pembelian: grandTotalPembelian,
+                },
+            });
+        } catch (err) {
+            console.error("❌ Error getLaporanPembelian:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Gagal mengambil laporan pembelian",
+                error: err.message,
+            });
+        }
+    },
+
+    // 🔹 Laporan Pembelian Harian
+    getLaporanPembelianHarian: async (req, res) => {
+        try {
+            const { tanggal } = req.query;
+
+            if (!tanggal) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
+                });
+            }
+
+            const transaksi = await HTransBeli.findAll({
+                where: { tanggal },
+                include: [
+                    {
+                        model: DTransBeli,
+                        as: "detail_transaksi",
+                        include: [
+                            {
+                                model: Product,
+                                as: "produk",
+                                attributes: ["nama_product"],
+                            },
+                        ],
+                    },
+                    {
+                        model: Supplier,
+                        as: "supplier",
+                        attributes: ["nama_supplier"],
+                    },
+                ],
+                order: [["id_htrans_beli", "ASC"]],
             });
 
-            const totalKeseluruhan = laporan.reduce(
-                (sum, row) => sum + row.total_pembelian,
-                0
-            );
+            let laporan = [];
+            let totalPembelian = 0;
+
+            for (const trx of transaksi) {
+                for (const d of trx.detail_transaksi) {
+                    const subtotal = d.harga_satuan * d.jumlah_barang;
+                    totalPembelian += subtotal;
+
+                    laporan.push({
+                        tanggal: trx.tanggal,
+                        no_pesanan: trx.id_htrans_beli,
+                        nama_barang: d.produk?.nama_product || "Tidak Diketahui",
+                        pemasok: trx.supplier?.nama_supplier || "-",
+                        jumlah: d.jumlah_barang,
+                        harga_beli: d.harga_satuan,
+                        total_pembelian: subtotal,
+                    });
+                }
+            }
 
             return res.json({
                 success: true,
                 data: laporan,
-                total: totalKeseluruhan,
+                total: totalPembelian,
             });
         } catch (err) {
-            console.error("❌ Error getLaporanPembelianPerNota:", err);
+            console.error("❌ Error getLaporanPembelianHarian:", err);
             return res.status(500).json({
                 success: false,
-                message: "Gagal memuat laporan pembelian per nota",
+                message: "Gagal memuat laporan pembelian harian",
                 error: err.message,
             });
         }
