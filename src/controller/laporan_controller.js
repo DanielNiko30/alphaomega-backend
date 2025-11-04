@@ -334,17 +334,9 @@ const LaporanController = {
                 });
             }
 
-            const { Op } = require("sequelize");
-            const startDate = new Date(tanggal);
-            const endDate = new Date(tanggal);
-            endDate.setHours(23, 59, 59, 999);
-
+            // ✅ Gunakan literal biar aman di semua format kolom tanggal
             const transaksi = await HTransBeli.findAll({
-                where: {
-                    tanggal: {
-                        [Op.between]: [startDate, endDate],
-                    },
-                },
+                where: literal(`DATE(tanggal) = '${tanggal}'`),
                 include: [
                     {
                         model: DTransBeli,
@@ -366,30 +358,67 @@ const LaporanController = {
                 order: [["id_htrans_beli", "ASC"]],
             });
 
+            if (!transaksi || transaksi.length === 0) {
+                return res.json({
+                    success: true,
+                    message: "Tidak ada transaksi pada tanggal tersebut",
+                    data: [],
+                    total: 0,
+                });
+            }
+
             let laporan = [];
             let totalPembelian = 0;
 
             for (const trx of transaksi) {
+                let totalNota = 0;
+                let detailBarang = [];
+
                 for (const d of trx.detail_transaksi) {
-                    const subtotal = d.harga_satuan * d.jumlah_barang;
+                    const produk = d.produk;
+
+                    // Ambil data stok untuk tau satuan dan harga beli (opsional)
+                    const stok = await Stok.findOne({
+                        where: { id_product_stok: d.id_produk },
+                        attributes: ["satuan", "harga_beli"],
+                    });
+
+                    const satuan = stok?.satuan || "-";
+                    const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
+                    const subtotal = hargaBeli * d.jumlah_barang;
+
+                    totalNota += subtotal;
                     totalPembelian += subtotal;
 
-                    laporan.push({
-                        tanggal: trx.tanggal,
-                        no_pesanan: trx.id_htrans_beli,
-                        nama_barang: d.produk?.nama_product || "Tidak Diketahui",
-                        pemasok: trx.supplier?.nama_supplier || "-",
+                    detailBarang.push({
+                        nama_product: produk?.nama_product || "Tidak Diketahui",
+                        satuan,
                         jumlah: d.jumlah_barang,
-                        harga_beli: d.harga_satuan,
-                        total_pembelian: subtotal,
+                        harga_beli: hargaBeli,
+                        subtotal,
                     });
                 }
+
+                laporan.push({
+                    id_htrans_beli: trx.id_htrans_beli,
+                    tanggal: trx.tanggal,
+                    pemasok: trx.supplier?.nama_supplier || "-",
+                    metode_pembayaran: trx.metode_pembayaran,
+                    nomor_invoice: trx.nomor_invoice,
+                    detail: detailBarang,
+                    total_nota: {
+                        total_pembelian: totalNota,
+                    },
+                });
             }
 
             return res.json({
                 success: true,
+                tanggal,
                 data: laporan,
-                total: totalPembelian,
+                grand_total: {
+                    total_pembelian: totalPembelian,
+                },
             });
         } catch (err) {
             console.error("❌ Error getLaporanPembelianHarian:", err);
