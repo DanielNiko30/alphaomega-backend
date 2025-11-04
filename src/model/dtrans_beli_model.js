@@ -1,6 +1,5 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
-const { Product } = require("./product_model");
 
 const db = getDB();
 
@@ -42,7 +41,20 @@ const DTransBeli = db.define(
   }
 );
 
-// ✅ Relasi ke produk
-DTransBeli.belongsTo(Product, { foreignKey: "id_produk", as: "produk" });
+const initDTransBeliAssociations = ({ Product, HTransBeli }) => {
+  if (Product) {
+    DTransBeli.belongsTo(Product, {
+      foreignKey: "id_produk",
+      as: "produk",
+    });
+  }
 
-module.exports = { DTransBeli };
+  if (HTransBeli) {
+    DTransBeli.belongsTo(HTransBeli, {
+      foreignKey: "id_htrans_beli",
+      as: "htrans_beli",
+    });
+  }
+};
+
+module.exports = { DTransBeli, initDTransBeliAssociations };
