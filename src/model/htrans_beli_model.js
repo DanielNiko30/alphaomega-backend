@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
 const { DTransBeli } = require("./dtrans_beli_model");
+const { Supplier } = require("./supplier_model");
 
 const db = getDB();
 
@@ -47,5 +48,13 @@ HTransBeli.hasMany(DTransBeli, { foreignKey: "id_htrans_beli", as: "detail_trans
 
 // ✅ Relasi balik dari detail ke header
 DTransBeli.belongsTo(HTransBeli, { foreignKey: "id_htrans_beli", as: "HTransBeli" });
+
+const { Supplier } = require("./supplier_model");
+
+HTransBeli.belongsTo(Supplier, {
+  foreignKey: "id_supplier",
+  as: "supplier",
+});
+
 
 module.exports = { HTransBeli };
