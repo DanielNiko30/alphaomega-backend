@@ -337,18 +337,12 @@ const LaporanController = {
 
             // 🔹 Langsung pakai tanggal, cocok untuk kolom DATE
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal },
+                where: { tanggal }, // langsung cocokkan DATE
                 include: [
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
-                        include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                include: [{ model: Stok, as: "stok" }],
-                            },
-                        ],
+                        include: [{ model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }],
                     },
                     { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
                 ],
