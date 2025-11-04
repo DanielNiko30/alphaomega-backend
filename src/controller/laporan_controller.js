@@ -305,9 +305,9 @@ const LaporanController = {
                 });
             }
 
-            // ✅ langsung pakai tanggal tanpa jam
+            // ✅ langsung pakai DATE, tanpa jam
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal }, // langsung cocokkan DATE
+                where: { tanggal },
                 include: [
                     {
                         model: DTransBeli,
