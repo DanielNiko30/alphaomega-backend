@@ -228,9 +228,9 @@ const LaporanController = {
                 });
             }
 
-            // Pakai startOf / endOf untuk keamanan
-            const start = moment(startDate, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
-            const end = moment(endDate, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
+            // Gunakan startOf / endOf + toDate() supaya aman jika kolom DATETIME
+            const start = moment(startDate, "YYYY-MM-DD").startOf("day").toDate();
+            const end = moment(endDate, "YYYY-MM-DD").endOf("day").toDate();
 
             const transaksi = await HTransBeli.findAll({
                 where: { tanggal: { [Op.between]: [start, end] } },
@@ -239,11 +239,7 @@ const LaporanController = {
                         model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                include: [{ model: Stok, as: "stok" }]
-                            }
+                            { model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }
                         ],
                     },
                     { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
@@ -307,9 +303,12 @@ const LaporanController = {
                 });
             }
 
-            // ✅ langsung pakai tanggal string, karena kolom DATE
+            // Aman untuk DATE / DATETIME
+            const start = moment(tanggal, "YYYY-MM-DD").startOf("day").toDate();
+            const end = moment(tanggal, "YYYY-MM-DD").endOf("day").toDate();
+
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal }, // Op.eq secara default
+                where: { tanggal: { [Op.between]: [start, end] } },
                 include: [
                     {
                         model: DTransBeli,
