@@ -9,17 +9,22 @@ const { Stok } = require('../model/stok_model');
 const LaporanController = {
     getLaporanPenjualan: async (req, res) => {
         try {
-            const { startDate, endDate, groupBy } = req.query;
+            const { startDate, endDate } = req.query;
 
-            // Default filter tanggal: semua
-            const whereClause = {};
-            if (startDate && endDate) {
-                whereClause.tanggal = {
-                    [Op.between]: [startDate, endDate],
-                };
+            if (!startDate || !endDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parameter startDate dan endDate wajib diisi (format: YYYY-MM-DD)",
+                });
             }
 
-            // ambil data dasar
+            const whereClause = {
+                tanggal: {
+                    [Op.between]: [startDate, endDate],
+                },
+            };
+
+            // 🔹 Ambil transaksi + detail + produk + stok
             const transaksi = await HTransJual.findAll({
                 where: whereClause,
                 include: [
@@ -35,99 +40,83 @@ const LaporanController = {
                             {
                                 model: Stok,
                                 as: "stok",
+                                attributes: ["satuan", "harga", "harga_beli"],
                             },
                         ],
                     },
                 ],
+                order: [["tanggal", "ASC"]],
             });
 
-            const data = transaksi.map((t) => {
-                const totalPenjualan = t.detail_transaksi.reduce(
-                    (sum, d) => sum + d.jumlah_barang * d.stok.harga,
-                    0
-                );
-                const totalHPP = t.detail_transaksi.reduce(
-                    (sum, d) => sum + d.jumlah_barang * d.stok.harga_beli,
-                    0
-                );
+            let laporan = [];
+            let grandTotalPenjualan = 0;
+            let grandTotalHPP = 0;
+            let grandTotalUntung = 0;
 
-                return {
-                    id_htrans_jual: t.id_htrans_jual,
-                    tanggal: t.tanggal,
-                    total_penjualan: totalPenjualan,
-                    total_hpp: totalHPP,
-                    total_untung: totalPenjualan - totalHPP,
-                };
-            });
+            transaksi.forEach((trx) => {
+                let totalPenjualanNota = 0;
+                let totalHppNota = 0;
+                let totalUntungNota = 0;
+                let detailBarang = [];
 
-            // --------------- 🔹 Grouping Sesuai Permintaan ---------------
-            let groupedData = [];
+                trx.detail_transaksi.forEach((d) => {
+                    const produk = d.produk;
+                    const stok = d.stok;
 
-            if (groupBy === "hari") {
-                const mapHari = {};
-                data.forEach((d) => {
-                    const key = new Date(d.tanggal).toISOString().split("T")[0];
-                    if (!mapHari[key]) {
-                        mapHari[key] = { tanggal: key, total_penjualan: 0, total_hpp: 0, total_untung: 0 };
-                    }
-                    mapHari[key].total_penjualan += d.total_penjualan;
-                    mapHari[key].total_hpp += d.total_hpp;
-                    mapHari[key].total_untung += d.total_untung;
-                });
-                groupedData = Object.values(mapHari);
-            }
+                    const hargaBeli = stok ? stok.harga_beli : 0;
+                    const hargaJual = d.harga_satuan;
+                    const jumlah = d.jumlah_barang;
 
-            else if (groupBy === "bulan") {
-                const mapBulan = {};
-                data.forEach((d) => {
-                    const date = new Date(d.tanggal);
-                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-                    if (!mapBulan[key]) {
-                        mapBulan[key] = { bulan: key, total_penjualan: 0, total_hpp: 0, total_untung: 0 };
-                    }
-                    mapBulan[key].total_penjualan += d.total_penjualan;
-                    mapBulan[key].total_hpp += d.total_hpp;
-                    mapBulan[key].total_untung += d.total_untung;
-                });
-                groupedData = Object.values(mapBulan);
-            }
+                    const subtotal = hargaJual * jumlah;
+                    const hpp = hargaBeli * jumlah;
+                    const untung = subtotal - hpp;
 
-            else if (groupBy === "produk") {
-                const mapProduk = {};
-                transaksi.forEach((t) => {
-                    t.DTransJuals.forEach((d) => {
-                        const nama = d.Stok.Product.nama_product;
-                        if (!mapProduk[nama]) {
-                            mapProduk[nama] = {
-                                nama_product: nama,
-                                qty: 0,
-                                total_penjualan: 0,
-                                total_hpp: 0,
-                                total_untung: 0,
-                            };
-                        }
-                        mapProduk[nama].qty += d.qty;
-                        mapProduk[nama].total_penjualan += d.qty * d.Stok.harga_jual;
-                        mapProduk[nama].total_hpp += d.qty * d.Stok.harga_beli;
-                        mapProduk[nama].total_untung += d.qty * (d.Stok.harga_jual - d.Stok.harga_beli);
+                    totalPenjualanNota += subtotal;
+                    totalHppNota += hpp;
+                    totalUntungNota += untung;
+
+                    detailBarang.push({
+                        nama_product: produk?.nama_product || "Tidak Diketahui",
+                        satuan: stok?.satuan || d.satuan,
+                        jumlah,
+                        harga_jual: hargaJual,
+                        harga_beli: hargaBeli,
+                        subtotal,
+                        hpp,
+                        untung,
                     });
                 });
-                groupedData = Object.values(mapProduk);
-            }
 
-            else {
-                // default per transaksi
-                groupedData = data;
-            }
+                grandTotalPenjualan += totalPenjualanNota;
+                grandTotalHPP += totalHppNota;
+                grandTotalUntung += totalUntungNota;
 
-            res.status(200).json({
+                laporan.push({
+                    id_htrans_jual: trx.id_htrans_jual,
+                    tanggal: trx.tanggal,
+                    metode_pembayaran: trx.metode_pembayaran,
+                    detail: detailBarang,
+                    total_nota: {
+                        total_penjualan: totalPenjualanNota,
+                        total_hpp: totalHppNota,
+                        total_untung: totalUntungNota,
+                    },
+                });
+            });
+
+            return res.json({
                 success: true,
-                message: "Laporan penjualan berhasil diambil",
-                data: groupedData,
+                periode: `${startDate} s.d ${endDate}`,
+                data: laporan,
+                grand_total: {
+                    total_penjualan: grandTotalPenjualan,
+                    total_hpp: grandTotalHPP,
+                    total_untung: grandTotalUntung,
+                },
             });
         } catch (err) {
-            console.error(err);
-            res.status(500).json({
+            console.error("❌ Error getLaporanPenjualan:", err);
+            return res.status(500).json({
                 success: false,
                 message: "Gagal mengambil laporan penjualan",
                 error: err.message,
