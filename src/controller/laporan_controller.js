@@ -39,18 +39,15 @@ const LaporanController = {
                         ],
                     },
                 ],
-                order: [["id_htrans_jual", "ASC"]],
             });
 
-
-            // mapping ke array yang sudah diolah
             const data = transaksi.map((t) => {
-                const totalPenjualan = t.DTransJuals.reduce(
-                    (sum, d) => sum + d.qty * d.Stok.harga_jual,
+                const totalPenjualan = t.detail_transaksi.reduce(
+                    (sum, d) => sum + d.jumlah_barang * d.stok.harga,
                     0
                 );
-                const totalHPP = t.DTransJuals.reduce(
-                    (sum, d) => sum + d.qty * d.Stok.harga_beli,
+                const totalHPP = t.detail_transaksi.reduce(
+                    (sum, d) => sum + d.jumlah_barang * d.stok.harga_beli,
                     0
                 );
 
