@@ -47,4 +47,10 @@ DTransJual.belongsTo(Product, {
   as: "produk",
 });
 
+// 🔗 Ke stok (berdasarkan id_produk dan satuan)
+DTransJual.belongsTo(Stok, {
+  foreignKey: "id_produk",
+  targetKey: "id_product_stok",
+  as: "stok",
+});
 module.exports = { DTransJual };

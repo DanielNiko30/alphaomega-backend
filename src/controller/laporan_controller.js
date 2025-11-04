@@ -25,22 +25,23 @@ const LaporanController = {
                 include: [
                     {
                         model: DTransJual,
-                        as: "detail_transaksi", // ✅ tambahkan alias
+                        as: "detail_transaksi",
                         include: [
                             {
+                                model: Product,
+                                as: "produk",
+                                attributes: ["nama_product"],
+                            },
+                            {
                                 model: Stok,
-                                as: "stok", // kalau di model stok juga pakai alias
-                                include: [
-                                    {
-                                        model: Product,
-                                        attributes: ["nama_product"],
-                                    },
-                                ],
+                                as: "stok",
                             },
                         ],
                     },
                 ],
+                order: [["id_htrans_jual", "ASC"]],
             });
+
 
             // mapping ke array yang sudah diolah
             const data = transaksi.map((t) => {
