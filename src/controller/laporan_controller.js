@@ -334,9 +334,22 @@ const LaporanController = {
                 });
             }
 
-            // Ambil transaksi pembelian pada tanggal tertentu + relasi detail, produk, dan supplier
+            const { Op } = require("sequelize");
+
+            // ⏱ Samakan cara ambil tanggal seperti getLaporanPembelian
+            const startDate = new Date(`${tanggal}T00:00:00`);
+            const endDate = new Date(`${tanggal}T23:59:59`);
+
+            // 🔹 Cek tanggal untuk debug
+            console.log("🔍 Filter tanggal:", startDate, "->", endDate);
+
+            // 🔹 Ambil transaksi pembelian + relasi lengkap
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal }, // cukup pakai equality
+                where: {
+                    tanggal: {
+                        [Op.between]: [startDate, endDate],
+                    },
+                },
                 include: [
                     {
                         model: DTransBeli,
@@ -358,15 +371,30 @@ const LaporanController = {
                 order: [["id_htrans_beli", "ASC"]],
             });
 
+            // 🧩 Debug kalau transaksi kosong
+            if (!transaksi || transaksi.length === 0) {
+                console.warn("⚠️ Tidak ada transaksi ditemukan untuk tanggal:", tanggal);
+                return res.json({
+                    success: true,
+                    message: "Tidak ada transaksi pembelian untuk tanggal ini",
+                    data: [],
+                    total: { pembelian: 0 },
+                });
+            }
 
             let laporan = [];
             let totalPembelian = 0;
 
-            // Loop tiap transaksi
-            transaksi.forEach((trx) => {
-                trx.detail_transaksi.forEach((d) => {
+            // 🔹 Loop tiap transaksi dan detailnya
+            for (const trx of transaksi) {
+                if (!trx.detail_transaksi || trx.detail_transaksi.length === 0) {
+                    console.warn(`⚠️ Transaksi ${trx.id_htrans_beli} tidak memiliki detail.`);
+                    continue;
+                }
+
+                for (const d of trx.detail_transaksi) {
                     const produk = d.produk;
-                    const stok = produk?.stok?.[0]; // ambil stok pertama (kalau ada)
+                    const stok = produk?.stok?.[0];
 
                     const satuan = stok?.satuan || "-";
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
@@ -386,11 +414,12 @@ const LaporanController = {
                         pembayaran: trx.metode_pembayaran,
                         invoice: trx.nomor_invoice,
                     });
-                });
-            });
+                }
+            }
 
             return res.json({
                 success: true,
+                tanggal: tanggal,
                 data: laporan,
                 total: {
                     pembelian: totalPembelian,
@@ -402,6 +431,7 @@ const LaporanController = {
                 success: false,
                 message: "Gagal memuat laporan pembelian harian",
                 error: err.message,
+                stack: err.stack, // 🔥 tambahkan stack trace biar jelas sumber error
             });
         }
     },
