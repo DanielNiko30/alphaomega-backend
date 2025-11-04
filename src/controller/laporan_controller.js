@@ -6,6 +6,7 @@ const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Product } = require("../model/product_model");
 const { Stok } = require('../model/stok_model');
 const { Supplier } = require('../model/supplier_model');
+const moment = require("moment");
 
 const LaporanController = {
     getLaporanPenjualan: async (req, res) => {
@@ -334,9 +335,17 @@ const LaporanController = {
                 });
             }
 
-            // 🔹 Fixed: gunakan tanggal langsung, tanpa jam
+            // 🔹 Parse tanggal menggunakan moment agar aman
+            const dayStart = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+            const dayEnd = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
+
+            const { Op } = require("sequelize");
+
+            // 🔹 Where clause untuk tipe DATE maupun DATETIME
             const whereClause = {
-                tanggal: tanggal, // cocok untuk tipe DATE
+                tanggal: {
+                    [Op.between]: [dayStart, dayEnd],
+                },
             };
 
             // 🔹 Ambil transaksi pembelian lengkap (harian)
@@ -367,7 +376,7 @@ const LaporanController = {
             if (!transaksi || transaksi.length === 0) {
                 return res.json({
                     success: true,
-                    message: "Tidak ada transaksi pembelian untuk tanggal ini",
+                    message: `Tidak ada transaksi pembelian untuk tanggal: ${tanggal}`,
                     data: [],
                     total: { pembelian: 0 },
                 });
