@@ -391,13 +391,13 @@ const LaporanController = {
             for (const p of products) {
                 // 🔹 Stok Masuk (Pembelian)
                 const pembelian = await DTransBeli.findAll({
+                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransBeli,
-                        as: "htrans_beli",
+                        as: "htrans_beli", // sesuai alias di model
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal", "nomor_invoice"]
                     }],
-                    where: { id_produk: p.id_product },
                     order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
                 });
 
@@ -413,13 +413,13 @@ const LaporanController = {
 
                 // 🔹 Stok Keluar (Penjualan)
                 const penjualan = await DTransJual.findAll({
+                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransJual,
-                        as: "htrans_jual",
+                        as: "htrans_jual", // sesuai alias di model
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal"]
                     }],
-                    where: { id_produk: p.id_product },
                     order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
                 });
 
@@ -486,13 +486,13 @@ const LaporanController = {
             for (const p of products) {
                 // 🔹 Stok Masuk hari ini
                 const pembelian = await DTransBeli.findAll({
+                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransBeli,
-                        as: "htrans_beli",
+                        as: "htrans_beli", // sesuai alias
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal", "nomor_invoice"]
                     }],
-                    where: { id_produk: p.id_product },
                     order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
                 });
 
@@ -508,13 +508,13 @@ const LaporanController = {
 
                 // 🔹 Stok Keluar hari ini
                 const penjualan = await DTransJual.findAll({
+                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransJual,
-                        as: "htrans_jual",
+                        as: "htrans_jual", // sesuai alias
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal"]
                     }],
-                    where: { id_produk: p.id_product },
                     order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
                 });
 
