@@ -218,22 +218,24 @@ const LaporanController = {
 
     getLaporanPembelian: async (req, res) => {
         try {
-            const { tanggal_mulai, tanggal_selesai } = req.query;
+            const { startDate, endDate } = req.query;
 
-            if (!tanggal_mulai || !tanggal_selesai) {
+            if (!startDate || !endDate) {
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Parameter 'tanggal_mulai' dan 'tanggal_selesai' wajib diisi (format: YYYY-MM-DD)",
+                    message: "Parameter startDate dan endDate wajib diisi (format: YYYY-MM-DD)",
                 });
             }
 
-            const transaksi = await HTransBeli.findAll({
-                where: {
-                    tanggal: {
-                        [Op.between]: [tanggal_mulai, tanggal_selesai],
-                    },
+            const whereClause = {
+                tanggal: {
+                    [Op.between]: [startDate, endDate],
                 },
+            };
+
+            // 🔹 Ambil transaksi pembelian lengkap
+            const transaksi = await HTransBeli.findAll({
+                where: whereClause,
                 include: [
                     {
                         model: DTransBeli,
@@ -258,20 +260,33 @@ const LaporanController = {
             let laporan = [];
             let grandTotalPembelian = 0;
 
+            // 🔹 Loop semua transaksi
             for (const trx of transaksi) {
                 let totalNota = 0;
                 let detailBarang = [];
 
+                // 🔹 Loop detail per transaksi
                 for (const d of trx.detail_transaksi) {
                     const produk = d.produk;
+
+                    // Cari stok buat tau harga beli per satuan (optional)
+                    const stok = await Stok.findOne({
+                        where: {
+                            id_product_stok: d.id_produk,
+                            satuan: d.satuan,
+                        },
+                        attributes: ["satuan", "harga_beli"],
+                    });
+
+                    const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
                     const jumlah = d.jumlah_barang;
-                    const hargaBeli = d.harga_satuan;
                     const subtotal = hargaBeli * jumlah;
 
                     totalNota += subtotal;
 
                     detailBarang.push({
                         nama_product: produk?.nama_product || "Tidak Diketahui",
+                        satuan: stok?.satuan || d.satuan,
                         jumlah,
                         harga_beli: hargaBeli,
                         subtotal,
@@ -287,13 +302,15 @@ const LaporanController = {
                     metode_pembayaran: trx.metode_pembayaran,
                     nomor_invoice: trx.nomor_invoice,
                     detail: detailBarang,
-                    total_nota: totalNota,
+                    total_nota: {
+                        total_pembelian: totalNota,
+                    },
                 });
             }
 
             return res.json({
                 success: true,
-                periode: `${tanggal_mulai} s.d ${tanggal_selesai}`,
+                periode: `${startDate} s.d ${endDate}`,
                 data: laporan,
                 grand_total: {
                     total_pembelian: grandTotalPembelian,
@@ -303,7 +320,7 @@ const LaporanController = {
             console.error("❌ Error getLaporanPembelian:", err);
             return res.status(500).json({
                 success: false,
-                message: "Gagal mengambil laporan pembelian",
+                message: "Gagal memuat laporan pembelian harian",
                 error: err.message,
             });
         }
