@@ -326,7 +326,7 @@ const LaporanController = {
 
     getLaporanPembelianHarian: async (req, res) => {
         try {
-            const { tanggal } = req.query;
+            let { tanggal } = req.query;
 
             if (!tanggal) {
                 return res.status(400).json({
@@ -335,19 +335,36 @@ const LaporanController = {
                 });
             }
 
-            // 🔹 Langsung pakai tanggal, cocok untuk kolom DATE
+            // 🔹 Hapus spasi dan pastikan format
+            tanggal = tanggal.trim();
+
+            // 🔹 Bisa pakai moment untuk validasi
+            if (!moment(tanggal, "YYYY-MM-DD", true).isValid()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Format tanggal tidak valid. Gunakan YYYY-MM-DD",
+                });
+            }
+
+            // 🔹 Untuk tipe DATE di MySQL, bisa pakai Op.eq
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal }, // langsung cocokkan DATE
+                where: { tanggal: { [Op.eq]: tanggal } },
                 include: [
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
-                        include: [{ model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }],
+                        include: [
+                            { model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }
+                        ],
                     },
                     { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
                 ],
                 order: [["id_htrans_beli", "ASC"]],
             });
+
+            // 🔹 Debug log supaya bisa cek apa query match
+            console.log("Query tanggal:", tanggal);
+            console.log("Jumlah transaksi ditemukan:", transaksi.length);
 
             if (!transaksi || transaksi.length === 0) {
                 return res.json({
@@ -361,8 +378,8 @@ const LaporanController = {
             let laporan = [];
             let totalPembelian = 0;
 
-            transaksi.forEach((trx) => {
-                trx.detail_transaksi.forEach((d) => {
+            transaksi.forEach(trx => {
+                trx.detail_transaksi.forEach(d => {
                     const produk = d.produk;
                     const stok = produk?.stok?.[0];
 
@@ -401,7 +418,7 @@ const LaporanController = {
                 error: err.message,
             });
         }
-    }
+    },
 
 };
 
