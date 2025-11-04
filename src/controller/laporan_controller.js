@@ -334,9 +334,9 @@ const LaporanController = {
                 });
             }
 
-            // ✅ Gunakan literal biar aman di semua format kolom tanggal
+            // Ambil transaksi pembelian pada tanggal tertentu + relasi detail, produk, dan supplier
             const transaksi = await HTransBeli.findAll({
-                where: literal(`DATE(tanggal) = '${tanggal}'`),
+                where: { tanggal },
                 include: [
                     {
                         model: DTransBeli,
@@ -345,7 +345,12 @@ const LaporanController = {
                             {
                                 model: Product,
                                 as: "produk",
-                                attributes: ["nama_product"],
+                                include: [
+                                    {
+                                        model: Stok,
+                                        as: "stok",
+                                    },
+                                ],
                             },
                         ],
                     },
@@ -358,66 +363,41 @@ const LaporanController = {
                 order: [["id_htrans_beli", "ASC"]],
             });
 
-            if (!transaksi || transaksi.length === 0) {
-                return res.json({
-                    success: true,
-                    message: "Tidak ada transaksi pada tanggal tersebut",
-                    data: [],
-                    total: 0,
-                });
-            }
-
             let laporan = [];
             let totalPembelian = 0;
 
-            for (const trx of transaksi) {
-                let totalNota = 0;
-                let detailBarang = [];
-
-                for (const d of trx.detail_transaksi) {
+            // Loop tiap transaksi
+            transaksi.forEach((trx) => {
+                trx.detail_transaksi.forEach((d) => {
                     const produk = d.produk;
-
-                    // Ambil data stok untuk tau satuan dan harga beli (opsional)
-                    const stok = await Stok.findOne({
-                        where: { id_product_stok: d.id_produk },
-                        attributes: ["satuan", "harga_beli"],
-                    });
+                    const stok = produk?.stok?.[0]; // ambil stok pertama (kalau ada)
 
                     const satuan = stok?.satuan || "-";
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
-                    const subtotal = hargaBeli * d.jumlah_barang;
+                    const jumlah = d.jumlah_barang;
+                    const subtotal = hargaBeli * jumlah;
 
-                    totalNota += subtotal;
                     totalPembelian += subtotal;
 
-                    detailBarang.push({
-                        nama_product: produk?.nama_product || "Tidak Diketahui",
+                    laporan.push({
+                        waktu: trx.tanggal,
+                        barang: produk?.nama_product || "Tidak Diketahui",
+                        pemasok: trx.supplier?.nama_supplier || "-",
+                        jumlah,
                         satuan,
-                        jumlah: d.jumlah_barang,
                         harga_beli: hargaBeli,
                         subtotal,
+                        pembayaran: trx.metode_pembayaran,
+                        invoice: trx.nomor_invoice,
                     });
-                }
-
-                laporan.push({
-                    id_htrans_beli: trx.id_htrans_beli,
-                    tanggal: trx.tanggal,
-                    pemasok: trx.supplier?.nama_supplier || "-",
-                    metode_pembayaran: trx.metode_pembayaran,
-                    nomor_invoice: trx.nomor_invoice,
-                    detail: detailBarang,
-                    total_nota: {
-                        total_pembelian: totalNota,
-                    },
                 });
-            }
+            });
 
             return res.json({
                 success: true,
-                tanggal,
                 data: laporan,
-                grand_total: {
-                    total_pembelian: totalPembelian,
+                total: {
+                    pembelian: totalPembelian,
                 },
             });
         } catch (err) {
