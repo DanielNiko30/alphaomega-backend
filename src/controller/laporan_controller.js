@@ -5,6 +5,7 @@ const { HTransBeli } = require("../model/htrans_beli_model");
 const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Product } = require("../model/product_model");
 const { Stok } = require('../model/stok_model');
+const { Supplier } = require('../model/supplier_model');
 
 const LaporanController = {
     getLaporanPenjualan: async (req, res) => {
@@ -308,7 +309,6 @@ const LaporanController = {
         }
     },
 
-    // 🔹 Laporan Pembelian Harian
     getLaporanPembelianHarian: async (req, res) => {
         try {
             const { tanggal } = req.query;
