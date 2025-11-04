@@ -334,8 +334,17 @@ const LaporanController = {
                 });
             }
 
+            const { Op } = require("sequelize");
+            const startDate = new Date(tanggal);
+            const endDate = new Date(tanggal);
+            endDate.setHours(23, 59, 59, 999);
+
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal },
+                where: {
+                    tanggal: {
+                        [Op.between]: [startDate, endDate],
+                    },
+                },
                 include: [
                     {
                         model: DTransBeli,
@@ -391,6 +400,7 @@ const LaporanController = {
             });
         }
     },
+
 };
 
 module.exports = LaporanController;
