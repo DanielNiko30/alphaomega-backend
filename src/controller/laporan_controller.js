@@ -4,6 +4,7 @@ const { DTransJual } = require("../model/dtrans_jual_model");
 const { HTransBeli } = require("../model/htrans_beli_model");
 const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Product } = require("../model/product_model");
+const { Stok } = require('../model/stok_model');
 
 const LaporanController = {
     getLaporanPenjualan: async (req, res) => {
