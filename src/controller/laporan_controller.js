@@ -215,147 +215,147 @@ const LaporanController = {
         }
     },
 
-    getLaporanPembelianHarian: async (req, res) => {
-        try {
-            const { tanggal } = req.query;
+    // getLaporanPembelianHarian: async (req, res) => {
+    //     try {
+    //         const { tanggal } = req.query;
 
-            if (!tanggal) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
-                });
-            }
+    //         if (!tanggal) {
+    //             return res.status(400).json({
+    //                 success: false,
+    //                 message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
+    //             });
+    //         }
 
-            const transaksi = await HTransBeli.findAll({
-                where: { tanggal },
-                include: [
-                    {
-                        model: DTransBeli,
-                        as: "detail_transaksi",
-                        include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                attributes: ["nama_product"],
-                            },
-                        ],
-                    },
-                    {
-                        model: Supplier,
-                        as: "supplier",
-                        attributes: ["nama_supplier"],
-                    },
-                ],
-                order: [["tanggal", "ASC"]],
-            });
+    //         const transaksi = await HTransBeli.findAll({
+    //             where: { tanggal },
+    //             include: [
+    //                 {
+    //                     model: DTransBeli,
+    //                     as: "detail_transaksi",
+    //                     include: [
+    //                         {
+    //                             model: Product,
+    //                             as: "produk",
+    //                             attributes: ["nama_product"],
+    //                         },
+    //                     ],
+    //                 },
+    //                 {
+    //                     model: Supplier,
+    //                     as: "supplier",
+    //                     attributes: ["nama_supplier"],
+    //                 },
+    //             ],
+    //             order: [["tanggal", "ASC"]],
+    //         });
 
-            let laporan = [];
-            let totalPembelian = 0;
+    //         let laporan = [];
+    //         let totalPembelian = 0;
 
-            transaksi.forEach((trx) => {
-                trx.detail_transaksi.forEach((d) => {
-                    const subtotal = d.harga_satuan * d.jumlah_barang;
-                    totalPembelian += subtotal;
+    //         transaksi.forEach((trx) => {
+    //             trx.detail_transaksi.forEach((d) => {
+    //                 const subtotal = d.harga_satuan * d.jumlah_barang;
+    //                 totalPembelian += subtotal;
 
-                    laporan.push({
-                        tanggal: trx.tanggal,
-                        no_pesanan: trx.id_htrans_beli,
-                        nama_barang: d.produk?.nama_product || "Tidak Diketahui",
-                        pemasok: trx.supplier?.nama_supplier || "-",
-                        total_pembelian: subtotal,
-                    });
-                });
-            });
+    //                 laporan.push({
+    //                     tanggal: trx.tanggal,
+    //                     no_pesanan: trx.id_htrans_beli,
+    //                     nama_barang: d.produk?.nama_product || "Tidak Diketahui",
+    //                     pemasok: trx.supplier?.nama_supplier || "-",
+    //                     total_pembelian: subtotal,
+    //                 });
+    //             });
+    //         });
 
-            return res.json({
-                success: true,
-                data: laporan,
-                total: totalPembelian,
-            });
-        } catch (err) {
-            console.error("❌ Error getLaporanPembelianHarian:", err);
-            return res.status(500).json({
-                success: false,
-                message: "Gagal memuat laporan pembelian harian",
-                error: err.message,
-            });
-        }
-    },
+    //         return res.json({
+    //             success: true,
+    //             data: laporan,
+    //             total: totalPembelian,
+    //         });
+    //     } catch (err) {
+    //         console.error("❌ Error getLaporanPembelianHarian:", err);
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: "Gagal memuat laporan pembelian harian",
+    //             error: err.message,
+    //         });
+    //     }
+    // },
 
-    getLaporanPembelian: async (req, res) => {
-        try {
-            const { tanggal_mulai, tanggal_selesai } = req.query;
+    // getLaporanPembelian: async (req, res) => {
+    //     try {
+    //         const { tanggal_mulai, tanggal_selesai } = req.query;
 
-            if (!tanggal_mulai || !tanggal_selesai) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Parameter 'tanggal_mulai' dan 'tanggal_selesai' wajib diisi (format: YYYY-MM-DD)",
-                });
-            }
+    //         if (!tanggal_mulai || !tanggal_selesai) {
+    //             return res.status(400).json({
+    //                 success: false,
+    //                 message:
+    //                     "Parameter 'tanggal_mulai' dan 'tanggal_selesai' wajib diisi (format: YYYY-MM-DD)",
+    //             });
+    //         }
 
-            const transaksi = await HTransBeli.findAll({
-                where: {
-                    tanggal: {
-                        [Op.between]: [tanggal_mulai, tanggal_selesai],
-                    },
-                },
-                include: [
-                    {
-                        model: DTransBeli,
-                        as: "detail_transaksi",
-                        include: [
-                            {
-                                model: Product,
-                                as: "produk",
-                                attributes: ["nama_product"],
-                            },
-                        ],
-                    },
-                    {
-                        model: Supplier,
-                        as: "supplier",
-                        attributes: ["nama_supplier"],
-                    },
-                ],
-                order: [["tanggal", "ASC"]],
-            });
+    //         const transaksi = await HTransBeli.findAll({
+    //             where: {
+    //                 tanggal: {
+    //                     [Op.between]: [tanggal_mulai, tanggal_selesai],
+    //                 },
+    //             },
+    //             include: [
+    //                 {
+    //                     model: DTransBeli,
+    //                     as: "detail_transaksi",
+    //                     include: [
+    //                         {
+    //                             model: Product,
+    //                             as: "produk",
+    //                             attributes: ["nama_product"],
+    //                         },
+    //                     ],
+    //                 },
+    //                 {
+    //                     model: Supplier,
+    //                     as: "supplier",
+    //                     attributes: ["nama_supplier"],
+    //                 },
+    //             ],
+    //             order: [["tanggal", "ASC"]],
+    //         });
 
-            const laporan = transaksi.map((trx) => {
-                const details = trx.detail_transaksi || [];
+    //         const laporan = transaksi.map((trx) => {
+    //             const details = trx.detail_transaksi || [];
 
-                const totalNota = details.reduce(
-                    (sum, d) => sum + (d.harga_satuan * d.jumlah_barang),
-                    0
-                );
+    //             const totalNota = details.reduce(
+    //                 (sum, d) => sum + (d.harga_satuan * d.jumlah_barang),
+    //                 0
+    //             );
 
-                return {
-                    tanggal: trx.tanggal,
-                    no_pesanan: trx.id_htrans_beli,
-                    pemasok: trx.supplier?.nama_supplier || "-",
-                    total_pembelian: totalNota,
-                };
-            });
+    //             return {
+    //                 tanggal: trx.tanggal,
+    //                 no_pesanan: trx.id_htrans_beli,
+    //                 pemasok: trx.supplier?.nama_supplier || "-",
+    //                 total_pembelian: totalNota,
+    //             };
+    //         });
 
-            const totalKeseluruhan = laporan.reduce(
-                (sum, row) => sum + row.total_pembelian,
-                0
-            );
+    //         const totalKeseluruhan = laporan.reduce(
+    //             (sum, row) => sum + row.total_pembelian,
+    //             0
+    //         );
 
-            return res.json({
-                success: true,
-                data: laporan,
-                total: totalKeseluruhan,
-            });
-        } catch (err) {
-            console.error("❌ Error getLaporanPembelianPerNota:", err);
-            return res.status(500).json({
-                success: false,
-                message: "Gagal memuat laporan pembelian per nota",
-                error: err.message,
-            });
-        }
-    },
+    //         return res.json({
+    //             success: true,
+    //             data: laporan,
+    //             total: totalKeseluruhan,
+    //         });
+    //     } catch (err) {
+    //         console.error("❌ Error getLaporanPembelianPerNota:", err);
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: "Gagal memuat laporan pembelian per nota",
+    //             error: err.message,
+    //         });
+    //     }
+    // },
 };
 
 module.exports = LaporanController;
