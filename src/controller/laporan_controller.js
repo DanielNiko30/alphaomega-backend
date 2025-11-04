@@ -402,103 +402,77 @@ const LaporanController = {
             const end = moment(endDate, "YYYY-MM-DD").endOf("day").toDate();
 
             const products = await Product.findAll({ include: [{ model: Stok, as: "stok" }] });
-            const platformList = ["offline", "shopee", "lazada"];
-            let laporanPerPlatform = {};
 
-            for (const platform of platformList) {
-                let laporan = [];
+            let laporan = [];
 
-                for (const p of products) {
-                    const idProduct = p.id_product;
+            for (const p of products) {
+                const idProduct = p.id_product;
 
-                    // Stok awal sebelum periode
-                    const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
-                        where: { id_produk: idProduct },
-                        include: [{
-                            model: HTransBeli,
-                            as: "HTransBeli",
-                            where: { tanggal: { [Op.lt]: start }, sumber_transaksi: platform },
-                            attributes: []
-                        }]
-                    }) || 0;
+                // 🔹 Stok awal = stok awal + pembelian sebelum periode - penjualan sebelum periode
+                const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
 
-                    const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
-                        where: { id_produk: idProduct },
-                        include: [{
-                            model: HTransJual,
-                            as: "HTransJual",
-                            where: { tanggal: { [Op.lt]: start }, sumber_transaksi: platform },
-                            attributes: []
-                        }]
-                    }) || 0;
+                const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
 
-                    const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
+                const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
 
-                    // Stok masuk periode
-                    const pembelian = await DTransBeli.findAll({
-                        include: [{
-                            model: HTransBeli,
-                            as: "HTransBeli",
-                            where: { tanggal: { [Op.between]: [start, end] }, sumber_transaksi: platform },
-                            attributes: ["tanggal", "nomor_invoice"]
-                        }],
-                        where: { id_produk: idProduct },
-                        order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
-                    });
+                // 🔹 Stok masuk periode
+                const pembelian = await DTransBeli.findAll({
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal", "nomor_invoice"] }],
+                    where: { id_produk: idProduct },
+                    order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
+                });
 
-                    let totalMasuk = 0;
-                    const detailMasuk = pembelian.map(d => {
-                        const jumlah = Number(d.jumlah_barang) || 0;
-                        totalMasuk += jumlah;
-                        return {
-                            tanggal: d.HTransBeli.tanggal,
-                            jumlah,
-                            invoice: d.HTransBeli.nomor_invoice || "-"
-                        };
-                    });
+                let totalMasuk = 0;
+                const detailMasuk = pembelian.map(d => {
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalMasuk += jumlah;
+                    return {
+                        tanggal: d.HTransBeli.tanggal,
+                        jumlah,
+                        invoice: d.HTransBeli.nomor_invoice || "-"
+                    };
+                });
 
-                    // Stok keluar periode
-                    const penjualan = await DTransJual.findAll({
-                        include: [{
-                            model: HTransJual,
-                            as: "HTransJual",
-                            where: { tanggal: { [Op.between]: [start, end] }, sumber_transaksi: platform },
-                            attributes: ["tanggal"]
-                        }],
-                        where: { id_produk: idProduct },
-                        order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
-                    });
+                // 🔹 Stok keluar periode
+                const penjualan = await DTransJual.findAll({
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal"] }],
+                    where: { id_produk: idProduct },
+                    order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
+                });
 
-                    let totalKeluar = 0;
-                    const detailKeluar = penjualan.map(d => {
-                        const jumlah = Number(d.jumlah_barang) || 0;
-                        totalKeluar += jumlah;
-                        return {
-                            tanggal: d.HTransJual.tanggal,
-                            jumlah,
-                        };
-                    });
+                let totalKeluar = 0;
+                const detailKeluar = penjualan.map(d => {
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalKeluar += jumlah;
+                    return {
+                        tanggal: d.HTransJual.tanggal,
+                        jumlah,
+                    };
+                });
 
-                    const stokAkhir = stokAwal + totalMasuk - totalKeluar;
+                const stokAkhir = stokAwal + totalMasuk - totalKeluar;
 
-                    laporan.push({
-                        nama_product: p.nama_product,
-                        stok_awal: stokAwal,
-                        total_masuk: totalMasuk,
-                        detail_masuk: detailMasuk,
-                        total_keluar: totalKeluar,
-                        detail_keluar: detailKeluar,
-                        stok_akhir: stokAkhir
-                    });
-                }
-
-                laporanPerPlatform[platform] = laporan;
+                laporan.push({
+                    nama_product: p.nama_product,
+                    stok_awal: stokAwal,
+                    total_masuk: totalMasuk,
+                    detail_masuk: detailMasuk,
+                    total_keluar: totalKeluar,
+                    detail_keluar: detailKeluar,
+                    stok_akhir: stokAkhir
+                });
             }
 
             return res.json({
                 success: true,
                 periode: `${startDate} s.d ${endDate}`,
-                data: laporanPerPlatform
+                data: laporan
             });
 
         } catch (err) {
@@ -525,102 +499,77 @@ const LaporanController = {
             const end = moment(tanggal, "YYYY-MM-DD").endOf("day").toDate();
 
             const products = await Product.findAll({ include: [{ model: Stok, as: "stok" }] });
-            const platformList = ["offline", "shopee", "lazada"];
-            let laporanPerPlatform = {};
 
-            for (const platform of platformList) {
-                let laporan = [];
+            let laporan = [];
 
-                for (const p of products) {
-                    const idProduct = p.id_product;
+            for (const p of products) {
+                const idProduct = p.id_product;
 
-                    const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
-                        where: { id_produk: idProduct },
-                        include: [{
-                            model: HTransBeli,
-                            as: "HTransBeli",
-                            where: { tanggal: { [Op.lt]: start }, sumber_transaksi: platform },
-                            attributes: []
-                        }]
-                    }) || 0;
+                // Stok awal = stok terakhir sebelum hari ini
+                const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
 
-                    const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
-                        where: { id_produk: idProduct },
-                        include: [{
-                            model: HTransJual,
-                            as: "HTransJual",
-                            where: { tanggal: { [Op.lt]: start }, sumber_transaksi: platform },
-                            attributes: []
-                        }]
-                    }) || 0;
+                const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
 
-                    const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
+                const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
 
-                    // Stok masuk hari ini
-                    const pembelian = await DTransBeli.findAll({
-                        include: [{
-                            model: HTransBeli,
-                            as: "HTransBeli",
-                            where: { tanggal: { [Op.between]: [start, end] }, sumber_transaksi: platform },
-                            attributes: ["tanggal", "nomor_invoice"]
-                        }],
-                        where: { id_produk: idProduct },
-                        order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
-                    });
+                // Stok masuk hari ini
+                const pembelian = await DTransBeli.findAll({
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal", "nomor_invoice"] }],
+                    where: { id_produk: idProduct },
+                    order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
+                });
 
-                    let totalMasuk = 0;
-                    const detailMasuk = pembelian.map(d => {
-                        const jumlah = Number(d.jumlah_barang) || 0;
-                        totalMasuk += jumlah;
-                        return {
-                            tanggal: d.HTransBeli.tanggal,
-                            jumlah,
-                            invoice: d.HTransBeli.nomor_invoice || "-"
-                        };
-                    });
+                let totalMasuk = 0;
+                const detailMasuk = pembelian.map(d => {
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalMasuk += jumlah;
+                    return {
+                        tanggal: d.HTransBeli.tanggal,
+                        jumlah,
+                        invoice: d.HTransBeli.nomor_invoice || "-"
+                    };
+                });
 
-                    // Stok keluar hari ini
-                    const penjualan = await DTransJual.findAll({
-                        include: [{
-                            model: HTransJual,
-                            as: "HTransJual",
-                            where: { tanggal: { [Op.between]: [start, end] }, sumber_transaksi: platform },
-                            attributes: ["tanggal"]
-                        }],
-                        where: { id_produk: idProduct },
-                        order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
-                    });
+                // Stok keluar hari ini
+                const penjualan = await DTransJual.findAll({
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal"] }],
+                    where: { id_produk: idProduct },
+                    order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
+                });
 
-                    let totalKeluar = 0;
-                    const detailKeluar = penjualan.map(d => {
-                        const jumlah = Number(d.jumlah_barang) || 0;
-                        totalKeluar += jumlah;
-                        return {
-                            tanggal: d.HTransJual.tanggal,
-                            jumlah,
-                        };
-                    });
+                let totalKeluar = 0;
+                const detailKeluar = penjualan.map(d => {
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalKeluar += jumlah;
+                    return {
+                        tanggal: d.HTransJual.tanggal,
+                        jumlah,
+                    };
+                });
 
-                    const stokAkhir = stokAwal + totalMasuk - totalKeluar;
+                const stokAkhir = stokAwal + totalMasuk - totalKeluar;
 
-                    laporan.push({
-                        nama_product: p.nama_product,
-                        stok_awal: stokAwal,
-                        total_masuk: totalMasuk,
-                        detail_masuk: detailMasuk,
-                        total_keluar: totalKeluar,
-                        detail_keluar: detailKeluar,
-                        stok_akhir: stokAkhir
-                    });
-                }
-
-                laporanPerPlatform[platform] = laporan;
+                laporan.push({
+                    nama_product: p.nama_product,
+                    stok_awal: stokAwal,
+                    total_masuk: totalMasuk,
+                    detail_masuk: detailMasuk,
+                    total_keluar: totalKeluar,
+                    detail_keluar: detailKeluar,
+                    stok_akhir: stokAkhir
+                });
             }
 
             return res.json({
                 success: true,
                 tanggal,
-                data: laporanPerPlatform
+                data: laporan
             });
 
         } catch (err) {
