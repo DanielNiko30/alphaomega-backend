@@ -371,7 +371,6 @@ const LaporanController = {
     getLaporanStok: async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
-
             if (!startDate || !endDate) {
                 return res.status(400).json({
                     success: false,
@@ -389,27 +388,22 @@ const LaporanController = {
             for (const p of products) {
                 const idProduct = p.id_product;
 
-                // 🔹 Hitung stok awal = stok terakhir sebelum periode
+                // 🔹 Stok awal = stok awal + pembelian sebelum periode - penjualan sebelum periode
                 const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
                     where: { id_produk: idProduct },
-                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.lt]: start } } }]
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
                 }) || 0;
 
                 const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
                     where: { id_produk: idProduct },
-                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.lt]: start } } }]
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
                 }) || 0;
 
-                const stokAwal = (p.stok?.[0]?.jumlah || 0) + stokMasukSebelum - stokKeluarSebelum;
+                const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
 
-                // 🔹 Stok Masuk periode
+                // 🔹 Stok masuk periode
                 const pembelian = await DTransBeli.findAll({
-                    include: [{
-                        model: HTransBeli,
-                        as: "HTransBeli",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: ["tanggal", "nomor_invoice"]
-                    }],
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal", "nomor_invoice"] }],
                     where: { id_produk: idProduct },
                     order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
                 });
@@ -425,14 +419,9 @@ const LaporanController = {
                     };
                 });
 
-                // 🔹 Stok Keluar periode
+                // 🔹 Stok keluar periode
                 const penjualan = await DTransJual.findAll({
-                    include: [{
-                        model: HTransJual,
-                        as: "HTransJual",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: ["tanggal"]
-                    }],
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal"] }],
                     where: { id_produk: idProduct },
                     order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
                 });
@@ -479,7 +468,6 @@ const LaporanController = {
     getLaporanStokHarian: async (req, res) => {
         try {
             const { tanggal } = req.query;
-
             if (!tanggal) {
                 return res.status(400).json({
                     success: false,
@@ -495,48 +483,56 @@ const LaporanController = {
             let laporan = [];
 
             for (const p of products) {
+                const idProduct = p.id_product;
+
+                // Stok awal = stok terakhir sebelum hari ini
+                const stokMasukSebelum = await DTransBeli.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
+
+                const stokKeluarSebelum = await DTransJual.sum("jumlah_barang", {
+                    where: { id_produk: idProduct },
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.lt]: start } }, attributes: [] }]
+                }) || 0;
+
+                const stokAwal = (Number(p.stok?.[0]?.jumlah) || 0) + Number(stokMasukSebelum) - Number(stokKeluarSebelum);
+
+                // Stok masuk hari ini
                 const pembelian = await DTransBeli.findAll({
-                    include: [{
-                        model: HTransBeli,
-                        as: "HTransBeli",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: ["tanggal", "nomor_invoice"]
-                    }],
-                    where: { id_produk: p.id_product },
+                    include: [{ model: HTransBeli, as: "HTransBeli", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal", "nomor_invoice"] }],
+                    where: { id_produk: idProduct },
                     order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
                 });
 
                 let totalMasuk = 0;
                 const detailMasuk = pembelian.map(d => {
-                    totalMasuk += d.jumlah_barang;
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalMasuk += jumlah;
                     return {
                         tanggal: d.HTransBeli.tanggal,
-                        jumlah: d.jumlah_barang,
+                        jumlah,
                         invoice: d.HTransBeli.nomor_invoice || "-"
                     };
                 });
 
+                // Stok keluar hari ini
                 const penjualan = await DTransJual.findAll({
-                    include: [{
-                        model: HTransJual,
-                        as: "HTransJual",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: ["tanggal"]
-                    }],
-                    where: { id_produk: p.id_product },
+                    include: [{ model: HTransJual, as: "HTransJual", where: { tanggal: { [Op.between]: [start, end] } }, attributes: ["tanggal"] }],
+                    where: { id_produk: idProduct },
                     order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
                 });
 
                 let totalKeluar = 0;
                 const detailKeluar = penjualan.map(d => {
-                    totalKeluar += d.jumlah_barang;
+                    const jumlah = Number(d.jumlah_barang) || 0;
+                    totalKeluar += jumlah;
                     return {
                         tanggal: d.HTransJual.tanggal,
-                        jumlah: d.jumlah_barang,
+                        jumlah,
                     };
                 });
 
-                const stokAwal = p.stok?.[0]?.jumlah || 0;
                 const stokAkhir = stokAwal + totalMasuk - totalKeluar;
 
                 laporan.push({
@@ -565,6 +561,7 @@ const LaporanController = {
             });
         }
     },
+
 
 };
 
