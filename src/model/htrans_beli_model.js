@@ -1,7 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
 const { DTransBeli } = require("./dtrans_beli_model");
-const { Supplier } = require("./supplier_model");
 
 const db = getDB();
 
@@ -44,21 +43,9 @@ const HTransBeli = db.define(
 );
 
 // ✅ Relasi ke detail transaksi pembelian
-HTransBeli.hasMany(DTransBeli, {
-  foreignKey: "id_htrans_beli",
-  as: "detail_transaksi",
-});
+HTransBeli.hasMany(DTransBeli, { foreignKey: "id_htrans_beli", as: "detail_transaksi" });
 
-// ✅ Relasi balik
-DTransBeli.belongsTo(HTransBeli, {
-  foreignKey: "id_htrans_beli",
-  as: "htrans_beli",
-});
-
-// ✅ Relasi ke supplier
-HTransBeli.belongsTo(Supplier, {
-  foreignKey: "id_supplier",
-  as: "supplier",
-});
+// ✅ Relasi balik dari detail ke header
+DTransBeli.belongsTo(HTransBeli, { foreignKey: "id_htrans_beli", as: "HTransBeli" });
 
 module.exports = { HTransBeli };

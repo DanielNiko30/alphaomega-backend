@@ -43,15 +43,6 @@ const DTransBeli = db.define(
 );
 
 // ✅ Relasi ke produk
-DTransBeli.belongsTo(Product, {
-  foreignKey: "id_produk",
-  as: "produk",
-});
-
-// ✅ Relasi balik dari produk ke detail pembelian
-Product.hasMany(DTransBeli, {
-  foreignKey: "id_produk", // ⬅️ ini diperbaiki dari id_product
-  as: "detail_pembelian",
-});
+DTransBeli.belongsTo(Product, { foreignKey: "id_produk", as: "produk" });
 
 module.exports = { DTransBeli };
