@@ -25,10 +25,17 @@ const LaporanController = {
                 include: [
                     {
                         model: DTransJual,
+                        as: "detail_transaksi", // ✅ tambahkan alias
                         include: [
                             {
                                 model: Stok,
-                                include: [{ model: Product, attributes: ["nama_product"] }],
+                                as: "stok", // kalau di model stok juga pakai alias
+                                include: [
+                                    {
+                                        model: Product,
+                                        attributes: ["nama_product"],
+                                    },
+                                ],
                             },
                         ],
                     },
