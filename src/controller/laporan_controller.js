@@ -24,7 +24,7 @@ const LaporanController = {
                 },
             };
 
-            // 🔹 Ambil transaksi + detail + produk + stok
+            // 🔹 Ambil transaksi + detail + produk
             const transaksi = await HTransJual.findAll({
                 where: whereClause,
                 include: [
@@ -37,11 +37,6 @@ const LaporanController = {
                                 as: "produk",
                                 attributes: ["nama_product"],
                             },
-                            {
-                                model: Stok,
-                                as: "stok",
-                                attributes: ["satuan", "harga", "harga_beli"],
-                            },
                         ],
                     },
                 ],
@@ -53,15 +48,25 @@ const LaporanController = {
             let grandTotalHPP = 0;
             let grandTotalUntung = 0;
 
-            transaksi.forEach((trx) => {
+            // 🔹 Loop semua transaksi
+            for (const trx of transaksi) {
                 let totalPenjualanNota = 0;
                 let totalHppNota = 0;
                 let totalUntungNota = 0;
                 let detailBarang = [];
 
-                trx.detail_transaksi.forEach((d) => {
+                // 🔹 Loop setiap detail transaksi
+                for (const d of trx.detail_transaksi) {
                     const produk = d.produk;
-                    const stok = d.stok;
+
+                    // Cari stok berdasarkan id_produk + satuan
+                    const stok = await Stok.findOne({
+                        where: {
+                            id_product_stok: d.id_produk,
+                            satuan: d.satuan,
+                        },
+                        attributes: ["satuan", "harga", "harga_beli"],
+                    });
 
                     const hargaBeli = stok ? stok.harga_beli : 0;
                     const hargaJual = d.harga_satuan;
@@ -85,7 +90,7 @@ const LaporanController = {
                         hpp,
                         untung,
                     });
-                });
+                }
 
                 grandTotalPenjualan += totalPenjualanNota;
                 grandTotalHPP += totalHppNota;
@@ -102,7 +107,7 @@ const LaporanController = {
                         total_untung: totalUntungNota,
                     },
                 });
-            });
+            }
 
             return res.json({
                 success: true,
