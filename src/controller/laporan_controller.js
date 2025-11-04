@@ -382,57 +382,54 @@ const LaporanController = {
             const start = moment(startDate, "YYYY-MM-DD").startOf("day").toDate();
             const end = moment(endDate, "YYYY-MM-DD").endOf("day").toDate();
 
-            const products = await Product.findAll({
-                include: [{ model: Stok, as: "stok" }]
-            });
+            const products = await Product.findAll({ include: [{ model: Stok, as: "stok" }] });
 
             let laporan = [];
 
             for (const p of products) {
                 // 🔹 Stok Masuk (Pembelian)
                 const pembelian = await DTransBeli.findAll({
-                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransBeli,
-                        as: "htrans_beli", // sesuai alias di model
+                        as: "HTransBeli", // gunakan alias persis seperti di model
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal", "nomor_invoice"]
                     }],
-                    order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
                 });
 
                 let totalMasuk = 0;
                 const detailMasuk = pembelian.map(d => {
                     totalMasuk += d.jumlah_barang;
                     return {
-                        tanggal: d.htrans_beli.tanggal,
+                        tanggal: d.HTransBeli.tanggal,
                         jumlah: d.jumlah_barang,
-                        invoice: d.htrans_beli.nomor_invoice || "-"
+                        invoice: d.HTransBeli.nomor_invoice || "-"
                     };
                 });
 
                 // 🔹 Stok Keluar (Penjualan)
                 const penjualan = await DTransJual.findAll({
-                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransJual,
-                        as: "htrans_jual", // sesuai alias di model
+                        as: "HTransJual", // alias default sesuai model
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal"]
                     }],
-                    order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
                 });
 
                 let totalKeluar = 0;
                 const detailKeluar = penjualan.map(d => {
                     totalKeluar += d.jumlah_barang;
                     return {
-                        tanggal: d.htrans_jual.tanggal,
+                        tanggal: d.HTransJual.tanggal,
                         jumlah: d.jumlah_barang,
                     };
                 });
 
-                // 🔹 Stok Akhir
                 const stokAwal = p.stok?.[0]?.jumlah || 0;
                 const stokAkhir = stokAwal + totalMasuk - totalKeluar;
 
@@ -477,52 +474,48 @@ const LaporanController = {
             const start = moment(tanggal, "YYYY-MM-DD").startOf("day").toDate();
             const end = moment(tanggal, "YYYY-MM-DD").endOf("day").toDate();
 
-            const products = await Product.findAll({
-                include: [{ model: Stok, as: "stok" }]
-            });
+            const products = await Product.findAll({ include: [{ model: Stok, as: "stok" }] });
 
             let laporan = [];
 
             for (const p of products) {
-                // 🔹 Stok Masuk hari ini
                 const pembelian = await DTransBeli.findAll({
-                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransBeli,
-                        as: "htrans_beli", // sesuai alias
+                        as: "HTransBeli",
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal", "nomor_invoice"]
                     }],
-                    order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
                 });
 
                 let totalMasuk = 0;
                 const detailMasuk = pembelian.map(d => {
                     totalMasuk += d.jumlah_barang;
                     return {
-                        tanggal: d.htrans_beli.tanggal,
+                        tanggal: d.HTransBeli.tanggal,
                         jumlah: d.jumlah_barang,
-                        invoice: d.htrans_beli.nomor_invoice || "-"
+                        invoice: d.HTransBeli.nomor_invoice || "-"
                     };
                 });
 
-                // 🔹 Stok Keluar hari ini
                 const penjualan = await DTransJual.findAll({
-                    where: { id_produk: p.id_product },
                     include: [{
                         model: HTransJual,
-                        as: "htrans_jual", // sesuai alias
+                        as: "HTransJual",
                         where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: ["tanggal"]
                     }],
-                    order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
                 });
 
                 let totalKeluar = 0;
                 const detailKeluar = penjualan.map(d => {
                     totalKeluar += d.jumlah_barang;
                     return {
-                        tanggal: d.htrans_jual.tanggal,
+                        tanggal: d.HTransJual.tanggal,
                         jumlah: d.jumlah_barang,
                     };
                 });
