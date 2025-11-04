@@ -368,6 +368,195 @@ const LaporanController = {
         }
     },
 
+    getLaporanStok: async (req, res) => {
+        try {
+            const { startDate, endDate } = req.query;
+
+            if (!startDate || !endDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parameter startDate dan endDate wajib diisi (format: YYYY-MM-DD)",
+                });
+            }
+
+            const start = moment(startDate, "YYYY-MM-DD").startOf("day").toDate();
+            const end = moment(endDate, "YYYY-MM-DD").endOf("day").toDate();
+
+            const products = await Product.findAll({
+                include: [{ model: Stok, as: "stok" }]
+            });
+
+            let laporan = [];
+
+            for (const p of products) {
+                // 🔹 Stok Masuk (Pembelian)
+                const pembelian = await DTransBeli.findAll({
+                    include: [{
+                        model: HTransBeli,
+                        as: "htrans_beli",
+                        where: { tanggal: { [Op.between]: [start, end] } },
+                        attributes: ["tanggal", "nomor_invoice"]
+                    }],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
+                });
+
+                let totalMasuk = 0;
+                const detailMasuk = pembelian.map(d => {
+                    totalMasuk += d.jumlah_barang;
+                    return {
+                        tanggal: d.htrans_beli.tanggal,
+                        jumlah: d.jumlah_barang,
+                        invoice: d.htrans_beli.nomor_invoice || "-"
+                    };
+                });
+
+                // 🔹 Stok Keluar (Penjualan)
+                const penjualan = await DTransJual.findAll({
+                    include: [{
+                        model: HTransJual,
+                        as: "htrans_jual",
+                        where: { tanggal: { [Op.between]: [start, end] } },
+                        attributes: ["tanggal"]
+                    }],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
+                });
+
+                let totalKeluar = 0;
+                const detailKeluar = penjualan.map(d => {
+                    totalKeluar += d.jumlah_barang;
+                    return {
+                        tanggal: d.htrans_jual.tanggal,
+                        jumlah: d.jumlah_barang,
+                    };
+                });
+
+                // 🔹 Stok Akhir
+                const stokAwal = p.stok?.[0]?.jumlah || 0;
+                const stokAkhir = stokAwal + totalMasuk - totalKeluar;
+
+                laporan.push({
+                    nama_product: p.nama_product,
+                    stok_awal: stokAwal,
+                    total_masuk: totalMasuk,
+                    detail_masuk: detailMasuk,
+                    total_keluar: totalKeluar,
+                    detail_keluar: detailKeluar,
+                    stok_akhir: stokAkhir
+                });
+            }
+
+            return res.json({
+                success: true,
+                periode: `${startDate} s.d ${endDate}`,
+                data: laporan
+            });
+
+        } catch (err) {
+            console.error("❌ Error getLaporanStok:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Gagal memuat laporan stok",
+                error: err.message
+            });
+        }
+    },
+
+    getLaporanStokHarian: async (req, res) => {
+        try {
+            const { tanggal } = req.query;
+
+            if (!tanggal) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parameter 'tanggal' wajib diisi (format: YYYY-MM-DD)",
+                });
+            }
+
+            const start = moment(tanggal, "YYYY-MM-DD").startOf("day").toDate();
+            const end = moment(tanggal, "YYYY-MM-DD").endOf("day").toDate();
+
+            const products = await Product.findAll({
+                include: [{ model: Stok, as: "stok" }]
+            });
+
+            let laporan = [];
+
+            for (const p of products) {
+                // 🔹 Stok Masuk hari ini
+                const pembelian = await DTransBeli.findAll({
+                    include: [{
+                        model: HTransBeli,
+                        as: "htrans_beli",
+                        where: { tanggal: { [Op.between]: [start, end] } },
+                        attributes: ["tanggal", "nomor_invoice"]
+                    }],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransBeli, as: "htrans_beli" }, "tanggal", "ASC"]],
+                });
+
+                let totalMasuk = 0;
+                const detailMasuk = pembelian.map(d => {
+                    totalMasuk += d.jumlah_barang;
+                    return {
+                        tanggal: d.htrans_beli.tanggal,
+                        jumlah: d.jumlah_barang,
+                        invoice: d.htrans_beli.nomor_invoice || "-"
+                    };
+                });
+
+                // 🔹 Stok Keluar hari ini
+                const penjualan = await DTransJual.findAll({
+                    include: [{
+                        model: HTransJual,
+                        as: "htrans_jual",
+                        where: { tanggal: { [Op.between]: [start, end] } },
+                        attributes: ["tanggal"]
+                    }],
+                    where: { id_produk: p.id_product },
+                    order: [[{ model: HTransJual, as: "htrans_jual" }, "tanggal", "ASC"]],
+                });
+
+                let totalKeluar = 0;
+                const detailKeluar = penjualan.map(d => {
+                    totalKeluar += d.jumlah_barang;
+                    return {
+                        tanggal: d.htrans_jual.tanggal,
+                        jumlah: d.jumlah_barang,
+                    };
+                });
+
+                const stokAwal = p.stok?.[0]?.jumlah || 0;
+                const stokAkhir = stokAwal + totalMasuk - totalKeluar;
+
+                laporan.push({
+                    nama_product: p.nama_product,
+                    stok_awal: stokAwal,
+                    total_masuk: totalMasuk,
+                    detail_masuk: detailMasuk,
+                    total_keluar: totalKeluar,
+                    detail_keluar: detailKeluar,
+                    stok_akhir: stokAkhir
+                });
+            }
+
+            return res.json({
+                success: true,
+                tanggal,
+                data: laporan
+            });
+
+        } catch (err) {
+            console.error("❌ Error getLaporanStokHarian:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Gagal memuat laporan stok harian",
+                error: err.message
+            });
+        }
+    },
+
 };
 
 module.exports = LaporanController;
