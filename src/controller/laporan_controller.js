@@ -327,6 +327,7 @@ const LaporanController = {
     getLaporanPembelianHarian: async (req, res) => {
         try {
             const { tanggal } = req.query;
+
             if (!tanggal) {
                 return res.status(400).json({
                     success: false,
@@ -334,19 +335,24 @@ const LaporanController = {
                 });
             }
 
+            // 🔹 Langsung pakai tanggal, cocok untuk kolom DATE
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal }, // langsung cocokkan tanggal string
+                where: { tanggal },
                 include: [
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
-                            { model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }
+                            {
+                                model: Product,
+                                as: "produk",
+                                include: [{ model: Stok, as: "stok" }],
+                            },
                         ],
                     },
                     { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
                 ],
-                order: [["tanggal", "ASC"]],
+                order: [["id_htrans_beli", "ASC"]],
             });
 
             if (!transaksi || transaksi.length === 0) {
@@ -361,8 +367,8 @@ const LaporanController = {
             let laporan = [];
             let totalPembelian = 0;
 
-            for (const trx of transaksi) {
-                for (const d of trx.detail_transaksi) {
+            transaksi.forEach((trx) => {
+                trx.detail_transaksi.forEach((d) => {
                     const produk = d.produk;
                     const stok = produk?.stok?.[0];
 
@@ -384,8 +390,8 @@ const LaporanController = {
                         pembayaran: trx.metode_pembayaran,
                         invoice: trx.nomor_invoice,
                     });
-                }
-            }
+                });
+            });
 
             return res.json({
                 success: true,
@@ -401,7 +407,8 @@ const LaporanController = {
                 error: err.message,
             });
         }
-    },
+    }
+
 };
 
 module.exports = LaporanController;
