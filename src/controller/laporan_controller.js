@@ -228,15 +228,12 @@ const LaporanController = {
                 });
             }
 
-            const whereClause = {
-                tanggal: {
-                    [Op.between]: [startDate, endDate],
-                },
-            };
+            // Pakai startOf / endOf untuk keamanan
+            const start = moment(startDate, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+            const end = moment(endDate, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
 
-            // 🔹 Ambil transaksi pembelian lengkap
             const transaksi = await HTransBeli.findAll({
-                where: whereClause,
+                where: { tanggal: { [Op.between]: [start, end] } },
                 include: [
                     {
                         model: DTransBeli,
@@ -245,80 +242,55 @@ const LaporanController = {
                             {
                                 model: Product,
                                 as: "produk",
-                                attributes: ["nama_product"],
-                            },
+                                include: [{ model: Stok, as: "stok" }]
+                            }
                         ],
                     },
-                    {
-                        model: Supplier,
-                        as: "supplier",
-                        attributes: ["nama_supplier"],
-                    },
+                    { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
                 ],
                 order: [["tanggal", "ASC"]],
             });
 
             let laporan = [];
-            let grandTotalPembelian = 0;
+            let grandTotal = 0;
 
-            // 🔹 Loop semua transaksi
-            for (const trx of transaksi) {
-                let totalNota = 0;
-                let detailBarang = [];
-
-                // 🔹 Loop detail per transaksi
-                for (const d of trx.detail_transaksi) {
+            transaksi.forEach(trx => {
+                trx.detail_transaksi.forEach(d => {
                     const produk = d.produk;
-
-                    // Cari stok buat tau harga beli per satuan (optional)
-                    const stok = await Stok.findOne({
-                        where: { id_product_stok: d.id_produk },
-                        attributes: ["satuan", "harga", "harga_beli"],
-                    });
+                    const stok = produk?.stok?.find(s => s.satuan === d.satuan) || produk?.stok?.[0];
 
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
                     const jumlah = d.jumlah_barang;
                     const subtotal = hargaBeli * jumlah;
 
-                    totalNota += subtotal;
+                    grandTotal += subtotal;
 
-                    detailBarang.push({
-                        nama_product: produk?.nama_product || "Tidak Diketahui",
-                        satuan: stok?.satuan || d.satuan,
+                    laporan.push({
+                        waktu: trx.tanggal,
+                        barang: produk?.nama_product || "Tidak Diketahui",
+                        pemasok: trx.supplier?.nama_supplier || "-",
                         jumlah,
+                        satuan: stok?.satuan || d.satuan,
                         harga_beli: hargaBeli,
                         subtotal,
+                        pembayaran: trx.metode_pembayaran,
+                        invoice: trx.nomor_invoice,
                     });
-                }
-
-                grandTotalPembelian += totalNota;
-
-                laporan.push({
-                    id_htrans_beli: trx.id_htrans_beli,
-                    tanggal: trx.tanggal,
-                    pemasok: trx.supplier?.nama_supplier || "-",
-                    metode_pembayaran: trx.metode_pembayaran,
-                    nomor_invoice: trx.nomor_invoice,
-                    detail: detailBarang,
-                    total_nota: {
-                        total_pembelian: totalNota,
-                    },
                 });
-            }
+            });
 
             return res.json({
                 success: true,
                 periode: `${startDate} s.d ${endDate}`,
                 data: laporan,
-                grand_total: {
-                    total_pembelian: grandTotalPembelian,
-                },
+                grand_total: { pembelian: grandTotal },
             });
+
         } catch (err) {
             console.error("❌ Error getLaporanPembelian:", err);
             return res.status(500).json({
                 success: false,
-                message: "Gagal memuat laporan pembelian harian",
+                message: "Gagal memuat laporan pembelian",
                 error: err.message,
             });
         }
@@ -326,7 +298,7 @@ const LaporanController = {
 
     getLaporanPembelianHarian: async (req, res) => {
         try {
-            let { tanggal } = req.query;
+            const { tanggal } = req.query;
 
             if (!tanggal) {
                 return res.status(400).json({
@@ -335,20 +307,12 @@ const LaporanController = {
                 });
             }
 
-            // 🔹 Hapus spasi dan pastikan format
-            tanggal = tanggal.trim();
+            // StartOf / EndOf day
+            const start = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+            const end = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
 
-            // 🔹 Bisa pakai moment untuk validasi
-            if (!moment(tanggal, "YYYY-MM-DD", true).isValid()) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Format tanggal tidak valid. Gunakan YYYY-MM-DD",
-                });
-            }
-
-            // 🔹 Untuk tipe DATE di MySQL, bisa pakai Op.eq
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal: { [Op.eq]: tanggal } },
+                where: { tanggal: { [Op.between]: [start, end] } },
                 include: [
                     {
                         model: DTransBeli,
@@ -361,10 +325,6 @@ const LaporanController = {
                 ],
                 order: [["id_htrans_beli", "ASC"]],
             });
-
-            // 🔹 Debug log supaya bisa cek apa query match
-            console.log("Query tanggal:", tanggal);
-            console.log("Jumlah transaksi ditemukan:", transaksi.length);
 
             if (!transaksi || transaksi.length === 0) {
                 return res.json({
@@ -381,9 +341,8 @@ const LaporanController = {
             transaksi.forEach(trx => {
                 trx.detail_transaksi.forEach(d => {
                     const produk = d.produk;
-                    const stok = produk?.stok?.[0];
+                    const stok = produk?.stok?.find(s => s.satuan === d.satuan) || produk?.stok?.[0];
 
-                    const satuan = stok?.satuan || "-";
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
                     const jumlah = d.jumlah_barang;
                     const subtotal = hargaBeli * jumlah;
@@ -395,7 +354,7 @@ const LaporanController = {
                         barang: produk?.nama_product || "Tidak Diketahui",
                         pemasok: trx.supplier?.nama_supplier || "-",
                         jumlah,
-                        satuan,
+                        satuan: stok?.satuan || d.satuan,
                         harga_beli: hargaBeli,
                         subtotal,
                         pembayaran: trx.metode_pembayaran,
