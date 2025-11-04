@@ -307,12 +307,9 @@ const LaporanController = {
                 });
             }
 
-            // StartOf / EndOf day
-            const start = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
-            const end = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
-
+            // ✅ langsung pakai tanggal string, karena kolom DATE
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal: { [Op.between]: [start, end] } },
+                where: { tanggal }, // Op.eq secara default
                 include: [
                     {
                         model: DTransBeli,
