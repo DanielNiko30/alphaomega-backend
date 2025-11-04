@@ -327,7 +327,6 @@ const LaporanController = {
     getLaporanPembelianHarian: async (req, res) => {
         try {
             const { tanggal } = req.query;
-
             if (!tanggal) {
                 return res.status(400).json({
                     success: false,
@@ -335,22 +334,14 @@ const LaporanController = {
                 });
             }
 
-            // 🔹 Parse tanggal menggunakan moment agar aman
+            // 🔹 Aman untuk DATE & DATETIME
             const dayStart = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
             const dayEnd = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
 
-            const { Op } = require("sequelize");
-
-            // 🔹 Where clause untuk tipe DATE maupun DATETIME
-            const whereClause = {
-                tanggal: {
-                    [Op.between]: [dayStart, dayEnd],
-                },
-            };
-
-            // 🔹 Ambil transaksi pembelian lengkap (harian)
             const transaksi = await HTransBeli.findAll({
-                where: whereClause,
+                where: {
+                    tanggal: { [Op.between]: [dayStart, dayEnd] },
+                },
                 include: [
                     {
                         model: DTransBeli,
@@ -363,16 +354,11 @@ const LaporanController = {
                             },
                         ],
                     },
-                    {
-                        model: Supplier,
-                        as: "supplier",
-                        attributes: ["nama_supplier"],
-                    },
+                    { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
                 ],
                 order: [["tanggal", "ASC"]],
             });
 
-            // 🔹 Kalau gak ada data
             if (!transaksi || transaksi.length === 0) {
                 return res.json({
                     success: true,
@@ -385,7 +371,6 @@ const LaporanController = {
             let laporan = [];
             let totalPembelian = 0;
 
-            // 🔹 Loop semua transaksi
             for (const trx of transaksi) {
                 for (const d of trx.detail_transaksi) {
                     const produk = d.produk;
@@ -415,10 +400,9 @@ const LaporanController = {
             return res.json({
                 success: true,
                 data: laporan,
-                total: {
-                    pembelian: totalPembelian,
-                },
+                total: { pembelian: totalPembelian },
             });
+
         } catch (err) {
             console.error("❌ Error getLaporanPembelianHarian:", err);
             return res.status(500).json({
@@ -428,7 +412,6 @@ const LaporanController = {
             });
         }
     },
-
 };
 
 module.exports = LaporanController;
