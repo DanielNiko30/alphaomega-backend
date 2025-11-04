@@ -334,8 +334,6 @@ const LaporanController = {
                 });
             }
 
-            const { Op } = require("sequelize");
-
             // 🔹 Fixed: gunakan tanggal langsung, tanpa jam
             const whereClause = {
                 tanggal: tanggal, // cocok untuk tipe DATE
