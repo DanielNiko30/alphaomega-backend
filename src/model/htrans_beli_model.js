@@ -49,8 +49,6 @@ HTransBeli.hasMany(DTransBeli, { foreignKey: "id_htrans_beli", as: "detail_trans
 // ✅ Relasi balik dari detail ke header
 DTransBeli.belongsTo(HTransBeli, { foreignKey: "id_htrans_beli", as: "HTransBeli" });
 
-const { Supplier } = require("./supplier_model");
-
 HTransBeli.belongsTo(Supplier, {
   foreignKey: "id_supplier",
   as: "supplier",
