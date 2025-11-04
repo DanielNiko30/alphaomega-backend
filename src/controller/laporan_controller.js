@@ -228,9 +228,12 @@ const LaporanController = {
                 });
             }
 
-            // ✅ langsung pakai DATE, tanpa jam
+            // Pakai startOf / endOf untuk keamanan
+            const start = moment(startDate, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+            const end = moment(endDate, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
+
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal: { [Op.between]: [startDate, endDate] } },
+                where: { tanggal: { [Op.between]: [start, end] } },
                 include: [
                     {
                         model: DTransBeli,
@@ -254,7 +257,6 @@ const LaporanController = {
             transaksi.forEach(trx => {
                 trx.detail_transaksi.forEach(d => {
                     const produk = d.produk;
-                    // Cari stok berdasarkan satuan, fallback ke stok pertama
                     const stok = produk?.stok?.find(s => s.satuan === d.satuan) || produk?.stok?.[0];
 
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
@@ -305,9 +307,12 @@ const LaporanController = {
                 });
             }
 
-            // ✅ langsung pakai DATE, tanpa jam
+            // StartOf / EndOf day
+            const start = moment(tanggal, "YYYY-MM-DD").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+            const end = moment(tanggal, "YYYY-MM-DD").endOf("day").format("YYYY-MM-DD HH:mm:ss");
+
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal },
+                where: { tanggal: { [Op.between]: [start, end] } },
                 include: [
                     {
                         model: DTransBeli,
