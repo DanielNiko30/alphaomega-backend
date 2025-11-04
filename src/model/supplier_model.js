@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { getDB } = require("../config/sequelize");
+const { HTransBeli } = require('./htrans_beli_model');
 
 const db = getDB();
 const Supplier = db.define(

@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { getDB } = require("../config/sequelize");
 const { DTransBeli } = require("./dtrans_beli_model");
+const { Supplier } = require("./supplier_model");
 
 const db = getDB();
 
