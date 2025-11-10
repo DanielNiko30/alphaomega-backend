@@ -1497,12 +1497,14 @@ const setShopeePickup = async (req, res) => {
 
             const jumlahKurangi = item.quantity;
 
-            if (!stock || stock.stok < jumlahKurangi) {
+            // <-- Perubahan: jika stok tidak ada ATAU setelah dikurangi stok <= 0, anggap tidak cukup
+            if (!stock || (stock.stok - jumlahKurangi) <= 0) {
                 stokTidakCukup.push({
                     id_produk: item.id_product_stok,
                     satuan: item.satuan,
                     stok_tersedia: stock ? stock.stok : 0,
                     jumlah_diminta: jumlahKurangi,
+                    sisa_setelah_pengurangan: stock ? stock.stok - jumlahKurangi : null,
                 });
             } else {
                 itemsForTransaction.push({
@@ -1669,12 +1671,14 @@ const setShopeeDropoff = async (req, res) => {
 
                 const jumlahKurangi = item.quantity;
 
-                if (!stock || stock.stok < jumlahKurangi) {
+                // 🔍 Tambahan: stok tidak boleh kurang atau sisa <= 0
+                if (!stock || (stock.stok - jumlahKurangi) <= 0) {
                     stokTidakCukup.push({
                         id_produk: item.id_product_stok,
                         satuan: item.satuan,
                         stok_tersedia: stock ? stock.stok : 0,
-                        jumlah_diminta: jumlahKurangi
+                        jumlah_diminta: jumlahKurangi,
+                        sisa_setelah_pengurangan: stock ? stock.stok - jumlahKurangi : null,
                     });
                 } else {
                     itemsForTransaction.push({
