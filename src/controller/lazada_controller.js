@@ -933,7 +933,10 @@ const getFullOrderDetailLazada = async (req, res) => {
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
-            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan di DB" });
+            return res.status(400).json({
+                success: false,
+                message: "Token Lazada tidak ditemukan di DB",
+            });
         }
 
         const accessToken = lazadaData.access_token.trim();
@@ -981,14 +984,75 @@ const getFullOrderDetailLazada = async (req, res) => {
         const itemsResponse = await axios.get(urlItems);
         const itemsData = itemsResponse.data?.data || [];
 
-        // ✅ Gabungkan hasil
-        res.json({
+        // ========== STEP 3: COCOKKAN DENGAN DB LOKAL ==========
+        const combinedItems = [];
+        for (const item of itemsData) {
+            const stok = await db.query(
+                `
+                SELECT 
+                    s.id_product_stok,
+                    s.id_product_lazada,
+                    s.satuan,
+                    p.nama_product,
+                    p.gambar_product
+                FROM stok s
+                JOIN product p ON p.id_product = s.id_product_stok
+                WHERE s.id_product_lazada = :itemId
+                LIMIT 1
+            `,
+                {
+                    replacements: { itemId: String(item.item_id) },
+                    type: db.QueryTypes.SELECT,
+                }
+            );
+
+            if (stok.length > 0) {
+                const local = stok[0];
+                const gambarBase64 = local.gambar_product
+                    ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
+                    : null;
+
+                combinedItems.push({
+                    item_id: item.item_id,
+                    item_name: item.name || item.sku || "-",
+                    variation_name: item.sku_name || item.variation || "",
+                    quantity: item.quantity_purchased || item.quantity || 0,
+                    price: item.item_price || item.paid_price || 0,
+                    from_db: true,
+                    id_product_stok: local.id_product_stok,
+                    satuan: local.satuan,
+                    nama_product: local.nama_product,
+                    gambar_product: gambarBase64,
+                });
+            } else {
+                combinedItems.push({
+                    item_id: item.item_id,
+                    item_name: item.name || "-",
+                    variation_name: item.sku_name || "",
+                    quantity: item.quantity_purchased || item.quantity || 0,
+                    price: item.item_price || item.paid_price || 0,
+                    from_db: false,
+                });
+            }
+        }
+
+        // ========== STEP 4: FORMAT RESPONSE AKHIR ==========
+        const fullOrder = {
+            order_id: orderData.order_id,
+            order_number: orderData.order_number,
+            buyer_username: orderData.customer_first_name || orderData.buyer_name || "-",
+            total_amount: orderData.price || orderData.total_amount || 0,
+            status: orderData.status || "-",
+            created_at: orderData.created_at,
+            address_shipping: orderData.address_shipping,
+            payment_method: orderData.payment_method,
+            items: combinedItems,
+        };
+
+        return res.json({
             success: true,
-            message: "Berhasil ambil detail pesanan + item dari Lazada (Production)",
-            data: {
-                order: orderData,
-                items: itemsData,
-            },
+            message: "Berhasil mengambil detail order Lazada + data lokal termasuk gambar & nama produk",
+            data: fullOrder,
         });
     } catch (err) {
         console.error("❌ Lazada GetFullOrderDetail Error:", err.response?.data || err.message);
