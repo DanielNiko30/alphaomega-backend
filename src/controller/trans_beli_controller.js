@@ -45,10 +45,6 @@ const TransBeliController = {
             const transaction = await HTransBeli.findByPk(id, {
                 include: [
                     {
-                        model: Supplier,
-                        as: "supplier",
-                    },
-                    {
                         model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
