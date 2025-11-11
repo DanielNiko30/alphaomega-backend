@@ -42,13 +42,30 @@ const TransBeliController = {
         try {
             const { id } = req.params;
 
-            const details = await DTransBeli.findAll({
-                where: { id_htrans_beli: id }
+            // Cari header transaksi + detail dari DTransBeli
+            const transaction = await HTransBeli.findByPk(id, {
+                include: [
+                    {
+                        model: DTransBeli,
+                        as: "detail_transaksi", // alias harus sama dengan relasi HTransBeli.hasMany
+                        include: [
+                            {
+                                model: Product,
+                                as: "produk", // alias dari DTransBeli.belongsTo(Product)
+                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar']
+                            }
+                        ]
+                    }
+                ]
             });
 
-            res.json(details);
+            if (!transaction) {
+                return res.status(404).json({ message: "Transaction not found" });
+            }
+
+            res.json(transaction);
         } catch (error) {
-            console.error("❌ Error getDetailTransactionByHeaderId:", error);
+            console.error("❌ Error getTransactionById:", error);
             res.status(500).json({ message: error.message });
         }
     },
