@@ -520,7 +520,22 @@ const TransJualController = {
         try {
             const transaksiLunas = await HTransJual.findAll({
                 where: { status: "Lunas" },
-                include: "detail_transaksi",
+                include: [
+                    {
+                        model: DTransJual,
+                        as: "detail_transaksi",
+                    },
+                    {
+                        model: User,
+                        as: "user",
+                        attributes: ["name"], // Nama pembeli
+                    },
+                    {
+                        model: User,
+                        as: "penjual",
+                        attributes: ["name"], // Nama pegawai
+                    },
+                ],
             });
 
             res.json(transaksiLunas);
