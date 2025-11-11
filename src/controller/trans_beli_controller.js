@@ -51,7 +51,7 @@ const TransBeliController = {
                             {
                                 model: Product,
                                 as: "produk",
-                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar']
+                                attributes: ['id_product', 'nama_product', 'satuan', 'harga_beli', 'harga_jual', 'gambar_product']
                                 // bisa di-uncomment kalau yakin kolom ada di DB
                             },
                         ],
