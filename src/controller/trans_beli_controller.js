@@ -40,10 +40,10 @@ const TransBeliController = {
     // Mendapatkan transaksi pembelian berdasarkan ID
     getTransactionById: async (req, res) => {
         try {
-            const { id_htrans } = req.params;
+            const { id } = req.params;
 
             const details = await DTransBeli.findAll({
-                where: { id_htrans_beli: id_htrans }
+                where: { id_htrans_beli: id }
             });
 
             res.json(details);
