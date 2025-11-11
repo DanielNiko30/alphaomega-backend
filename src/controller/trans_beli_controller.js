@@ -42,10 +42,10 @@ const TransBeliController = {
         try {
             const { id } = req.params;
 
-            const transaction = await HTransJual.findByPk(id, {
+            const transaction = await HTransBeli.findByPk(id, {
                 include: [
                     {
-                        model: DTransJual,
+                        model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
                             {
