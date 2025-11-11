@@ -544,15 +544,33 @@ const TransJualController = {
         }
     },
 
-    getDetailTransactionByHeaderId: async (req, res) => {
+    getTransactionById: async (req, res) => {
         try {
-            const { id_htrans } = req.params;
-            const details = await DTransJual.findAll({
-                where: { id_htrans_jual: id_htrans }
+            const { id } = req.params;
+
+            const transaction = await HTransBeli.findByPk(id, {
+                include: [
+                    {
+                        model: DTransBeli,
+                        as: 'detail_transaksi',
+                        include: [
+                            {
+                                model: Produk,
+                                as: 'produk',
+                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar'],
+                            },
+                        ],
+                    },
+                ],
             });
 
-            res.json(details);
+            if (!transaction) {
+                return res.status(404).json({ message: "Transaction not found" });
+            }
+
+            res.json(transaction);
         } catch (error) {
+            console.error("❌ Error getTransactionById:", error);
             res.status(500).json({ message: error.message });
         }
     },
