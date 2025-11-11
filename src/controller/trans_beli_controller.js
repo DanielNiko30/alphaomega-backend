@@ -40,32 +40,15 @@ const TransBeliController = {
     // Mendapatkan transaksi pembelian berdasarkan ID
     getTransactionById: async (req, res) => {
         try {
-            const { id } = req.params;
+            const { id_htrans } = req.params;
 
-            // Cari header transaksi + detail dari DTransBeli
-            const transaction = await HTransBeli.findByPk(id, {
-                include: [
-                    {
-                        model: DTransBeli,
-                        as: "detail_transaksi", // alias harus sama dengan relasi HTransBeli.hasMany
-                        include: [
-                            {
-                                model: Product,
-                                as: "produk", // alias dari DTransBeli.belongsTo(Product)
-                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar']
-                            }
-                        ]
-                    }
-                ]
+            const details = await DTransJual.findAll({
+                where: { id_htrans_jual: id_htrans }
             });
 
-            if (!transaction) {
-                return res.status(404).json({ message: "Transaction not found" });
-            }
-
-            res.json(transaction);
+            res.json(details);
         } catch (error) {
-            console.error("❌ Error getTransactionById:", error);
+            console.error("❌ Error getDetailTransactionByHeaderId:", error);
             res.status(500).json({ message: error.message });
         }
     },
