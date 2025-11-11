@@ -933,16 +933,13 @@ const getFullOrderDetailLazada = async (req, res) => {
 
         const lazadaData = await Lazada.findOne();
         if (!lazadaData?.access_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Token Lazada tidak ditemukan di DB",
-            });
+            return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan di DB" });
         }
 
         const accessToken = lazadaData.access_token.trim();
         const apiKey = process.env.LAZADA_APP_KEY.trim();
         const appSecret = process.env.LAZADA_APP_SECRET.trim();
-        const baseUrl = "https://api.lazada.co.id/rest";
+        const baseUrl = "https://api.lazada.co.id/rest"; // ✅ toko asli
 
         // ========== STEP 1: GET ORDER DETAIL ==========
         const apiPathOrder = "/order/get";
@@ -984,85 +981,14 @@ const getFullOrderDetailLazada = async (req, res) => {
         const itemsResponse = await axios.get(urlItems);
         const itemsData = itemsResponse.data?.data || [];
 
-        // ========== STEP 3: GABUNGKAN DENGAN DATA LOKAL (seperti Shopee) ==========
-        const itemList = [];
-
-        for (const item of itemsData) {
-            const stok = await db.query(
-                `
-        SELECT 
-          s.id_product_stok,
-          s.id_product_lazada,
-          s.satuan,
-          p.nama_product,
-          p.gambar_product
-        FROM stok s
-        JOIN product p ON p.id_product = s.id_product_stok
-        WHERE s.id_product_lazada = :itemId
-        LIMIT 1
-      `,
-                {
-                    replacements: { itemId: String(item.item_id) },
-                    type: db.QueryTypes.SELECT,
-                }
-            );
-
-            if (stok.length > 0) {
-                const local = stok[0];
-                const gambarBase64 = local.gambar_product
-                    ? `data:image/png;base64,${Buffer.from(local.gambar_product).toString("base64")}`
-                    : null;
-
-                itemList.push({
-                    item_id: item.item_id,
-                    item_name: item.name || "-",
-                    variation_name: item.sku_name || item.variation || "",
-                    quantity: item.quantity_purchased || item.quantity || 0,
-                    price: item.item_price || item.paid_price || 0,
-                    from_db: true,
-                    id_product_stok: local.id_product_stok,
-                    satuan: local.satuan,
-                    nama_product: local.nama_product,
-                    gambar_product: gambarBase64,
-                });
-            } else {
-                itemList.push({
-                    item_id: item.item_id,
-                    item_name: item.name || "-",
-                    variation_name: item.sku_name || "",
-                    quantity: item.quantity_purchased || item.quantity || 0,
-                    price: item.item_price || item.paid_price || 0,
-                    from_db: false,
-                });
-            }
-        }
-
-        // ========== STEP 4: FORMAT DATA AKHIR (sama seperti Shopee) ==========
-        const orderFormatted = {
-            order_sn: String(orderData.order_number || orderData.order_id),
-            buyer_username: orderData.customer_first_name || orderData.buyer_name || "-",
-            total_amount: orderData.price || orderData.total_amount || 0,
-            status: orderData.status || "-",
-            pickup_done_time: orderData.created_at || null,
-            recipient_address: orderData.address_shipping || {},
-            payment_method: orderData.payment_method || "-",
-            items: itemList,
-            packages: [
-                {
-                    package_number: String(orderData.order_number || orderData.order_id),
-                    booking_sn: null,
-                    advance_package: false,
-                    logistics_status: orderData.status || "-",
-                    shipping_carrier: orderData.shipping_carrier || "-",
-                    allow_self_design_awb: false,
-                },
-            ],
-        };
-
-        return res.json({
+        // ✅ Gabungkan hasil
+        res.json({
             success: true,
-            message: "Berhasil mengambil detail order Lazada + data lokal termasuk gambar & nama produk",
-            data: [orderFormatted], // ✅ sesuai Shopee: data = array
+            message: "Berhasil ambil detail pesanan + item dari Lazada (Production)",
+            data: {
+                order: orderData,
+                items: itemsData,
+            },
         });
     } catch (err) {
         console.error("❌ Lazada GetFullOrderDetail Error:", err.response?.data || err.message);
