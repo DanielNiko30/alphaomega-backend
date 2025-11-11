@@ -42,8 +42,8 @@ const TransBeliController = {
         try {
             const { id_htrans } = req.params;
 
-            const details = await DTransJual.findAll({
-                where: { id_htrans_jual: id_htrans }
+            const details = await DTransBeli.findAll({
+                where: { id_htrans_beli: id_htrans }
             });
 
             res.json(details);
