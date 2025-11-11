@@ -42,17 +42,23 @@ const TransBeliController = {
         try {
             const { id } = req.params;
 
-            const transaction = await HTransBeli.findByPk(id, {
+            const transaction = await HTransJual.findByPk(id, {
                 include: [
                     {
-                        model: DTransBeli,
+                        model: DTransJual,
                         as: "detail_transaksi",
                         include: [
                             {
                                 model: Product,
                                 as: "produk",
-                                attributes: ['id_product', 'nama_product', 'satuan', 'harga_beli', 'harga_jual', 'gambar_product']
-                                // bisa di-uncomment kalau yakin kolom ada di DB
+                                attributes: ["id_product", "nama_product", "gambar_product"],
+                                include: [
+                                    {
+                                        model: Stok,
+                                        as: "stok",
+                                        attributes: ["satuan", "harga", "harga_beli"],
+                                    },
+                                ],
                             },
                         ],
                     },
