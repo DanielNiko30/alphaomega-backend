@@ -41,20 +41,21 @@ const TransBeliController = {
         try {
             const { id } = req.params;
 
+            // Cari header transaksi + detail dari DTransBeli
             const transaction = await HTransBeli.findByPk(id, {
                 include: [
                     {
                         model: DTransBeli,
-                        as: 'detail_transaksi',
+                        as: "detail_transaksi", // alias harus sama dengan relasi HTransBeli.hasMany
                         include: [
                             {
-                                model: Produk,
-                                as: 'produk',
-                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar'],
-                            },
-                        ],
-                    },
-                ],
+                                model: Product,
+                                as: "produk", // alias dari DTransBeli.belongsTo(Product)
+                                attributes: ['id_produk', 'nama_produk', 'satuan', 'harga_beli', 'harga_jual', 'gambar']
+                            }
+                        ]
+                    }
+                ]
             });
 
             if (!transaction) {
