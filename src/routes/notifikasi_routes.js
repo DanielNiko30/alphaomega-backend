@@ -3,8 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 
 // 🔐 Ambil credentials dari environment
-const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
-const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
+const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID?.trim();
+const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY?.trim();
 
 /**
  * 📤 POST /api/notification/send
