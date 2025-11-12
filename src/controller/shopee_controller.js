@@ -1453,21 +1453,17 @@ const getShippingParameter = async (req, res) => {
 const setShopeePickup = async (req, res) => {
     try {
         const { order_sn, address_id, package_number, pickup_time_id } = req.body;
-
         if (!order_sn || !address_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Field 'order_sn' dan 'address_id' wajib diisi",
-            });
+            return res.status(400).json({ success: false, message: "Field 'order_sn' dan 'address_id' wajib diisi" });
         }
 
         // Ambil user login
-        let currentUser = req.user;
+        const currentUser = req.user;
         if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat membuat transaksi' });
         }
 
-        // Jika admin, pakai pegawai online sebagai id_user transaksi
+        // Tentukan id_user transaksi
         let idUserForTransaction;
         if (currentUser.role === 'pegawai online') {
             idUserForTransaction = currentUser.id_user;
@@ -1483,30 +1479,49 @@ const setShopeePickup = async (req, res) => {
         const order = detailResp.data.data?.[0];
         if (!order) return res.status(404).json({ success: false, message: "Order tidak ditemukan" });
 
-        // Cek stok & siapkan item transaksi
+        // Cek stok & validasi item
         const itemsForTransaction = [];
         const stokTidakCukup = [];
+        const itemTidakDitemukan = [];
+
         for (const item of order.items) {
-            const stock = await Stok.findOne({ where: { id_product_stok: item.id_product_stok, satuan: item.satuan } });
-            const qty = item.quantity;
-            if (!stock || stock.stok < qty) {
-                stokTidakCukup.push({
-                    id_produk: item.id_product_stok,
-                    satuan: item.satuan,
-                    stok_tersedia: stock ? stock.stok : 0,
-                    jumlah_diminta: qty,
-                });
-            } else {
-                itemsForTransaction.push({
-                    id_produk: item.id_product_stok,
-                    satuan: item.satuan,
-                    jumlah_barang: qty,
-                    harga_satuan: item.price,
-                    subtotal: qty * item.price,
-                });
+            if (!item.id_product_stok) {
+                itemTidakDitemukan.push({ item_id: item.item_id, message: "Item tidak ditemukan di DB lokal" });
+                continue;
             }
+
+            const stock = await Stok.findOne({ where: { id_product_stok: item.id_product_stok, satuan: item.satuan } });
+            if (!stock) {
+                itemTidakDitemukan.push({ item_id: item.id_product_stok, message: "Item tidak ditemukan di DB lokal" });
+                continue;
+            }
+
+            if (stock.stok < item.quantity) {
+                stokTidakCukup.push({
+                    id_produk: stock.id_product_stok,
+                    nama_produk: item.name,
+                    stok_tersedia: stock.stok,
+                    jumlah_diminta: item.quantity,
+                    message: "Stok tidak cukup"
+                });
+                continue;
+            }
+
+            itemsForTransaction.push({
+                id_produk: item.id_product_stok,
+                satuan: item.satuan,
+                jumlah_barang: item.quantity,
+                harga_satuan: item.price,
+                subtotal: item.quantity * item.price
+            });
         }
-        if (stokTidakCukup.length) return res.status(400).json({ success: false, message: "Stok tidak cukup", stok_tidak_cukup: stokTidakCukup });
+
+        if (itemTidakDitemukan.length > 0) {
+            return res.status(400).json({ success: false, message: "Beberapa item tidak ditemukan di DB lokal", items: itemTidakDitemukan });
+        }
+        if (stokTidakCukup.length > 0) {
+            return res.status(400).json({ success: false, message: "Stok tidak cukup untuk beberapa item", items: stokTidakCukup });
+        }
 
         // Buat HTransJual
         const id_htrans_jual = await generateHTransJualId();
@@ -1538,6 +1553,7 @@ const setShopeePickup = async (req, res) => {
                 harga_satuan: item.harga_satuan,
                 subtotal: item.subtotal,
             });
+
             const stock = await Stok.findOne({ where: { id_product_stok: item.id_produk, satuan: item.satuan } });
             await stock.update({ stok: stock.stok - item.jumlah_barang });
         }
@@ -1552,7 +1568,7 @@ const setShopeePickup = async (req, res) => {
 
         const payloadShip = { order_sn, pickup: { address_id } };
         if (package_number) payloadShip.package_number = package_number;
-        if (req.body.pickup_time_id) payloadShip.pickup.pickup_time_id = pickup_time_id;
+        if (pickup_time_id) payloadShip.pickup.pickup_time_id = pickup_time_id;
 
         const shipResp = await axios.post(urlShip, payloadShip, { headers: { "Content-Type": "application/json" } });
         if (shipResp.data.error) return res.status(400).json({ success: false, message: "Pickup Shopee gagal", shopee_response: shipResp.data });
@@ -1581,8 +1597,7 @@ const setShopeeDropoff = async (req, res) => {
         const { order_sn } = req.body;
         if (!order_sn) return res.status(400).json({ success: false, message: "Field 'order_sn' wajib diisi" });
 
-        // Ambil user login
-        let currentUser = req.user;
+        const currentUser = req.user;
         if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat membuat transaksi' });
         }
@@ -1596,7 +1611,7 @@ const setShopeeDropoff = async (req, res) => {
             idUserForTransaction = pegawaiOnline.id_user;
         }
 
-        // Cek order di DB
+        // Cek transaksi di DB
         let existingOrder = await HTransJual.findOne({ where: { order_sn } });
 
         // Ambil detail order Shopee
