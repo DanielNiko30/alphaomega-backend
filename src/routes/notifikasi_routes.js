@@ -12,43 +12,47 @@ const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY?.trim();
  */
 router.post('/send', async (req, res) => {
     try {
-        const { title, message } = req.body;
+        const { title, message, idPesanan, namaPembeli } = req.body;
         const notifTitle = title || "Notifikasi Baru";
-        const notifMessage = message || "Terdapat pembaruan baru di sistem!";
+        const notifMessage = message || "Ada pembaruan baru di sistem!";
 
         console.log("📦 Mengirim notifikasi ke OneSignal...");
         console.log("Title:", notifTitle);
         console.log("Message:", notifMessage);
 
-        // Payload lengkap untuk Android + iOS
+        // ✅ Payload lengkap untuk Android agar bunyi + tampil di system tray walau app tertutup
         const payload = {
             app_id: ONESIGNAL_APP_ID,
             headings: { en: notifTitle },
             contents: { en: notifMessage },
             included_segments: ["All"],
 
-            // ✅ Pastikan ini aktif
-            android_sound: "cashier",     // cashier.mp3 di android/app/src/main/res/raw/
-            small_icon: "ic_stat_onesignal_default", // optional icon default
-            large_icon: "ic_launcher",    // optional
-            priority: 10,
+            // ✅ Channel dan suara
+            android_channel_id: "default", // harus sama dengan di AndroidManifest
+            android_sound: "cashier",      // nama file di res/raw tanpa .mp3
+            android_priority: 10,
             android_visibility: 1,
 
-            // ❗ jangan pakai listener foreground untuk app terminated
-            // jadi backend kirim murni payload yang bisa langsung di-handle oleh OneSignal SDK
+            // ✅ Opsional: ikon notif
+            small_icon: "ic_stat_onesignal_default",
+            large_icon: "ic_launcher",
+
+            // ✅ Data tambahan untuk klik handler di Flutter
             data: {
                 route: "/detailPesanan",
-                idPesanan: "12345",
+                idPesanan: idPesanan || "12345",
+                namaPembeli: namaPembeli || "John Doe",
             },
-        };
 
+            ttl: 3600, // time-to-live (1 jam)
+        };
 
         const response = await axios.post(
             "https://onesignal.com/api/v1/notifications",
             payload,
             {
                 headers: {
-                    "Authorization": `Basic ${ONESIGNAL_API_KEY}`,
+                    Authorization: `Basic ${ONESIGNAL_API_KEY}`,
                     "Content-Type": "application/json",
                 },
             }
