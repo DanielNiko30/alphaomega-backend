@@ -11,6 +11,8 @@ const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY?.trim();
  * Mengirim notifikasi ke semua pengguna (segment 'All') dengan suara custom
  */
 router.post('/send', async (req, res) => {
+    console.log("ONESIGNAL_APP_ID:", process.env.ONESIGNAL_APP_ID);
+    console.log("ONESIGNAL_API_KEY:", process.env.ONESIGNAL_API_KEY);
     try {
         const { title, message } = req.body;
         const notifTitle = title || "Notifikasi Baru";
@@ -53,6 +55,9 @@ router.post('/send', async (req, res) => {
 
     } catch (err) {
         console.error("❌ OneSignal Error:");
+        console.log("ONESIGNAL_APP_ID:", process.env.ONESIGNAL_APP_ID);
+        console.log("ONESIGNAL_API_KEY:", process.env.ONESIGNAL_API_KEY);
+
         if (err.response) {
             console.error("Status:", err.response.status);
             console.error("Data:", err.response.data);
