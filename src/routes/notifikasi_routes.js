@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // 🔐 OneSignal credentials (disarankan pakai .env nanti)
 const ONESIGNAL_APP_ID = "257845e8-86e4-466e-b8cb-df95a1005a5f";
-const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l7csaqelqgjeinmh6ueu3mdxrvys4cf25ljbwlwv2lk4w6wyluewo6ztxxnaljcnyhl4ew3qhea5v4q"; // ⚠️ Ganti dengan REST API Key dari OneSignal dashboard
+const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l6bgzxcyd2audn5qok64euhbyyd6en24moi4fmxe2enq2ob7ekhzmqsfi2i72ulamky5zzdiqiw7cdy"; // ⚠️ Ganti dengan REST API Key dari OneSignal dashboard
 
 /**
  * 📤 POST /api/notification/send
