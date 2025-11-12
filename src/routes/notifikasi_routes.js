@@ -11,8 +11,6 @@ const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY?.trim();
  * Mengirim notifikasi ke semua pengguna (segment 'All') dengan suara custom
  */
 router.post('/send', async (req, res) => {
-    console.log("ONESIGNAL_APP_ID:", process.env.ONESIGNAL_APP_ID);
-    console.log("ONESIGNAL_API_KEY:", process.env.ONESIGNAL_API_KEY);
     try {
         const { title, message } = req.body;
         const notifTitle = title || "Notifikasi Baru";
@@ -22,14 +20,19 @@ router.post('/send', async (req, res) => {
         console.log("Title:", notifTitle);
         console.log("Message:", notifMessage);
 
+        // Payload lengkap untuk Android + iOS
         const payload = {
             app_id: ONESIGNAL_APP_ID,
             headings: { en: notifTitle },
             contents: { en: notifMessage },
-            included_segments: ["All"],    // Kirim ke semua user
+            included_segments: ["All"], // kirim ke semua user
+            android_sound: "cashier",   // cashier.mp3 di res/raw
+            android_priority: 10,
             android_visibility: 1,
-            android_sound: "cashier",      // nama file mp3 di res/raw (tanpa .mp3)
-            priority: 10                   // notifikasi langsung muncul
+            data: {
+                customData: "contoh data tambahan",
+            },
+            ttl: 3600, // notification time-to-live (detik)
         };
 
         const response = await axios.post(
@@ -55,9 +58,6 @@ router.post('/send', async (req, res) => {
 
     } catch (err) {
         console.error("❌ OneSignal Error:");
-        console.log("ONESIGNAL_APP_ID:", process.env.ONESIGNAL_APP_ID);
-        console.log("ONESIGNAL_API_KEY:", process.env.ONESIGNAL_API_KEY);
-
         if (err.response) {
             console.error("Status:", err.response.status);
             console.error("Data:", err.response.data);
