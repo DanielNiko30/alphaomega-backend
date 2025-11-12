@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { 
-    generateLoginUrl, 
-    lazadaCallback, 
-    refreshToken, 
-    createProductLazada, 
+const {
+    generateLoginUrl,
+    lazadaCallback,
+    refreshToken,
+    createProductLazada,
     updateProductLazada,
     getCategoryTree,
     getBrands,
@@ -24,6 +24,8 @@ const {
     updatePriceQuantity
 } = require('../controller/lazada_controller');
 
+const authMiddleware = require('../middleware/auth');
+
 router.get('/generate-login-url', generateLoginUrl);
 router.get('/callback', lazadaCallback);
 router.post('/refresh-token', refreshToken);
@@ -40,11 +42,11 @@ router.get("/order/detail", getFullOrderDetailLazada);
 router.get("/orders", getLazadaOrders);
 router.get("/orders/full", getLazadaOrdersWithItems);
 router.get("/ready/orders/full", getLazadaReadyOrdersWithItems);
-router.get("/seller",getSeller);
+router.get("/seller", getSeller);
 router.get("/warehouse", getWarehouseBySeller);
 router.post("/atur-pickup", aturPickup);
 router.post("/print-resi", printLazadaResi);
-router.post("/ready-to-ship", readyToShipLazada);
+router.post("/ready-to-ship", authMiddleware, readyToShipLazada);
 router.post('/update-stock', updatePriceQuantity);
 
 module.exports = router;
