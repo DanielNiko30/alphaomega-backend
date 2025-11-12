@@ -25,15 +25,23 @@ router.post('/send', async (req, res) => {
             app_id: ONESIGNAL_APP_ID,
             headings: { en: notifTitle },
             contents: { en: notifMessage },
-            included_segments: ["All"], // kirim ke semua user
-            android_sound: "cashier",   // cashier.mp3 di res/raw
-            android_priority: 10,
+            included_segments: ["All"],
+
+            // ✅ Pastikan ini aktif
+            android_sound: "cashier",     // cashier.mp3 di android/app/src/main/res/raw/
+            small_icon: "ic_stat_onesignal_default", // optional icon default
+            large_icon: "ic_launcher",    // optional
+            priority: 10,
             android_visibility: 1,
+
+            // ❗ jangan pakai listener foreground untuk app terminated
+            // jadi backend kirim murni payload yang bisa langsung di-handle oleh OneSignal SDK
             data: {
-                customData: "contoh data tambahan",
+                route: "/detailPesanan",
+                idPesanan: "12345",
             },
-            ttl: 3600, // notification time-to-live (detik)
         };
+
 
         const response = await axios.post(
             "https://onesignal.com/api/v1/notifications",
