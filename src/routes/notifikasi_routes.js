@@ -2,17 +2,16 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
-// 🔐 OneSignal credentials (disarankan pakai .env nanti)
-const ONESIGNAL_APP_ID = "257845e8-86e4-466e-b8cb-df95a1005a5f";
-const ONESIGNAL_API_KEY = "os_v2_app_ev4el2eg4rdg5ogl36k2cac2l5wjj6xjj7ku2m5hzkabfdjqzz6i4ldkrzt6uxovhy6ywzfcoj5bwa2mxk7telcjgwxysao5433ye5y"; // ⚠️ Ganti dengan REST API Key dari OneSignal dashboard
+// 🔐 Ambil credentials dari environment
+const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
+const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
 /**
  * 📤 POST /api/notification/send
- * Mengirim notifikasi ke semua pengguna (segment 'All')
+ * Mengirim notifikasi ke semua pengguna (segment 'All') dengan suara custom
  */
 router.post('/send', async (req, res) => {
     try {
-        // Ambil data dari body request
         const { title, message } = req.body;
         const notifTitle = title || "Notifikasi Baru";
         const notifMessage = message || "Terdapat pembaruan baru di sistem!";
@@ -21,18 +20,19 @@ router.post('/send', async (req, res) => {
         console.log("Title:", notifTitle);
         console.log("Message:", notifMessage);
 
-        // Kirim request ke OneSignal API
+        const payload = {
+            app_id: ONESIGNAL_APP_ID,
+            headings: { en: notifTitle },
+            contents: { en: notifMessage },
+            included_segments: ["All"],    // Kirim ke semua user
+            android_visibility: 1,
+            android_sound: "cashier",      // nama file mp3 di res/raw (tanpa .mp3)
+            priority: 10                   // notifikasi langsung muncul
+        };
+
         const response = await axios.post(
             "https://onesignal.com/api/v1/notifications",
-            {
-                app_id: ONESIGNAL_APP_ID,
-                headings: { en: notifTitle },
-                contents: { en: notifMessage },
-                included_segments: ["All"], // Kirim ke semua user
-                android_visibility: 1,
-                android_sound: "defaultz",
-                priority: 10,
-            },
+            payload,
             {
                 headers: {
                     "Authorization": `Basic ${ONESIGNAL_API_KEY}`,
@@ -41,7 +41,6 @@ router.post('/send', async (req, res) => {
             }
         );
 
-        // ✅ Sukses kirim
         console.log("✅ Notifikasi berhasil dikirim!");
         res.json({
             success: true,
@@ -51,8 +50,8 @@ router.post('/send', async (req, res) => {
                 external_id: response.data.external_id,
             },
         });
+
     } catch (err) {
-        // ❌ Gagal kirim
         console.error("❌ OneSignal Error:");
         if (err.response) {
             console.error("Status:", err.response.status);
