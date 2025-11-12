@@ -1576,6 +1576,22 @@ const readyToShipLazada = async (req, res) => {
             });
         }
 
+        // Ambil user login
+        const currentUser = req.user;
+        if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
+            return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat menandai Ready To Ship' });
+        }
+
+        // Tentukan id_user yang dicatat untuk transaksi
+        let idUserForTransaction;
+        if (currentUser.role === 'pegawai online') {
+            idUserForTransaction = currentUser.id_user;
+        } else if (currentUser.role === 'admin') {
+            const pegawaiOnline = await User.findOne({ where: { role: 'pegawai online' } });
+            if (!pegawaiOnline) return res.status(500).json({ success: false, message: 'Pegawai online tidak ditemukan di DB' });
+            idUserForTransaction = pegawaiOnline.id_user;
+        }
+
         // Ambil access token Lazada
         const lazadaAccount = await Lazada.findOne();
         if (!lazadaAccount?.access_token) {
@@ -1653,23 +1669,14 @@ const readyToShipLazada = async (req, res) => {
         const id_htrans_jual = await generateHTransJualId();
         const nomor_invoice = await generateInvoiceNumber();
         const totalHarga = detailData.items.reduce(
-            (sum, item) =>
-                sum + (parseFloat(item.item_price) || 0) * (parseInt(item.quantity || 1)),
+            (sum, item) => sum + (parseFloat(item.item_price) || 0) * (parseInt(item.quantity || 1)),
             0
         );
 
-        // Ambil user dari request JWT
-        let idUser = "USR001";
-        let idUserPenjual = "USR001";
-        if (req.user && req.user.role === "pegawai online") {
-            idUser = req.user.id_user;
-            idUserPenjual = req.user.id_user;
-        }
-
         await HTransJual.create({
             id_htrans_jual,
-            id_user: idUser,
-            id_user_penjual: idUserPenjual,
+            id_user: idUserForTransaction, // pakai pegawai online
+            id_user_penjual: idUserForTransaction,
             nama_pembeli: detailData.address_shipping?.first_name || "Pembeli Lazada",
             tanggal: new Date(),
             total_harga: Math.floor(totalHarga),
@@ -1706,17 +1713,9 @@ const readyToShipLazada = async (req, res) => {
         // 5️⃣ Ready To Ship API Lazada
         const apiPath = "/order/package/rts";
         const timestamp = Date.now();
-
-        const params = {
-            access_token,
-            app_key: appKey,
-            sign_method: "sha256",
-            timestamp,
-        };
-
+        const params = { access_token, app_key: appKey, sign_method: "sha256", timestamp };
         const readyToShipReq = JSON.stringify({ packages: [{ package_id: packageId }] });
 
-        // 🔐 Generate signature
         const signParams = { ...params, readyToShipReq };
         const sortedKeys = Object.keys(signParams).sort();
         let baseStr = apiPath;
@@ -1762,7 +1761,6 @@ const readyToShipLazada = async (req, res) => {
         });
     }
 };
-
 
 const printLazadaResi = async (req, res) => {
     try {
