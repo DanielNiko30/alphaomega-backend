@@ -28,7 +28,7 @@ router.post('/send', async (req, res) => {
             included_segments: ["All"],
 
             // ✅ Channel dan suara
-            android_channel_id: "default", // harus sama dengan di AndroidManifest
+            android_channel_id: "a113ecdb-c25e-4c3d-9461-3d0a9161ad46", // harus sama dengan di AndroidManifest
             android_sound: "cashier",      // nama file di res/raw tanpa .mp3
             android_priority: 10,
             android_visibility: 1,
