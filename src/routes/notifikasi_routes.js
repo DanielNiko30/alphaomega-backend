@@ -30,7 +30,7 @@ router.post('/send', async (req, res) => {
                 contents: { en: notifMessage },
                 included_segments: ["All"], // Kirim ke semua user
                 android_visibility: 1,
-                android_sound: "default",
+                android_sound: "cashier",
                 priority: 10,
             },
             {
