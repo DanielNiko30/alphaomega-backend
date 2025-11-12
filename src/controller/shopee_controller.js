@@ -1529,7 +1529,7 @@ const setShopeePickup = async (req, res) => {
         await HTransJual.create({
             id_htrans_jual,
             id_user: idUserForTransaction,
-            id_user_penjual: "USR001",
+            id_user_penjual: idUserForTransaction,
             nama_pembeli: order.buyer_username,
             tanggal: new Date(),
             total_harga: Math.floor(order.total_amount),
@@ -1538,7 +1538,7 @@ const setShopeePickup = async (req, res) => {
             order_sn: order.order_sn,
             package_number: null,
             status: "Pending",
-            sumber_transaksi: "offline",
+            sumber_transaksi: "shopee",
         });
 
         // Buat DTransJual & update stok
@@ -1655,7 +1655,7 @@ const setShopeeDropoff = async (req, res) => {
             await HTransJual.create({
                 id_htrans_jual,
                 id_user: idUserForTransaction,
-                id_user_penjual: "USR001",
+                id_user_penjual: idUserForTransaction,
                 nama_pembeli: order.buyer_username,
                 tanggal: new Date(),
                 total_harga: Math.floor(order.total_amount),
@@ -1664,7 +1664,7 @@ const setShopeeDropoff = async (req, res) => {
                 order_sn: order.order_sn,
                 package_number: null,
                 status: "Pending",
-                sumber_transaksi: "offline",
+                sumber_transaksi: "shopee",
             });
 
             for (const item of itemsForTransaction) {
