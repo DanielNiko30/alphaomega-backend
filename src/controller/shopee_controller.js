@@ -1462,29 +1462,24 @@ const setShopeePickup = async (req, res) => {
         }
 
         // Ambil user login
-        const currentUser = req.user;
+        let currentUser = req.user;
         if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat membuat transaksi' });
         }
 
-        // Tentukan id_user untuk transaksi
+        // Jika admin, pakai pegawai online sebagai id_user transaksi
         let idUserForTransaction;
         if (currentUser.role === 'pegawai online') {
             idUserForTransaction = currentUser.id_user;
-        } else if (currentUser.role === 'admin') {
+        } else {
             const pegawaiOnline = await User.findOne({ where: { role: 'pegawai online' } });
             if (!pegawaiOnline) return res.status(500).json({ success: false, message: 'Pegawai online tidak ditemukan di DB' });
             idUserForTransaction = pegawaiOnline.id_user;
         }
 
         // Ambil detail order dari Shopee
-        const detailUrl = `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order_sn}`;
-        const detailResp = await axios.get(detailUrl, { headers: { "Content-Type": "application/json" } });
-
-        if (!detailResp.data.success) {
-            return res.status(400).json({ success: false, message: detailResp.data.message || "Gagal mengambil detail order dari Shopee" });
-        }
-
+        const detailResp = await axios.get(`https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order_sn}`);
+        if (!detailResp.data.success) return res.status(400).json({ success: false, message: detailResp.data.message });
         const order = detailResp.data.data?.[0];
         if (!order) return res.status(404).json({ success: false, message: "Order tidak ditemukan" });
 
@@ -1492,43 +1487,33 @@ const setShopeePickup = async (req, res) => {
         const itemsForTransaction = [];
         const stokTidakCukup = [];
         for (const item of order.items) {
-            if (!item.from_db) {
-                return res.status(400).json({ success: false, message: `Item ${item.item_id} tidak ditemukan di DB lokal` });
-            }
-
             const stock = await Stok.findOne({ where: { id_product_stok: item.id_product_stok, satuan: item.satuan } });
-            const jumlahKurangi = item.quantity;
-
-            if (!stock || (stock.stok - jumlahKurangi) <= 0) {
+            const qty = item.quantity;
+            if (!stock || stock.stok < qty) {
                 stokTidakCukup.push({
                     id_produk: item.id_product_stok,
                     satuan: item.satuan,
                     stok_tersedia: stock ? stock.stok : 0,
-                    jumlah_diminta: jumlahKurangi,
-                    sisa_setelah_pengurangan: stock ? stock.stok - jumlahKurangi : null,
+                    jumlah_diminta: qty,
                 });
             } else {
                 itemsForTransaction.push({
                     id_produk: item.id_product_stok,
                     satuan: item.satuan,
-                    jumlah_barang: jumlahKurangi,
+                    jumlah_barang: qty,
                     harga_satuan: item.price,
-                    subtotal: jumlahKurangi * item.price,
+                    subtotal: qty * item.price,
                 });
             }
         }
+        if (stokTidakCukup.length) return res.status(400).json({ success: false, message: "Stok tidak cukup", stok_tidak_cukup: stokTidakCukup });
 
-        if (stokTidakCukup.length) {
-            return res.status(400).json({ success: false, message: "Stok tidak cukup", stok_tidak_cukup: stokTidakCukup });
-        }
-
-        // Buat transaksi jual
+        // Buat HTransJual
         const id_htrans_jual = await generateHTransJualId();
         const nomor_invoice = await generateInvoiceNumber();
-
         await HTransJual.create({
             id_htrans_jual,
-            id_user: idUserForTransaction, // pakai pegawai online
+            id_user: idUserForTransaction,
             id_user_penjual: "USR001",
             nama_pembeli: order.buyer_username,
             tanggal: new Date(),
@@ -1541,7 +1526,7 @@ const setShopeePickup = async (req, res) => {
             sumber_transaksi: "offline",
         });
 
-        // Insert detail transaksi & update stok
+        // Buat DTransJual & update stok
         for (const item of itemsForTransaction) {
             const id_dtrans_jual = await generateDTransJualId();
             await DTransJual.create({
@@ -1553,12 +1538,11 @@ const setShopeePickup = async (req, res) => {
                 harga_satuan: item.harga_satuan,
                 subtotal: item.subtotal,
             });
-
             const stock = await Stok.findOne({ where: { id_product_stok: item.id_produk, satuan: item.satuan } });
             await stock.update({ stok: stock.stok - item.jumlah_barang });
         }
 
-        // Panggil Shopee API ship_order (pickup)
+        // Panggil Shopee Pickup API
         const shopeeData = await Shopee.findOne();
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
@@ -1568,18 +1552,13 @@ const setShopeePickup = async (req, res) => {
 
         const payloadShip = { order_sn, pickup: { address_id } };
         if (package_number) payloadShip.package_number = package_number;
-        if (pickup_time_id) payloadShip.pickup.pickup_time_id = pickup_time_id;
+        if (req.body.pickup_time_id) payloadShip.pickup.pickup_time_id = pickup_time_id;
 
         const shipResp = await axios.post(urlShip, payloadShip, { headers: { "Content-Type": "application/json" } });
-
-        if (shipResp.data.error) {
-            return res.status(400).json({ success: false, message: "Pickup Shopee gagal", shopee_response: shipResp.data });
-        }
+        if (shipResp.data.error) return res.status(400).json({ success: false, message: "Pickup Shopee gagal", shopee_response: shipResp.data });
 
         const pkgNumber = shipResp.data.response?.result_list?.[0]?.package_number || package_number || null;
-        if (pkgNumber) {
-            await HTransJual.update({ package_number: pkgNumber }, { where: { id_htrans_jual } });
-        }
+        if (pkgNumber) await HTransJual.update({ package_number: pkgNumber }, { where: { id_htrans_jual } });
 
         return res.json({
             success: true,
@@ -1592,7 +1571,7 @@ const setShopeePickup = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ Error Pickup + Transaksi:", err.response?.data || err.message);
+        console.error("❌ Error Pickup:", err.response?.data || err.message);
         return res.status(500).json({ success: false, message: err.message, error: err.response?.data || err.message });
     }
 };
@@ -1600,65 +1579,55 @@ const setShopeePickup = async (req, res) => {
 const setShopeeDropoff = async (req, res) => {
     try {
         const { order_sn } = req.body;
-
         if (!order_sn) return res.status(400).json({ success: false, message: "Field 'order_sn' wajib diisi" });
 
         // Ambil user login
-        const currentUser = req.user;
+        let currentUser = req.user;
         if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat membuat transaksi' });
         }
 
-        // Tentukan id_user untuk transaksi
         let idUserForTransaction;
         if (currentUser.role === 'pegawai online') {
             idUserForTransaction = currentUser.id_user;
-        } else if (currentUser.role === 'admin') {
+        } else {
             const pegawaiOnline = await User.findOne({ where: { role: 'pegawai online' } });
             if (!pegawaiOnline) return res.status(500).json({ success: false, message: 'Pegawai online tidak ditemukan di DB' });
             idUserForTransaction = pegawaiOnline.id_user;
         }
 
-        // Cek order sebelumnya
-        const existingOrder = await HTransJual.findOne({ where: { order_sn } });
+        // Cek order di DB
+        let existingOrder = await HTransJual.findOne({ where: { order_sn } });
 
-        // Ambil detail order
-        const detailUrl = `https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order_sn}`;
-        const detailResp = await axios.get(detailUrl, { headers: { "Content-Type": "application/json" } });
+        // Ambil detail order Shopee
+        const detailResp = await axios.get(`https://tokalphaomegaploso.my.id/api/shopee/order-detail?order_sn_list=${order_sn}`);
         if (!detailResp.data.success) return res.status(400).json({ success: false, message: detailResp.data.message });
-
         const order = detailResp.data.data?.[0];
-        if (!order) return res.status(400).json({ success: false, message: "Order tidak ditemukan" });
+        if (!order) return res.status(404).json({ success: false, message: "Order tidak ditemukan" });
 
         const itemsForTransaction = [];
         const stokTidakCukup = [];
 
         if (!existingOrder) {
             for (const item of order.items) {
-                if (!item.from_db) return res.status(400).json({ success: false, message: `Item ${item.item_id} tidak ditemukan di DB lokal` });
-
                 const stock = await Stok.findOne({ where: { id_product_stok: item.id_product_stok, satuan: item.satuan } });
-                const jumlahKurangi = item.quantity;
-
-                if (!stock || (stock.stok - jumlahKurangi) <= 0) {
+                if (!stock || stock.stok < item.quantity) {
                     stokTidakCukup.push({
                         id_produk: item.id_product_stok,
                         satuan: item.satuan,
                         stok_tersedia: stock ? stock.stok : 0,
-                        jumlah_diminta: jumlahKurangi,
-                        sisa_setelah_pengurangan: stock ? stock.stok - jumlahKurangi : null,
+                        jumlah_diminta: item.quantity,
                     });
                 } else {
                     itemsForTransaction.push({
                         id_produk: item.id_product_stok,
                         satuan: item.satuan,
-                        jumlah_barang: jumlahKurangi,
+                        jumlah_barang: item.quantity,
                         harga_satuan: item.price,
-                        subtotal: jumlahKurangi * item.price,
+                        subtotal: item.quantity * item.price,
                     });
                 }
             }
-
             if (stokTidakCukup.length) return res.status(400).json({ success: false, message: "Stok tidak cukup", stok_tidak_cukup: stokTidakCukup });
         }
 
@@ -1698,15 +1667,13 @@ const setShopeeDropoff = async (req, res) => {
                 const stock = await Stok.findOne({ where: { id_product_stok: item.id_produk, satuan: item.satuan } });
                 await stock.update({ stok: stock.stok - item.jumlah_barang });
             }
-
-            package_number = null;
         } else {
             id_htrans_jual = existingOrder.id_htrans_jual;
             nomor_invoice = existingOrder.nomor_invoice;
             package_number = existingOrder.package_number;
         }
 
-        // Panggil Shopee Dropoff
+        // Panggil Shopee Dropoff API
         const shopeeData = await Shopee.findOne();
         const { shop_id, access_token } = shopeeData;
         const timestamp = Math.floor(Date.now() / 1000);
@@ -1718,7 +1685,6 @@ const setShopeeDropoff = async (req, res) => {
         if (package_number) payloadShip.package_number = package_number;
 
         const shipResp = await axios.post(urlShip, payloadShip, { headers: { "Content-Type": "application/json" } });
-
         if (shipResp.data.error) return res.status(400).json({ success: false, message: "Dropoff Shopee gagal", shopee_response: shipResp.data });
 
         // Ambil package_number kalau belum ada
@@ -1728,9 +1694,8 @@ const setShopeeDropoff = async (req, res) => {
             const signPkg = generateSign(pathPkg, timestamp2, access_token, shop_id);
             const urlPkg = `https://partner.shopeemobile.com${pathPkg}?partner_id=${PARTNER_ID}&timestamp=${timestamp2}&access_token=${access_token}&shop_id=${shop_id}&sign=${signPkg}&order_sn_list=${order_sn}`;
 
-            const pkgResp = await axios.get(urlPkg, { headers: { "Content-Type": "application/json" } });
+            const pkgResp = await axios.get(urlPkg);
             package_number = pkgResp.data.response?.order_list?.[0]?.package_list?.[0]?.package_number || null;
-
             if (package_number) await HTransJual.update({ package_number }, { where: { order_sn } });
         }
 
@@ -1739,11 +1704,11 @@ const setShopeeDropoff = async (req, res) => {
             message: "Dropoff berhasil dan transaksi jual tersimpan",
             invoice: nomor_invoice,
             id_htrans_jual,
-            package_number
+            package_number,
         });
 
     } catch (err) {
-        console.error("❌ Error Dropoff + Transaksi:", err.response?.data || err.message);
+        console.error("❌ Error Dropoff:", err.response?.data || err.message);
         return res.status(500).json({ success: false, message: err.message, error: err.response?.data || err.message });
     }
 };

@@ -1569,12 +1569,7 @@ const aturPickup = async (req, res) => {
 const readyToShipLazada = async (req, res) => {
     try {
         const orderId = req.body.order_id || req.query.order_id;
-        if (!orderId) {
-            return res.status(400).json({
-                success: false,
-                message: "Parameter 'order_id' wajib diisi",
-            });
-        }
+        if (!orderId) return res.status(400).json({ success: false, message: "Parameter 'order_id' wajib diisi" });
 
         // Ambil user login
         const currentUser = req.user;
@@ -1582,11 +1577,11 @@ const readyToShipLazada = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat menandai Ready To Ship' });
         }
 
-        // Tentukan id_user yang dicatat untuk transaksi
+        // Tentukan id_user untuk transaksi
         let idUserForTransaction;
         if (currentUser.role === 'pegawai online') {
             idUserForTransaction = currentUser.id_user;
-        } else if (currentUser.role === 'admin') {
+        } else {
             const pegawaiOnline = await User.findOne({ where: { role: 'pegawai online' } });
             if (!pegawaiOnline) return res.status(500).json({ success: false, message: 'Pegawai online tidak ditemukan di DB' });
             idUserForTransaction = pegawaiOnline.id_user;
@@ -1594,12 +1589,7 @@ const readyToShipLazada = async (req, res) => {
 
         // Ambil access token Lazada
         const lazadaAccount = await Lazada.findOne();
-        if (!lazadaAccount?.access_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Token Lazada tidak ditemukan di DB",
-            });
-        }
+        if (!lazadaAccount?.access_token) return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan di DB" });
 
         const access_token = lazadaAccount.access_token.trim();
         const appKey = process.env.LAZADA_APP_KEY.trim();
@@ -1607,65 +1597,37 @@ const readyToShipLazada = async (req, res) => {
         const baseUrl = "https://api.lazada.co.id/rest";
 
         // 1️⃣ Ambil detail order
-        const detailUrl = `https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`;
-        const detailRes = await axios.get(detailUrl);
+        const detailRes = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`);
         const detailData = detailRes.data?.data;
 
         if (!detailData || !Array.isArray(detailData.items) || detailData.items.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Gagal ambil data order dari Lazada — items kosong",
-            });
+            return res.status(400).json({ success: false, message: "Gagal ambil data order dari Lazada — items kosong" });
         }
 
         const packageId = detailData.items[0].package_id;
-        if (!packageId) {
-            return res.status(400).json({
-                success: false,
-                message: "Tidak menemukan package_id di data order Lazada",
-            });
-        }
+        if (!packageId) return res.status(400).json({ success: false, message: "Tidak menemukan package_id di data order Lazada" });
 
         // 2️⃣ Cek stok
         const stokTidakCukup = [];
         for (const item of detailData.items) {
-            const sku = item.sku_id;
-            const qty = parseInt(item.quantity || 1);
-
-            let stok = await Stok.findOne({ where: { sku_lazada: sku } });
+            let stok = await Stok.findOne({ where: { sku_lazada: item.sku_id } });
             if (!stok) stok = await Stok.findOne({ where: { id_product_stok: item.product_id } });
 
-            if (!stok) {
+            const qty = parseInt(item.quantity || 1);
+            if (!stok || stok.stok < qty) {
                 stokTidakCukup.push({
-                    id_produk: item.product_id,
-                    sku_lazada: sku,
+                    id_produk: stok ? stok.id_product_stok : item.product_id,
+                    sku_lazada: item.sku_id,
                     nama_produk: item.name,
-                    pesan: "Produk tidak ditemukan di stok lokal",
-                });
-                continue;
-            }
-
-            if (stok.stok < qty) {
-                stokTidakCukup.push({
-                    id_produk: stok.id_product_stok,
-                    sku_lazada: sku,
-                    nama_produk: item.name,
-                    stok_tersedia: stok.stok,
+                    stok_tersedia: stok ? stok.stok : 0,
                     jumlah_diminta: qty,
-                    pesan: "Stok tidak mencukupi",
+                    pesan: stok ? "Stok tidak mencukupi" : "Produk tidak ditemukan di stok lokal",
                 });
             }
         }
+        if (stokTidakCukup.length > 0) return res.status(400).json({ success: false, message: "❌ Stok tidak cukup", stok_tidak_cukup: stokTidakCukup });
 
-        if (stokTidakCukup.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: "❌ Stok tidak cukup untuk beberapa produk Lazada",
-                stok_tidak_cukup: stokTidakCukup,
-            });
-        }
-
-        // 3️⃣ Buat transaksi jual
+        // 3️⃣ Buat transaksi HTransJual
         const id_htrans_jual = await generateHTransJualId();
         const nomor_invoice = await generateInvoiceNumber();
         const totalHarga = detailData.items.reduce(
@@ -1675,7 +1637,7 @@ const readyToShipLazada = async (req, res) => {
 
         await HTransJual.create({
             id_htrans_jual,
-            id_user: idUserForTransaction, // pakai pegawai online
+            id_user: idUserForTransaction,
             id_user_penjual: idUserForTransaction,
             nama_pembeli: detailData.address_shipping?.first_name || "Pembeli Lazada",
             tanggal: new Date(),
@@ -1688,7 +1650,7 @@ const readyToShipLazada = async (req, res) => {
             sumber_transaksi: "lazada",
         });
 
-        // 4️⃣ Simpan detail & update stok
+        // 4️⃣ Simpan detail DTransJual & update stok
         for (const item of detailData.items) {
             const id_dtrans_jual = await generateDTransJualId();
             const qty = parseInt(item.quantity || 1);
