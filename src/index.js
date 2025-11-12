@@ -3,6 +3,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const http = require('http');
 const { getDB } = require('./config/sequelize');
+require('dotenv').config(); 
 
 // =================== CRON JOB ===================
 require("./cron/refreshShopeeToken");
