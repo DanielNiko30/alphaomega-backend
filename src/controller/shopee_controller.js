@@ -2228,6 +2228,45 @@ const updateStockShopee = async (req, res) => {
     }
 };
 
+const getShopeeAttributeTree = async (req, res) => {
+    try {
+        const { category_id } = req.params;
+
+        // 1️⃣ Ambil token Shopee
+        const shopeeData = await Shopee.findOne();
+        if (!shopeeData?.access_token) {
+            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        }
+        const { shop_id, access_token } = shopeeData;
+
+        // 2️⃣ Prepare request ke Shopee
+        const timestamp = Math.floor(Date.now() / 1000);
+        const path = "/api/v2/product/get_attribute_tree";
+        const sign = generateSign(path, timestamp, access_token, shop_id);
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+        const response = await axios.post(url, { category_id_list: [Number(category_id)] }, {
+            headers: { "Content-Type": "application/json" }
+        });
+
+        console.log("🔹 Attribute Tree Response:", JSON.stringify(response.data, null, 2));
+
+        if (response.data.error) {
+            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Attribute tree berhasil diambil",
+            attribute_tree: response.data.response?.list?.[0]?.attribute_tree || []
+        });
+
+    } catch (err) {
+        console.error("❌ Shopee Get Attribute Tree Error:", err.response?.data || err.message);
+        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal mengambil attribute tree Shopee." });
+    }
+};
+
 module.exports = {
     shopeeCallback,
     getShopeeItemList,
@@ -2252,5 +2291,6 @@ module.exports = {
     createShopeeShippingDocument,
     downloadShippingDocumentController,
     printShopeeResi,
-    updateStockShopee
+    updateStockShopee,
+    getShopeeAttributeTree
 };

@@ -24,7 +24,8 @@ const {
     createShopeeShippingDocument,
     downloadShippingDocumentController,
     printShopeeResi,
-    updateStockShopee
+    updateStockShopee,
+    getShopeeAttributeTree
 } = require('../controller/shopee_controller');
 const authMiddleware = require('../middleware/auth');
 
@@ -61,5 +62,6 @@ router.post("/print-resi", printShopeeResi);
 
 //update stok
 router.post("/update-stock", updateStockShopee);
+router.get("/attribute-tree/:category_id", getShopeeAttributeTree);
 
 module.exports = router;
