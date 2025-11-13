@@ -230,8 +230,8 @@ const createProductShopee = async (req, res) => {
 
         // 1️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
+            return res.status(400).json({ error: "Shopee token atau shop_id tidak ditemukan" });
         }
         const { shop_id, access_token } = shopeeData;
 
@@ -262,12 +262,13 @@ const createProductShopee = async (req, res) => {
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 5️⃣ Ambil attribute tree Shopee untuk kategori
+        // 5️⃣ Ambil attribute tree Shopee pakai cara getShopeeAttributeTree
         const attrPath = "/api/v2/product/get_attribute_tree";
         const attrSign = generateSign(attrPath, timestamp, access_token, shop_id);
-        const attrUrl = `https://partner.shopeemobile.com${attrPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${attrSign}`;
-        const attrResponse = await axios.post(attrUrl, { category_id: Number(category_id) });
-        const attributes = attrResponse.data?.response?.attribute_tree || [];
+        const attrUrl = `https://partner.shopeemobile.com${attrPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${attrSign}&category_id_list=${category_id}&language=id`;
+
+        const attrResponse = await axios.get(attrUrl, { headers: { "Content-Type": "application/json" } });
+        const attributes = attrResponse.data.response?.list?.[0]?.attribute_tree || [];
 
         // 6️⃣ Ambil attribute required paling atas
         const requiredAttr = attributes.find(a => a.mandatory);
@@ -288,7 +289,7 @@ const createProductShopee = async (req, res) => {
             }
         }
 
-        // 7️⃣ Body Add Item dengan logistic_id dari request
+        // 7️⃣ Body Add Item
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
 
         const body = {
@@ -301,19 +302,10 @@ const createProductShopee = async (req, res) => {
             package_length: Number(dimension.length),
             package_width: Number(dimension.width),
             logistic_info: [
-                {
-                    logistic_id: Number(logistic_id),
-                    enabled: true,
-                    is_free: false
-                }
+                { logistic_id: Number(logistic_id), enabled: true, is_free: false }
             ],
             category_id: Number(category_id),
-            seller_stock: [
-                {
-                    stock_location_id: 0,
-                    stock: Number(stokTerpilih.stok)
-                }
-            ],
+            seller_stock: [{ stock_location_id: 0, stock: Number(stokTerpilih.stok) }],
             condition: condition || "NEW",
             image: { image_id_list: [uploadedImageId], image_ratio: "1:1" },
             brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" },
@@ -329,13 +321,10 @@ const createProductShopee = async (req, res) => {
             return res.status(400).json({ success: false, message: createResponse.data.message, shopee_response: createResponse.data });
         }
 
-        // ✅ Simpan id_product_shopee di tabel Stok sesuai satuan
+        // ✅ Simpan id_product_shopee di tabel Stok
         const newShopeeId = createResponse.data.response?.item_id;
         if (newShopeeId) {
-            await Stok.update(
-                { id_product_shopee: newShopeeId },
-                { where: { id_stok: stokTerpilih.id_stok } }
-            );
+            await Stok.update({ id_product_shopee: newShopeeId }, { where: { id_stok: stokTerpilih.id_stok } });
         }
 
         return res.status(201).json({
