@@ -2231,47 +2231,44 @@ const updateStockShopee = async (req, res) => {
 const getShopeeAttributeTree = async (req, res) => {
     try {
         const { category_id } = req.params;
-        console.log("✅ Hit getShopeeAttributeTree, params:", req.params);
+        if (!category_id) return res.status(400).json({ success: false, message: "category_id wajib diisi" });
 
-
-        if (!category_id) {
-            return res.status(400).json({ error: "category_id is required" });
-        }
-
-        // Ambil token Shopee
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
-            return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
+        if (!shopeeData?.access_token || !shopeeData?.shop_id) {
+            return res.status(400).json({ success: false, message: "Shopee token atau shop_id tidak ditemukan" });
         }
 
         const { shop_id, access_token } = shopeeData;
-
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/get_attribute_tree";
         const sign = generateSign(path, timestamp, access_token, shop_id);
-        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        // POST request ke Shopee
-        const body = { category_id_list: [Number(category_id)] };
-        const response = await axios.post(url, body, { headers: { "Content-Type": "application/json" } });
+        const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&category_id_list=${category_id}&language=id`;
+
+        const response = await axios.get(url, { headers: { "Content-Type": "application/json" } });
 
         if (response.data.error) {
             return res.status(400).json({
                 success: false,
-                message: response.data.message,
-                shopee_response: response.data
+                message: response.data.message || "Shopee API Error",
+                shopee_response: response.data,
             });
         }
 
-        return res.status(200).json({
+        return res.json({
             success: true,
-            message: "Attribute tree berhasil diambil",
-            attribute_tree: response.data.response?.list?.[0]?.attribute_tree || []
+            message: "Berhasil ambil attribute tree Shopee",
+            data: response.data.response?.list?.[0]?.attribute_tree || [],
+            shopee_response: response.data,
         });
 
     } catch (err) {
         console.error("❌ Shopee Get Attribute Tree Error:", err.response?.data || err.message);
-        return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal mengambil attribute tree Shopee." });
+        return res.status(500).json({
+            success: false,
+            message: "Gagal ambil attribute tree Shopee",
+            error: err.response?.data || err.message,
+        });
     }
 };
 
