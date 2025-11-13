@@ -262,7 +262,22 @@ const createProductShopee = async (req, res) => {
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 5️⃣ Body Add Item dengan logistic_id dari request
+        // 5️⃣ Ambil attribute tree untuk kategori
+        const attrTreePath = "/api/v2/product/get_attribute_tree";
+        const attrTreeSign = generateSign(attrTreePath, timestamp, access_token, shop_id);
+        const attrTreeUrl = `https://partner.shopeemobile.com${attrTreePath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${attrTreeSign}`;
+        const attrTreeResponse = await axios.post(attrTreeUrl, { category_id_list: [Number(category_id)] }, { headers: { "Content-Type": "application/json" } });
+
+        let shelfLifeAttribute = null;
+        const attributeTree = attrTreeResponse.data.response?.list?.[0]?.attribute_tree || [];
+        for (const attr of attributeTree) {
+            if (attr.name.toLowerCase().includes("shelf life")) {
+                shelfLifeAttribute = attr;
+                break;
+            }
+        }
+
+        // 6️⃣ Body Add Item dengan logistic_id & shelf life
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
 
         const body = {
@@ -276,7 +291,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistic_id: Number(logistic_id), // dari request
+                    logistic_id: Number(logistic_id),
                     enabled: true,
                     is_free: false
                 }
@@ -292,6 +307,18 @@ const createProductShopee = async (req, res) => {
             image: { image_id_list: [uploadedImageId], image_ratio: "1:1" },
             brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" }
         };
+
+        // 7️⃣ Tambahkan shelf life jika ada
+        if (shelfLifeAttribute) {
+            body.attribute_list = [
+                {
+                    attribute_id: shelfLifeAttribute.attribute_id,
+                    attribute_value_list: [
+                        { value_id: 0, original_value_name: "12 bulan" } // value text langsung
+                    ]
+                }
+            ];
+        }
 
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
@@ -327,6 +354,7 @@ const createProductShopee = async (req, res) => {
         return res.status(500).json({ error: err.response?.data || err.message, message: "Gagal menambahkan produk ke Shopee." });
     }
 };
+
 
 const getShopeeCategories = async (req, res) => {
     try {
