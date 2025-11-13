@@ -2232,27 +2232,33 @@ const getShopeeAttributeTree = async (req, res) => {
     try {
         const { category_id } = req.params;
 
-        // 1️⃣ Ambil token Shopee
+        if (!category_id) {
+            return res.status(400).json({ error: "category_id is required" });
+        }
+
+        // Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
+
         const { shop_id, access_token } = shopeeData;
 
-        // 2️⃣ Prepare request ke Shopee
         const timestamp = Math.floor(Date.now() / 1000);
         const path = "/api/v2/product/get_attribute_tree";
         const sign = generateSign(path, timestamp, access_token, shop_id);
         const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
 
-        const response = await axios.post(url, { category_id_list: [Number(category_id)] }, {
-            headers: { "Content-Type": "application/json" }
-        });
-
-        console.log("🔹 Attribute Tree Response:", JSON.stringify(response.data, null, 2));
+        // POST request ke Shopee
+        const body = { category_id_list: [Number(category_id)] };
+        const response = await axios.post(url, body, { headers: { "Content-Type": "application/json" } });
 
         if (response.data.error) {
-            return res.status(400).json({ success: false, message: response.data.message, shopee_response: response.data });
+            return res.status(400).json({
+                success: false,
+                message: response.data.message,
+                shopee_response: response.data
+            });
         }
 
         return res.status(200).json({
