@@ -231,7 +231,6 @@ const createProductShopee = async (req, res) => {
         // 1️⃣ Ambil token Shopee
         const shopeeData = await Shopee.findOne();
         if (!shopeeData?.access_token) {
-            console.log("❌ Shopee token tidak ditemukan");
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
         }
         const { shop_id, access_token } = shopeeData;
@@ -260,28 +259,10 @@ const createProductShopee = async (req, res) => {
         const formData = new FormData();
         formData.append("image", imageBuffer, { filename: `${product.id_product}.png`, contentType: "image/png" });
         const uploadResponse = await axios.post(uploadUrl, formData, { headers: formData.getHeaders() });
-        console.log("🔹 Upload Image Response:", uploadResponse.data);
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 5️⃣ Ambil attribute tree untuk kategori
-        const attrTreePath = "/api/v2/product/get_attribute_tree";
-        const attrTreeSign = generateSign(attrTreePath, timestamp, access_token, shop_id);
-        const attrTreeUrl = `https://partner.shopeemobile.com${attrTreePath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${attrTreeSign}`;
-        const attrTreeResponse = await axios.post(attrTreeUrl, { category_id_list: [Number(category_id)] }, { headers: { "Content-Type": "application/json" } });
-        console.log("🔹 Attribute Tree Response:", JSON.stringify(attrTreeResponse.data, null, 2));
-
-        let shelfLifeAttribute = null;
-        const attributeTree = attrTreeResponse.data.response?.list?.[0]?.attribute_tree || [];
-        for (const attr of attributeTree) {
-            if (attr.name.toLowerCase().includes("shelf life")) {
-                shelfLifeAttribute = attr;
-                break;
-            }
-        }
-        console.log("🔹 Shelf Life Attribute:", shelfLifeAttribute);
-
-        // 6️⃣ Body Add Item
+        // 5️⃣ Body Add Item dengan logistic_id dari request
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
 
         const body = {
@@ -295,7 +276,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistic_id: Number(logistic_id),
+                    logistic_id: Number(logistic_id), // dari request
                     enabled: true,
                     is_free: false
                 }
@@ -312,34 +293,22 @@ const createProductShopee = async (req, res) => {
             brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" }
         };
 
-        // 7️⃣ Tambahkan shelf life jika ada
-        if (shelfLifeAttribute) {
-            body.attribute_list = [
-                {
-                    attribute_id: shelfLifeAttribute.attribute_id,
-                    attribute_value_list: [
-                        { value_id: 0, original_value_name: "12 bulan" }
-                    ]
-                }
-            ];
-        }
-
-        console.log("🔹 Add Item Body:", JSON.stringify(body, null, 2));
-
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
         const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
-
         const createResponse = await axios.post(addItemUrl, body, { headers: { "Content-Type": "application/json" } });
-        console.log("🔹 Add Item Response:", JSON.stringify(createResponse.data, null, 2));
 
         if (createResponse.data.error) {
             return res.status(400).json({ success: false, message: createResponse.data.message, shopee_response: createResponse.data });
         }
 
+        // ✅ Simpan id_product_shopee di tabel Stok sesuai satuan
         const newShopeeId = createResponse.data.response?.item_id;
         if (newShopeeId) {
-            await Stok.update({ id_product_shopee: newShopeeId }, { where: { id_stok: stokTerpilih.id_stok } });
+            await Stok.update(
+                { id_product_shopee: newShopeeId },
+                { where: { id_stok: stokTerpilih.id_stok } }
+            );
         }
 
         return res.status(201).json({
