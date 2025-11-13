@@ -2231,6 +2231,8 @@ const updateStockShopee = async (req, res) => {
 const getShopeeAttributeTree = async (req, res) => {
     try {
         const { category_id } = req.params;
+        console.log("✅ Hit getShopeeAttributeTree, params:", req.params);
+
 
         if (!category_id) {
             return res.status(400).json({ error: "category_id is required" });
