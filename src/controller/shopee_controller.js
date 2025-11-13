@@ -262,7 +262,33 @@ const createProductShopee = async (req, res) => {
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
         if (!uploadedImageId) return res.status(400).json({ error: "Gagal mendapatkan image_id dari Shopee", shopee_response: uploadResponse.data });
 
-        // 5️⃣ Body Add Item dengan logistic_id dari request
+        // 5️⃣ Ambil attribute tree Shopee untuk kategori
+        const attrPath = "/api/v2/product/get_attribute_tree";
+        const attrSign = generateSign(attrPath, timestamp, access_token, shop_id);
+        const attrUrl = `https://partner.shopeemobile.com${attrPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${attrSign}`;
+        const attrResponse = await axios.post(attrUrl, { category_id: Number(category_id) });
+        const attributes = attrResponse.data?.response?.attribute_tree || [];
+
+        // 6️⃣ Ambil attribute required paling atas
+        const requiredAttr = attributes.find(a => a.mandatory);
+        let itemAttributes = [];
+        if (requiredAttr) {
+            if (requiredAttr.attribute_value_list?.length > 0) {
+                // Pilih value pertama yang ada
+                itemAttributes.push({
+                    attribute_id: requiredAttr.attribute_id,
+                    value_id: requiredAttr.attribute_value_list[0].value_id
+                });
+            } else {
+                // Input type manual, isi dengan nama attribute (flat)
+                itemAttributes.push({
+                    attribute_id: requiredAttr.attribute_id,
+                    value: requiredAttr.name
+                });
+            }
+        }
+
+        // 7️⃣ Body Add Item dengan logistic_id dari request
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
 
         const body = {
@@ -276,7 +302,7 @@ const createProductShopee = async (req, res) => {
             package_width: Number(dimension.width),
             logistic_info: [
                 {
-                    logistic_id: Number(logistic_id), // dari request
+                    logistic_id: Number(logistic_id),
                     enabled: true,
                     is_free: false
                 }
@@ -290,7 +316,8 @@ const createProductShopee = async (req, res) => {
             ],
             condition: condition || "NEW",
             image: { image_id_list: [uploadedImageId], image_ratio: "1:1" },
-            brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" }
+            brand: { brand_id: Number(brand_id) || 0, original_brand_name: brand_name || "No Brand" },
+            attribute: itemAttributes
         };
 
         const addItemPath = "/api/v2/product/add_item";
