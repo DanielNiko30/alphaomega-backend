@@ -223,15 +223,52 @@ const getShopeeItemList = async (req, res) => {
     }
 };
 
+async function getShopeeAttributes(category_id, access_token, shop_id) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = "/api/v2/product/get_attributes";
+    const sign = generateSign(path, timestamp, access_token, shop_id);
+
+    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
+
+    const response = await axios.get(url, {
+        params: { category_id }
+    });
+
+    return response.data?.response?.attribute_list || [];
+};
+
+function generateAutoAttributeList(attributeTree) {
+    const finalAttributes = [];
+
+    for (const attr of attributeTree) {
+        if (!attr.mandatory) continue;
+        if (!attr.attribute_value_list || attr.attribute_value_list.length === 0) continue;
+
+        // Ambil value pertama dari Shopee
+        const firstVal = attr.attribute_value_list[0];
+
+        finalAttributes.push({
+            attribute_id: attr.attribute_id,
+            attribute_value_list: [
+                {
+                    value_id: firstVal.value_id
+                }
+            ]
+        });
+    }
+
+    return finalAttributes;
+};
+
 const createProductShopee = async (req, res) => {
     try {
         const { id_product } = req.params;
         const { weight, category_id, dimension, condition, item_sku, brand_id, brand_name, selected_unit, logistic_id } = req.body;
 
         const shopeeData = await Shopee.findOne();
-        if (!shopeeData?.access_token) {
+        if (!shopeeData?.access_token)
             return res.status(400).json({ error: "Shopee token not found. Please authorize first." });
-        }
+
         const { shop_id, access_token } = shopeeData;
 
         const product = await Product.findOne({
@@ -248,7 +285,7 @@ const createProductShopee = async (req, res) => {
 
         if (!stokTerpilih) return res.status(400).json({ error: `Stok untuk satuan ${selected_unit} tidak ditemukan` });
 
-        // ===================== UPLOAD GAMBAR =====================
+        // ===================== UPLOAD IMAGE =====================
         const timestamp = Math.floor(Date.now() / 1000);
         const uploadPath = "/api/v2/media_space/upload_image";
         const uploadSign = generateSign(uploadPath, timestamp, access_token, shop_id);
@@ -266,14 +303,21 @@ const createProductShopee = async (req, res) => {
         });
 
         const uploadedImageId = uploadResponse.data?.response?.image_info?.image_id;
-        if (!uploadedImageId) {
+        if (!uploadedImageId)
             return res.status(400).json({
                 error: "Gagal mendapatkan image_id dari Shopee",
                 shopee_response: uploadResponse.data,
             });
-        }
 
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
+
+        // ===================== AUTO GET ATTRIBUTE TREE =====================
+        const attributeTree = await getShopeeAttributes(category_id, access_token, shop_id);
+
+        // ===================== AUTO GENERATE ATTRIBUTE =====================
+        const autoAttributes = generateAutoAttributeList(attributeTree);
+
+        console.log("AUTO ATTRIBUTE:", autoAttributes);
 
         // ===================== BODY CREATE PRODUCT =====================
         const body = {
@@ -315,20 +359,10 @@ const createProductShopee = async (req, res) => {
                 original_brand_name: brand_name || "No Brand",
             },
 
-            // ===================== FIXED SHELF LIFE (AUTOMATIC) =====================
-            attribute_list: [
-                {
-                    attribute_id: 100010, // Shelf Life
-                    attribute_value_list: [
-                        {
-                            value_id: 593, // 12 Months (ID resmi Shopee)
-                        },
-                    ],
-                },
-            ],
+            attribute_list: autoAttributes
         };
 
-        // ===================== REQUEST KE SHOPEE =====================
+        // ===================== SEND TO SHOPEE =====================
         const addItemPath = "/api/v2/product/add_item";
         const addItemSign = generateSign(addItemPath, timestamp, access_token, shop_id);
         const addItemUrl = `https://partner.shopeemobile.com${addItemPath}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${addItemSign}`;
@@ -337,13 +371,12 @@ const createProductShopee = async (req, res) => {
             headers: { "Content-Type": "application/json" },
         });
 
-        if (createResponse.data.error) {
+        if (createResponse.data.error)
             return res.status(400).json({
                 success: false,
                 message: createResponse.data.message,
                 shopee_response: createResponse.data,
             });
-        }
 
         const newShopeeId = createResponse.data.response?.item_id;
 
@@ -374,7 +407,6 @@ const createProductShopee = async (req, res) => {
         });
     }
 };
-
 
 const getShopeeCategories = async (req, res) => {
     try {
