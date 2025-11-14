@@ -13,7 +13,15 @@ async function generateUserId() {
 const UserController = {
     getUsers: async (req, res) => {
         try {
-            const users = await User.findAll();
+            // Ambil semua user kecuali yang role = 'admin'
+            const users = await User.findAll({
+                where: {
+                    role: {
+                        [User.sequelize.Op.ne]: 'admin' // NE = not equal
+                    }
+                }
+            });
+
             res.setHeader("Content-Type", "application/json");
             res.status(200).json(users);
         } catch (error) {
