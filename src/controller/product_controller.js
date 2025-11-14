@@ -816,9 +816,7 @@ const ProductController = {
                 nama_product: p.nama_product,
                 deskripsi_product: p.deskripsi_product,
                 product_kategori: p.kategori ? p.kategori.nama_kategori : "-",
-                gambar_product_url: p.gambar_product
-                    ? `/api/product/loadImage/${p.id_product}`
-                    : null,
+                gambar_product: p.gambar_product ? `/api/product/loadImage/${p.id_product}` : null,
 
                 stok_list: (p.stok || []).map((s) => ({
                     id_stok: s.id_stok,
@@ -847,21 +845,17 @@ const ProductController = {
     loadProductImage: async (req, res) => {
         try {
             const { id } = req.params;
-
             const product = await Product.findByPk(id);
+            if (!product || !product.gambar_product) return res.status(404).send("Image not found");
 
-            if (!product || !product.gambar_product) {
-                return res.status(404).send("Image not found");
-            }
-
-            // Kirim gambar langsung, bukan base64
-            res.setHeader("Content-Type", "image/jpeg"); // sesuaikan tipe gambar
-            return res.send(product.gambar_product);
+            res.setHeader("Content-Type", "image/jpeg"); // sesuaikan tipe
+            return res.send(product.gambar_product); // kirim BLOB
         } catch (err) {
-            console.error("❌ Error loadProductImage:", err);
+            console.error(err);
             return res.status(500).send("Server error");
         }
-    },
+    }
+
 };
 
 module.exports = ProductController;
