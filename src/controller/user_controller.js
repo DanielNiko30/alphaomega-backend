@@ -1,4 +1,5 @@
 const { User, Kategori, Product, Stok } = require('../model/models');
+const { Op } = require('sequelize');
 
 async function generateUserId() {
     const lastUser = await User.findOne({ order: [['id_user', 'DESC']] });
