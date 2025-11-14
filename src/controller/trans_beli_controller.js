@@ -90,10 +90,14 @@ const TransBeliController = {
                 detail
             } = req.body;
 
-            // 1️⃣ Generate ID Header Transaksi
+            if (!detail || !Array.isArray(detail) || detail.length === 0) {
+                return res.status(400).json({ message: "Detail transaksi tidak boleh kosong" });
+            }
+
+            // 🔹 1. Generate ID HTrans
             const id_htrans_beli = await generateHTransBeliId();
 
-            // 2️⃣ Buat Header Transaksi
+            // 🔹 2. Buat header transaksi
             await HTransBeli.create(
                 {
                     id_htrans_beli,
@@ -107,14 +111,12 @@ const TransBeliController = {
                 { transaction: t }
             );
 
-            // 3️⃣ Penampung untuk sinkron stok nanti
             const stokUpdateList = [];
 
-            // 4️⃣ Proses detail transaksi pembelian
+            // 🔹 3. Insert detail transaksi + update stok
             for (const item of detail) {
                 const id_dtrans_beli = await generateDTransBeliId();
 
-                // Simpan detail transaksi
                 await DTransBeli.create(
                     {
                         id_dtrans_beli,
@@ -128,25 +130,26 @@ const TransBeliController = {
                     { transaction: t }
                 );
 
-                // 🧮 Update atau buat stok
+                // 🔹 Cari stok berdasarkan product + satuan
                 let stok = await Stok.findOne({
                     where: { id_product_stok: item.id_produk, satuan: item.satuan },
                     transaction: t,
                 });
 
                 if (stok) {
+                    // Tambah stok (karena transaksi baru)
                     const stokBaru = stok.stok + Number(item.jumlah_barang);
                     await stok.update(
                         {
                             stok: stokBaru,
                             harga: Number(item.harga_satuan),
-                            harga_beli: Number(item.harga_satuan), // 🆕 Tambahan harga_beli
+                            harga_beli: Number(item.harga_satuan),
                         },
                         { transaction: t }
                     );
                     stokUpdateList.push(stok);
                 } else {
-                    // Jika stok belum ada
+                    // Stok belum ada → buat baru
                     const id_stok = await generateStokId();
                     stok = await Stok.create(
                         {
@@ -155,7 +158,7 @@ const TransBeliController = {
                             satuan: item.satuan,
                             stok: Number(item.jumlah_barang),
                             harga: Number(item.harga_satuan),
-                            harga_beli: Number(item.harga_satuan), // 🆕 Tambahan harga_beli
+                            harga_beli: Number(item.harga_satuan),
                         },
                         { transaction: t }
                     );
@@ -163,44 +166,40 @@ const TransBeliController = {
                 }
             }
 
-            // ✅ Commit transaksi lokal
+            // 🔹 4. Commit DB lokal
             await t.commit();
 
-            // 🔄 Ambil stok terbaru
+            // 🔄 5. Ambil stok terbaru untuk sinkronisasi
             const freshStokList = await Promise.all(
                 stokUpdateList.map(async (s) => await Stok.findByPk(s.id_stok))
             );
 
-            // 🚀 Sinkron ke marketplace (Shopee & Lazada)
+            // 🚀 6. Sync Shopee & Lazada (tidak menggagalkan transaksi kalau gagal)
             (async () => {
                 for (const stok of freshStokList) {
                     if (!stok) continue;
 
                     try {
                         // 🟠 Shopee
-                        if (stok.id_product_shopee && stok.id_product_shopee !== '' && !isNaN(stok.stok)) {
+                        if (stok.id_product_shopee && stok.id_product_shopee !== '') {
                             await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
                                 item_id: Number(stok.id_product_shopee),
                                 stock: Number(stok.stok)
                             });
                             console.log(`🟢 Shopee stok updated [${stok.id_product_stok}] → ${stok.stok}`);
-                        } else {
-                            console.log(`⏭️ Skip Shopee: produk ${stok.id_product_stok} belum punya id_product_shopee`);
                         }
 
                         // 🔵 Lazada
-                        if (stok.id_product_lazada && stok.id_product_lazada !== '' && !isNaN(stok.stok)) {
+                        if (stok.id_product_lazada && stok.id_product_lazada !== '') {
                             await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
                                 item_id: String(stok.id_product_lazada),
                                 sku_id: String(stok.sku_lazada),
                                 quantity: Number(stok.stok)
                             });
                             console.log(`🟣 Lazada stok updated [${stok.id_product_stok}] → ${stok.stok}`);
-                        } else {
-                            console.log(`⏭️ Skip Lazada: produk ${stok.id_product_stok} belum punya id_product_lazada/sku_lazada`);
                         }
                     } catch (err) {
-                        console.error("❌ Gagal update stok marketplace (createTransactionBeli):", {
+                        console.error("❌ Gagal update stok marketplace (createTransaction):", {
                             produk: stok.id_product_stok,
                             error: err.response?.data || err.message,
                         });
@@ -208,12 +207,13 @@ const TransBeliController = {
                 }
             })();
 
-            // ✅ Response sukses
-            res.status(201).json({
+            // 🔥 7. Response sukses
+            res.status(200).json({
                 success: true,
-                message: "Transaksi pembelian berhasil dibuat dan stok diperbarui",
+                message: "Transaksi pembelian berhasil dibuat",
                 id_htrans_beli,
             });
+
         } catch (error) {
             await t.rollback();
             console.error("❌ Gagal createTransactionBeli:", error);
