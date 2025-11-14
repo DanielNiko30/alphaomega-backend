@@ -80,6 +80,8 @@ const TransBeliController = {
     createTransaction: async (req, res) => {
         const t = await HTransBeli.sequelize.transaction();
         try {
+            console.log("📥 Incoming BODY:", req.body);
+
             let {
                 id_supplier,
                 tanggal,
@@ -90,11 +92,23 @@ const TransBeliController = {
                 detail
             } = req.body;
 
-            // 🛠️ AUTO-PARSE detail jika datang sebagai string JSON
+            // =====================================================================================
+            // 1️⃣ VALIDASI DASAR
+            // =====================================================================================
+            if (!id_supplier || !tanggal || !total_harga || !detail) {
+                return res.status(400).json({
+                    success: false,
+                    message: "id_supplier, tanggal, total_harga, dan detail wajib diisi"
+                });
+            }
+
+            // =====================================================================================
+            // 2️⃣ PARSE detail jika masih string JSON
+            // =====================================================================================
             if (typeof detail === "string") {
                 try {
                     detail = JSON.parse(detail);
-                } catch (err) {
+                } catch (e) {
                     return res.status(400).json({
                         success: false,
                         message: "Format detail tidak valid (bukan JSON)"
@@ -102,23 +116,42 @@ const TransBeliController = {
                 }
             }
 
-            if (!Array.isArray(detail)) {
+            // Jika Flutter mengirim MapEntry → kadang bentuknya {detail: [{...}]}
+            if (typeof detail === "object" && !Array.isArray(detail)) {
+                // bisa jadi formatnya {0: {...}, 1: {...}}
+                detail = Object.values(detail);
+            }
+
+            if (!Array.isArray(detail) || detail.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "detail harus berupa array"
+                    message: "detail harus berupa ARRAY dan minimal 1 item"
                 });
             }
 
-            // 1️⃣ Generate ID Header
+            // =====================================================================================
+            // 3️⃣ VALIDASI SETIAP ITEM DETAIL
+            // =====================================================================================
+            for (const d of detail) {
+                if (!d.id_produk || !d.jumlah_barang || !d.harga_satuan || !d.subtotal || !d.satuan) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Semua field detail harus lengkap. Data bermasalah: ${JSON.stringify(d)}`
+                    });
+                }
+            }
+
+            // =====================================================================================
+            // 4️⃣ GENERATE ID HEADER
+            // =====================================================================================
             const id_htrans_beli = await generateHTransBeliId();
 
-            // 2️⃣ Buat Header
             await HTransBeli.create(
                 {
                     id_htrans_beli,
                     id_supplier,
                     tanggal,
-                    total_harga: Math.floor(Number(total_harga)),
+                    total_harga: Number(total_harga),
                     metode_pembayaran,
                     nomor_invoice,
                     ppn: Number(ppn) || 0,
@@ -126,10 +159,11 @@ const TransBeliController = {
                 { transaction: t }
             );
 
-            // 3️⃣ List stok untuk sinkron marketplace
             const stokUpdateList = [];
 
-            // 4️⃣ Simpan Detail
+            // =====================================================================================
+            // 5️⃣ SIMPAN DETAIL & UPDATE STOK
+            // =====================================================================================
             for (const item of detail) {
                 const id_dtrans_beli = await generateDTransBeliId();
 
@@ -141,15 +175,18 @@ const TransBeliController = {
                         jumlah_barang: Number(item.jumlah_barang),
                         harga_satuan: Number(item.harga_satuan),
                         diskon_barang: Number(item.diskon_barang) || 0,
-                        subtotal: Math.floor(Number(item.subtotal)),
+                        subtotal: Number(item.subtotal),
                     },
                     { transaction: t }
                 );
 
-                // 🧮 Update STOK
+                // ---------------- UPDATE STOK ----------------
                 let stok = await Stok.findOne({
-                    where: { id_product_stok: item.id_produk, satuan: item.satuan },
-                    transaction: t,
+                    where: {
+                        id_product_stok: item.id_produk,
+                        satuan: item.satuan
+                    },
+                    transaction: t
                 });
 
                 if (stok) {
@@ -179,91 +216,86 @@ const TransBeliController = {
                 stokUpdateList.push(stok);
             }
 
-            // 🔥 Commit transaksi utama
+            // =====================================================================================
+            // 6️⃣ COMMIT TRANSAKSI DATABASE
+            // =====================================================================================
             await t.commit();
 
-            // --------------------------------------------------------------------------------------------------
-            // 🔄 Sinkron Marketplace (NON-BLOCKING) → error tidak menggagalkan create transaksi
-            // --------------------------------------------------------------------------------------------------
-            const marketplaceResult = {
-                shopee: [],
-                lazada: []
-            };
+            // =====================================================================================
+            // 7️⃣ UPDATE MARKETPLACE (NON BLOCKING)
+            // =====================================================================================
+            const marketplaceResult = { shopee: [], lazada: [] };
 
             (async () => {
                 for (const stok of stokUpdateList) {
                     try {
-                        const freshStok = await Stok.findByPk(stok.id_stok);
+                        const fresh = await Stok.findByPk(stok.id_stok);
 
-                        // 🟠 SHOPEE
-                        if (freshStok.id_product_shopee) {
+                        // === SHOPEE ===
+                        if (fresh.id_product_shopee) {
                             try {
                                 await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                                    item_id: Number(freshStok.id_product_shopee),
-                                    stock: Number(freshStok.stok)
+                                    item_id: Number(fresh.id_product_shopee),
+                                    stock: Number(fresh.stok)
                                 });
 
                                 marketplaceResult.shopee.push({
-                                    produk: freshStok.id_product_stok,
+                                    produk: fresh.id_product_stok,
                                     status: "success"
                                 });
-
                             } catch (err) {
-                                console.error("❌ Shopee gagal update:", err.response?.data || err.message);
                                 marketplaceResult.shopee.push({
-                                    produk: freshStok.id_product_stok,
+                                    produk: fresh.id_product_stok,
                                     status: "failed",
                                     error: err.message
                                 });
                             }
                         }
 
-                        // 🔵 LAZADA
-                        if (freshStok.id_product_lazada && freshStok.sku_lazada) {
+                        // === LAZADA ===
+                        if (fresh.id_product_lazada && fresh.sku_lazada) {
                             try {
                                 await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                                    item_id: String(freshStok.id_product_lazada),
-                                    sku_id: String(freshStok.sku_lazada),
-                                    quantity: Number(freshStok.stok)
+                                    item_id: String(fresh.id_product_lazada),
+                                    sku_id: String(fresh.sku_lazada),
+                                    quantity: Number(fresh.stok)
                                 });
 
                                 marketplaceResult.lazada.push({
-                                    produk: freshStok.id_product_stok,
+                                    produk: fresh.id_product_stok,
                                     status: "success"
                                 });
-
                             } catch (err) {
-                                console.error("❌ Lazada gagal update:", err.response?.data || err.message);
                                 marketplaceResult.lazada.push({
-                                    produk: freshStok.id_product_stok,
+                                    produk: fresh.id_product_stok,
                                     status: "failed",
                                     error: err.message
                                 });
                             }
                         }
-
                     } catch (err) {
-                        console.log("❌ Error general sinkron marketplace:", err.message);
+                        console.log("❌ Sync marketplace error:", err.message);
                     }
                 }
             })();
 
-            // --------------------------------------------------------------------------------------------------
-
-            // 🎉 Sukses response
+            // =====================================================================================
+            // 8️⃣ SEND RESPONSE
+            // =====================================================================================
             return res.status(201).json({
                 success: true,
                 message: "Transaksi pembelian berhasil dibuat",
                 id_htrans_beli,
-                marketplace: marketplaceResult // opsional
+                marketplace: marketplaceResult
             });
 
         } catch (error) {
             await t.rollback();
-            console.error("❌ Gagal createTransactionBeli:", error);
+            console.error("❌ ERROR createTransaction:", error);
+
             return res.status(500).json({
                 success: false,
-                message: error.message || "Gagal membuat transaksi pembelian",
+                message: error.message || "Gagal membuat transaksi pembelian"
             });
         }
     },
