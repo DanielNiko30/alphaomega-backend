@@ -816,9 +816,10 @@ const ProductController = {
                 nama_product: p.nama_product,
                 deskripsi_product: p.deskripsi_product,
                 product_kategori: p.kategori ? p.kategori.nama_kategori : "-",
-                gambar_product: p.gambar_product
-                    ? `data:image/jpeg;base64,${p.gambar_product.toString("base64")}`
+                gambar_product_url: p.gambar_product
+                    ? `/api/product/loadImage/${p.id_product}`
                     : null,
+
                 stok_list: (p.stok || []).map((s) => ({
                     id_stok: s.id_stok,
                     satuan: s.satuan,
@@ -840,6 +841,25 @@ const ProductController = {
                 message: "Terjadi kesalahan pada server",
                 error: error.message,
             });
+        }
+    },
+
+    loadProductImage: async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            const product = await Product.findByPk(id);
+
+            if (!product || !product.gambar_product) {
+                return res.status(404).send("Image not found");
+            }
+
+            // Kirim gambar langsung, bukan base64
+            res.setHeader("Content-Type", "image/jpeg"); // sesuaikan tipe gambar
+            return res.send(product.gambar_product);
+        } catch (err) {
+            console.error("❌ Error loadProductImage:", err);
+            return res.status(500).send("Server error");
         }
     },
 };
