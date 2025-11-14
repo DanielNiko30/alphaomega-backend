@@ -24,6 +24,6 @@ router.get("/:id/satuan", ProductController.getSatuanByProductId);
 
 router.post("/kategori", ProductController.addKategori);
 router.post("/konversi-stok", ProductController.konversiStok);
-router.get("/loadImage/:id", ProductController.loadProductImage);
+
 
 module.exports = router;
