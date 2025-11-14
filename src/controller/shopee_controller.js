@@ -228,20 +228,20 @@ async function getMandatoryAttributes(category_id, access_token, shop_id) {
     const path = "/api/v2/product/get_attribute_tree";
     const sign = generateSign(path, timestamp, access_token, shop_id);
 
-    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}&category_id_list=${category_id}&language=id`;
+    const url =
+        `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}` +
+        `&timestamp=${timestamp}&access_token=${access_token}` +
+        `&shop_id=${shop_id}&sign=${sign}&category_id_list=${category_id}&language=id`;
 
     const res = await axios.get(url);
-
     const tree = res.data.response?.list?.[0]?.attribute_tree || [];
 
-    // ---- Extract mandatory attributes ----
-    function extractMandatory(treeNode) {
+    function extractMandatory(node) {
         let arr = [];
+        if (node.is_mandatory) arr.push(node);
 
-        if (treeNode.is_mandatory) arr.push(treeNode);
-
-        if (treeNode.children && treeNode.children.length > 0) {
-            for (const child of treeNode.children) {
+        if (node.children) {
+            for (const child of node.children) {
                 arr = arr.concat(extractMandatory(child));
             }
         }
@@ -249,6 +249,49 @@ async function getMandatoryAttributes(category_id, access_token, shop_id) {
     }
 
     return extractMandatory({ children: tree });
+}
+
+function buildAttributeValue(attr) {
+    // Jika punya daftar pilihan → wajib pakai value_id
+    if (attr.values && attr.values.length > 0) {
+        return {
+            attribute_id: attr.attribute_id,
+            value_id: attr.values[0].value_id
+        };
+    }
+
+    const type = (attr.input_type || "").toUpperCase();
+
+    // Number only
+    if (type.includes("NUMBER") && !type.includes("UNIT")) {
+        return {
+            attribute_id: attr.attribute_id,
+            value: "1"
+        };
+    }
+
+    // Number with unit (Shelf Life)
+    if (type.includes("UNIT")) {
+        return {
+            attribute_id: attr.attribute_id,
+            value: "1",
+            unit: attr.unit || "month"  // default aman
+        };
+    }
+
+    // Date or datetime → YYYY-MM-DD
+    if (type.includes("DATE")) {
+        return {
+            attribute_id: attr.attribute_id,
+            value: new Date().toISOString().split("T")[0]
+        };
+    }
+
+    // Default string
+    return {
+        attribute_id: attr.attribute_id,
+        value: "Default"
+    };
 }
 
 const createProductShopee = async (req, res) => {
@@ -319,21 +362,8 @@ const createProductShopee = async (req, res) => {
         // ----------------- 5️⃣ Ambil Mandatory Attributes (SOLUSI SHELF LIFE) -----------------
         const mandatoryAttrs = await getMandatoryAttributes(category_id, access_token, shop_id);
 
-        const finalAttributes = mandatoryAttrs.map(attr => {
-            if (attr.values && attr.values.length > 0) {
-                // jika atribut punya pilihan value → pakai default (first)
-                return {
-                    attribute_id: attr.attribute_id,
-                    value_id: attr.values[0].value_id
-                };
-            }
+        const finalAttributes = mandatoryAttrs.map(a => buildAttributeValue(a));
 
-            // jika atribut tipe string/number → isi "Default"
-            return {
-                attribute_id: attr.attribute_id,
-                value: "Default"
-            };
-        });
 
         // ----------------- 6️⃣ Build body Add Item -----------------
         if (!logistic_id) return res.status(400).json({ error: "logistic_id wajib diisi" });
