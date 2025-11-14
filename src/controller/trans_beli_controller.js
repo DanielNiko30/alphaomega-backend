@@ -89,12 +89,12 @@ const TransBeliController = {
                 metode_pembayaran,
                 nomor_invoice,
                 ppn,
-                detail
+                detail,
+                detail_transaksi
             } = req.body;
 
-            // =====================================================================================
-            // 1️⃣ VALIDASI DASAR
-            // =====================================================================================
+            detail = detail || detail_transaksi;
+
             if (!id_supplier || !tanggal || !total_harga || !detail) {
                 return res.status(400).json({
                     success: false,
@@ -102,9 +102,6 @@ const TransBeliController = {
                 });
             }
 
-            // =====================================================================================
-            // 2️⃣ PARSE detail jika masih string JSON
-            // =====================================================================================
             if (typeof detail === "string") {
                 try {
                     detail = JSON.parse(detail);
@@ -116,9 +113,7 @@ const TransBeliController = {
                 }
             }
 
-            // Jika Flutter mengirim MapEntry → kadang bentuknya {detail: [{...}]}
             if (typeof detail === "object" && !Array.isArray(detail)) {
-                // bisa jadi formatnya {0: {...}, 1: {...}}
                 detail = Object.values(detail);
             }
 
@@ -129,21 +124,15 @@ const TransBeliController = {
                 });
             }
 
-            // =====================================================================================
-            // 3️⃣ VALIDASI SETIAP ITEM DETAIL
-            // =====================================================================================
             for (const d of detail) {
                 if (!d.id_produk || !d.jumlah_barang || !d.harga_satuan || !d.subtotal || !d.satuan) {
                     return res.status(400).json({
                         success: false,
-                        message: `Semua field detail harus lengkap. Data bermasalah: ${JSON.stringify(d)}`
+                        message: `Data detail tidak lengkap: ${JSON.stringify(d)}`
                     });
                 }
             }
 
-            // =====================================================================================
-            // 4️⃣ GENERATE ID HEADER
-            // =====================================================================================
             const id_htrans_beli = await generateHTransBeliId();
 
             await HTransBeli.create(
@@ -160,10 +149,6 @@ const TransBeliController = {
             );
 
             const stokUpdateList = [];
-
-            // =====================================================================================
-            // 5️⃣ SIMPAN DETAIL & UPDATE STOK
-            // =====================================================================================
             for (const item of detail) {
                 const id_dtrans_beli = await generateDTransBeliId();
 
@@ -180,7 +165,6 @@ const TransBeliController = {
                     { transaction: t }
                 );
 
-                // ---------------- UPDATE STOK ----------------
                 let stok = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
@@ -215,17 +199,9 @@ const TransBeliController = {
 
                 stokUpdateList.push(stok);
             }
-
-            // =====================================================================================
-            // 6️⃣ COMMIT TRANSAKSI DATABASE
-            // =====================================================================================
             await t.commit();
 
-            // =====================================================================================
-            // 7️⃣ UPDATE MARKETPLACE (NON BLOCKING)
-            // =====================================================================================
             const marketplaceResult = { shopee: [], lazada: [] };
-
             (async () => {
                 for (const stok of stokUpdateList) {
                     try {
@@ -280,7 +256,7 @@ const TransBeliController = {
             })();
 
             // =====================================================================================
-            // 8️⃣ SEND RESPONSE
+            // 9️⃣ RESPONSE
             // =====================================================================================
             return res.status(201).json({
                 success: true,
