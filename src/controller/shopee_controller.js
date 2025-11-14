@@ -223,18 +223,17 @@ const getShopeeItemList = async (req, res) => {
     }
 };
 
-async function getShopeeAttributes(category_id, access_token, shop_id) {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const path = "/api/v2/product/get_attributes";
-    const sign = generateSign(path, timestamp, access_token, shop_id);
+async function getShopeeAttributes(category_id) {
+    try {
+        const url = `https://tokalphaomegaploso.my.id/api/shopee/attribute-tree/${category_id}`;
+        const response = await axios.get(url);
 
-    const url = `https://partner.shopeemobile.com${path}?partner_id=${PARTNER_ID}&timestamp=${timestamp}&access_token=${access_token}&shop_id=${shop_id}&sign=${sign}`;
-
-    const response = await axios.get(url, {
-        params: { category_id }
-    });
-
-    return response.data?.response?.attribute_list || [];
+        // Sesuaikan dengan struktur response backend kamu
+        return response.data?.data || [];
+    } catch (error) {
+        console.error("Error fetch attributes:", error.response?.data || error);
+        return [];
+    }
 };
 
 function generateAutoAttributeList(attributeTree) {
