@@ -17,7 +17,7 @@ const UserController = {
             const users = await User.findAll({
                 where: {
                     role: {
-                        [User.sequelize.Op.ne]: 'admin' // NE = not equal
+                        [Op.ne]: 'admin'  // "not equal" admin
                     }
                 }
             });
