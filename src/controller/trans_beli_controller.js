@@ -281,23 +281,29 @@ const TransBeliController = {
                 metode_pembayaran,
                 nomor_invoice,
                 ppn,
-                detail
+                detail,
+                detail_transaksi
             } = req.body;
 
-            if (!id_htrans_beli) {
-                return res.status(400).json({ message: "id_htrans_beli wajib diisi" });
-            }
+            // Merge key (sama seperti create)
+            detail = detail || detail_transaksi;
 
-            // ========== PARSE DETAIL ==========
+            // ============= PARSING (identik create) =================
             if (!detail) {
-                return res.status(400).json({ message: "detail wajib diisi" });
+                return res.status(400).json({
+                    success: false,
+                    message: "detail wajib diisi"
+                });
             }
 
             if (typeof detail === "string") {
                 try {
                     detail = JSON.parse(detail);
                 } catch (e) {
-                    return res.status(400).json({ message: "Format detail tidak valid" });
+                    return res.status(400).json({
+                        success: false,
+                        message: "Format detail tidak valid"
+                    });
                 }
             }
 
@@ -306,27 +312,39 @@ const TransBeliController = {
             }
 
             if (detail.length === 0) {
-                return res.status(400).json({ message: "detail tidak boleh kosong" });
+                return res.status(400).json({
+                    success: false,
+                    message: "detail tidak boleh kosong"
+                });
             }
 
-            // ========== AMBIL TRANSAKSI LAMA ==========
-            const existingTrans = await HTransBeli.findByPk(id_htrans_beli, {
+            for (const d of detail) {
+                if (!d.id_produk || !d.jumlah_barang || !d.harga_satuan || !d.subtotal || !d.satuan) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Data detail tidak lengkap: ${JSON.stringify(d)}`
+                    });
+                }
+            }
+
+            // ============= AMBIL TRANSAKSI =============
+            const existing = await HTransBeli.findByPk(id_htrans_beli, {
                 include: [{ model: DTransBeli, as: "detail_transaksi" }],
                 transaction: t,
             });
 
-            if (!existingTrans) {
-                return res.status(404).json({ message: "Transaksi tidak ditemukan" });
+            if (!existing) {
+                return res.status(404).json({ success: false, message: "Transaksi tidak ditemukan" });
             }
 
-            const oldDetails = existingTrans.detail_transaksi;
+            const oldDetails = existing.detail_transaksi;
 
-            // ========== ROLLBACK STOK LAMA ==========
+            // ============= ROLLBACK STOK LAMA (fix satuan) =============
             for (const oldItem of oldDetails) {
                 const stok = await Stok.findOne({
                     where: {
                         id_product_stok: oldItem.id_produk,
-                        satuan: oldItem.satuan   // ← FIXED
+                        satuan: oldItem.satuan
                     },
                     transaction: t,
                 });
@@ -338,8 +356,8 @@ const TransBeliController = {
                 }
             }
 
-            // ========== UPDATE HEADER ==========
-            await existingTrans.update({
+            // ============= UPDATE HEADER =================
+            await existing.update({
                 id_supplier,
                 tanggal,
                 total_harga: Number(total_harga),
@@ -348,14 +366,14 @@ const TransBeliController = {
                 ppn: Number(ppn) || 0,
             }, { transaction: t });
 
-            // ========== HAPUS DETAIL LAMA ==========
+            // ============= HAPUS DETAIL LAMA =============
             await DTransBeli.destroy({
                 where: { id_htrans_beli },
                 transaction: t,
             });
 
-            // ========== INSERT DETAIL BARU ==========
-            const stokUpdateList = [];
+            // ============= INSERT DETAIL BARU (identik create) =============
+            const stokIds = [];
 
             for (const item of detail) {
                 const id_dtrans_beli = await generateDTransBeliId();
@@ -371,13 +389,13 @@ const TransBeliController = {
                     satuan: item.satuan
                 }, { transaction: t });
 
-                // cari stok berdasarkan satuan
+                // === UPDATE / CREATE STOK (sama persis create) ===
                 let stok = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
                         satuan: item.satuan
                     },
-                    transaction: t,
+                    transaction: t
                 });
 
                 if (stok) {
@@ -386,10 +404,12 @@ const TransBeliController = {
                         harga: Number(item.harga_satuan),
                         harga_beli: Number(item.harga_satuan),
                     }, { transaction: t });
+
+                    stokIds.push(stok.id_stok);
                 } else {
                     const id_stok = await generateStokId();
 
-                    stok = await Stok.create({
+                    await Stok.create({
                         id_stok,
                         id_product_stok: item.id_produk,
                         satuan: item.satuan,
@@ -397,41 +417,40 @@ const TransBeliController = {
                         harga: Number(item.harga_satuan),
                         harga_beli: Number(item.harga_satuan),
                     }, { transaction: t });
-                }
 
-                stokUpdateList.push(stok.id_stok);
+                    stokIds.push(id_stok);
+                }
             }
 
-            // ========== COMMIT ==========
+            // ============= COMMIT =============
             await t.commit();
 
-            // ========== SYNC MARKETPLACE ==========
-            const freshList = await Promise.all(
-                stokUpdateList.map(id => Stok.findByPk(id))
-            );
+            // ============= SYNC MARKETPLACE (identik create) =============
+            const marketplaceResult = { shopee: [], lazada: [] };
 
-            for (const stok of freshList) {
-                if (!stok) continue;
+            for (const id_stok of stokIds) {
+                const fresh = await Stok.findByPk(id_stok);
+                if (!fresh) continue;
 
                 try {
-                    // Shopee
-                    if (stok.id_product_shopee) {
+                    if (fresh.id_product_shopee) {
                         await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
-                            item_id: Number(stok.id_product_shopee),
-                            stock: Number(stok.stok)
+                            item_id: Number(fresh.id_product_shopee),
+                            stock: Number(fresh.stok)
                         });
+                        marketplaceResult.shopee.push({ produk: fresh.id_product_stok, status: "success" });
                     }
 
-                    // Lazada
-                    if (stok.id_product_lazada && stok.sku_lazada) {
+                    if (fresh.id_product_lazada && fresh.sku_lazada) {
                         await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
-                            item_id: String(stok.id_product_lazada),
-                            sku_id: String(stok.sku_lazada),
-                            quantity: Number(stok.stok)
+                            item_id: String(fresh.id_product_lazada),
+                            sku_id: String(fresh.sku_lazada),
+                            quantity: Number(fresh.stok)
                         });
+                        marketplaceResult.lazada.push({ produk: fresh.id_product_stok, status: "success" });
                     }
                 } catch (e) {
-                    console.error("Gagal update marketplace:", e.message);
+                    console.error("Marketplace update fail:", e.message);
                 }
             }
 
@@ -439,6 +458,7 @@ const TransBeliController = {
                 success: true,
                 message: "Transaksi berhasil diperbarui",
                 id_htrans_beli,
+                marketplace: marketplaceResult
             });
 
         } catch (error) {
