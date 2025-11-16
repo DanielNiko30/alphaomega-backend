@@ -288,6 +288,11 @@ const TransBeliController = {
             // Merge key (sama seperti create)
             detail = detail || detail_transaksi;
 
+            // Basic required
+            if (!id_htrans_beli) {
+                return res.status(400).json({ success: false, message: "id_htrans_beli wajib diisi" });
+            }
+
             // ============= PARSING (identik create) =================
             if (!detail) {
                 return res.status(400).json({
@@ -302,7 +307,7 @@ const TransBeliController = {
                 } catch (e) {
                     return res.status(400).json({
                         success: false,
-                        message: "Format detail tidak valid"
+                        message: "Format detail tidak valid (bukan JSON)"
                     });
                 }
             }
@@ -318,13 +323,26 @@ const TransBeliController = {
                 });
             }
 
-            for (const d of detail) {
-                if (!d.id_produk || !d.jumlah_barang || !d.harga_satuan || !d.subtotal || !d.satuan) {
+            // Validate each detail and ensure satuan is non-empty string
+            for (let i = 0; i < detail.length; i++) {
+                const d = detail[i];
+                if (!d.id_produk || d.jumlah_barang == null || d.harga_satuan == null || d.subtotal == null) {
                     return res.status(400).json({
                         success: false,
-                        message: `Data detail tidak lengkap: ${JSON.stringify(d)}`
+                        message: `Data detail tidak lengkap pada index ${i}: ${JSON.stringify(d)}`
                     });
                 }
+
+                // stricter check for satuan
+                if (typeof d.satuan !== 'string' || d.satuan.trim() === '') {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Field 'satuan' wajib diisi (tidak boleh kosong) pada detail index ${i}, produk: ${d.id_produk}`
+                    });
+                }
+
+                // normalize satuan (trim)
+                d.satuan = d.satuan.trim();
             }
 
             // ============= AMBIL TRANSAKSI =============
@@ -334,13 +352,25 @@ const TransBeliController = {
             });
 
             if (!existing) {
+                await t.rollback();
                 return res.status(404).json({ success: false, message: "Transaksi tidak ditemukan" });
             }
 
-            const oldDetails = existing.detail_transaksi;
+            const oldDetails = existing.detail_transaksi || [];
 
-            // ============= ROLLBACK STOK LAMA (fix satuan) =============
+            // ============= ROLLBACK STOK LAMA (safe: skip if satuan missing) =============
             for (const oldItem of oldDetails) {
+                if (!oldItem || oldItem.id_produk == null) {
+                    console.warn("[updateTransaction] skip oldItem karena tidak valid:", oldItem);
+                    continue;
+                }
+
+                // jika satuan tidak ada di record lama, skip dan log
+                if (typeof oldItem.satuan !== 'string' || oldItem.satuan.trim() === '') {
+                    console.warn(`[updateTransaction] old detail missing satuan, skip rollback for product ${oldItem.id_produk}`);
+                    continue;
+                }
+
                 const stok = await Stok.findOne({
                     where: {
                         id_product_stok: oldItem.id_produk,
@@ -353,6 +383,8 @@ const TransBeliController = {
                     await stok.update({
                         stok: Math.max(stok.stok - Number(oldItem.jumlah_barang), 0)
                     }, { transaction: t });
+                } else {
+                    console.warn(`[updateTransaction] stok not found for ${oldItem.id_produk} / ${oldItem.satuan} during rollback`);
                 }
             }
 
@@ -376,6 +408,16 @@ const TransBeliController = {
             const stokIds = [];
 
             for (const item of detail) {
+                // safety: ensure item.satuan already normalized
+                if (typeof item.satuan !== 'string' || item.satuan.trim() === '') {
+                    // this should not happen due validation above, but double-check
+                    await t.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        message: `Satuan tidak boleh kosong untuk produk ${item.id_produk}`
+                    });
+                }
+
                 const id_dtrans_beli = await generateDTransBeliId();
 
                 await DTransBeli.create({
@@ -409,7 +451,7 @@ const TransBeliController = {
                 } else {
                     const id_stok = await generateStokId();
 
-                    await Stok.create({
+                    const created = await Stok.create({
                         id_stok,
                         id_product_stok: item.id_produk,
                         satuan: item.satuan,
@@ -418,7 +460,7 @@ const TransBeliController = {
                         harga_beli: Number(item.harga_satuan),
                     }, { transaction: t });
 
-                    stokIds.push(id_stok);
+                    stokIds.push(created.id_stok);
                 }
             }
 
@@ -451,6 +493,7 @@ const TransBeliController = {
                     }
                 } catch (e) {
                     console.error("Marketplace update fail:", e.message);
+                    marketplaceResult.shopee.push({ produk: fresh.id_product_stok, status: "failed", error: e.message });
                 }
             }
 
@@ -463,10 +506,10 @@ const TransBeliController = {
 
         } catch (error) {
             await t.rollback();
-            console.error(error);
+            console.error("[updateTransaction] ERROR:", error);
             return res.status(500).json({
                 success: false,
-                message: error.message
+                message: error.message || "Gagal memperbarui transaksi pembelian"
             });
         }
     },
