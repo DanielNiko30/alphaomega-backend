@@ -33,7 +33,6 @@ const User = db.define('User', {
         allowNull: false,
         defaultValue: "Tidak diketahui",
     },
-
     alamat: {
         type: DataTypes.STRING(255),
         allowNull: false,
