@@ -29,14 +29,14 @@ const User = db.define('User', {
         allowNull: false,
     },
     jenis_kelamin: {
-        type: DataTypes.STRING(10), // contoh: "Laki-laki", "Perempuan"
+        type: DataTypes.STRING(10),
         allowNull: false,
-        defaultValue: "Tidak diketahui",
+        defaultValue: "tidak diketahui",
     },
     alamat: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        defaultValue: "Belum diisi",
+        defaultValue: "tidak diketahui",
     },
 
 }, {

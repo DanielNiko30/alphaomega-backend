@@ -32,8 +32,6 @@ exports.login = async (req, res) => {
                 name: user.name,
                 role: user.role,
                 no_telp: user.no_telp,
-
-                // 🟩 TAMBAHKAN FIELD BARU DI SINI
                 alamat: user.alamat,
                 jenis_kelamin: user.jenis_kelamin
             },
