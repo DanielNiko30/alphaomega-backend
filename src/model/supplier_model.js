@@ -17,10 +17,16 @@ const Supplier = db.define(
         no_telp: {
             type: DataTypes.STRING(50),
             allowNull: false,
+        },
+        keterangan: {
+            type: DataTypes.TEXT,
+            allowNull: true, // bisa null
         }
-    }, {
-    tableName: 'supplier',
-    timestamps: false,
-});
+    },
+    {
+        tableName: 'supplier',
+        timestamps: false,
+    }
+);
 
 module.exports = { Supplier };
