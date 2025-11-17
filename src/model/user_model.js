@@ -28,6 +28,18 @@ const User = db.define('User', {
         type: DataTypes.STRING(50),
         allowNull: false,
     },
+    jenis_kelamin: {
+        type: DataTypes.STRING(10), // contoh: "Laki-laki", "Perempuan"
+        allowNull: false,
+        defaultValue: "Tidak diketahui",
+    },
+
+    alamat: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        defaultValue: "Belum diisi",
+    },
+
 }, {
     tableName: 'user',
     timestamps: false,
