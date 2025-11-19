@@ -68,8 +68,11 @@ const UserController = {
         try {
             const { id } = req.params;
 
-            // Cari user
-            const user = await User.findByPk(id);
+            // Cari user berdasarkan kolom id_user
+            const user = await User.findOne({
+                where: { id_user: id }
+            });
+
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
             }
