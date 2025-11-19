@@ -68,17 +68,16 @@ const UserController = {
         try {
             const { id } = req.params;
 
-            const user = await User.findOne({
-                where: { id_user: id }
-            });
-
+            const user = await User.findByPk(id);
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
             }
 
-            await user.update({ aktif: false });
+            user.aktif = false;
+            await user.save();
 
             res.json({ message: 'User disabled (aktif = false)' });
+
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
