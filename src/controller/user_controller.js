@@ -68,7 +68,6 @@ const UserController = {
         try {
             const { id } = req.params;
 
-            // Cari user berdasarkan kolom id_user
             const user = await User.findOne({
                 where: { id_user: id }
             });
@@ -77,7 +76,6 @@ const UserController = {
                 return res.status(404).json({ message: 'User not found' });
             }
 
-            // Update aktif menjadi false
             await user.update({ aktif: false });
 
             res.json({ message: 'User disabled (aktif = false)' });
