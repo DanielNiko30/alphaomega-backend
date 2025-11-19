@@ -1,5 +1,4 @@
 require('dotenv').config();
-console.log('ONESIGNAL_API_KEY:', process.env.ONESIGNAL_API_KEY);
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');

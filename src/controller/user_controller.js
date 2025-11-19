@@ -14,12 +14,12 @@ async function generateUserId() {
 const UserController = {
     getUsers: async (req, res) => {
         try {
-            // Ambil semua user kecuali yang role = 'admin'
             const users = await User.findAll({
                 where: {
                     role: {
-                        [Op.ne]: 'admin'  // "not equal" admin
-                    }
+                        [Op.ne]: 'admin'
+                    },
+                    aktif: true   // hanya ambil user yang masih aktif
                 }
             });
 
@@ -67,11 +67,17 @@ const UserController = {
     deleteUser: async (req, res) => {
         try {
             const { id } = req.params;
-            const user = await User.findByPk(id);
-            if (!user) return res.status(404).json({ message: 'User not found' });
 
-            await user.destroy();
-            res.json({ message: 'User deleted successfully' });
+            // Cari user
+            const user = await User.findByPk(id);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            // Update aktif menjadi false
+            await user.update({ aktif: false });
+
+            res.json({ message: 'User disabled (aktif = false)' });
         } catch (error) {
             res.status(500).json({ message: error.message });
         }

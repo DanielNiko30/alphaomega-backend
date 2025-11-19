@@ -223,15 +223,15 @@ const getProducts = async (req, res) => {
 
         return res.json({
             success: true,
-            url,                  // URL lengkap yang dipakai
-            params,               // Optional: tunjukkan query params juga
+            url,                  
+            params,               
             lazada_response: response.data
         });
     } catch (err) {
         console.error("❌ Lazada Get Products Error:", err.response?.data || err.message);
         return res.status(500).json({
             error: err.response?.data || err.message,
-            url: err.config?.url || null,   // URL request jika ada error
+            url: err.config?.url || null,  
             params: err.config?.params || null
         });
     }

@@ -38,6 +38,11 @@ const User = db.define('User', {
         allowNull: false,
         defaultValue: "tidak diketahui",
     },
+    aktif: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+    },
 
 }, {
     tableName: 'user',
