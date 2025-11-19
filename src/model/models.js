@@ -21,6 +21,11 @@ const User = db.define('user', {
         allowNull: false,
         defaultValue: "tidak diketahui",
     },
+    aktif: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+    },
 }, { tableName: 'user', timestamps: false });
 
 // Kategori
