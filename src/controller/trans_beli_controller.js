@@ -37,13 +37,8 @@ async function generateDTransBeliId() {
         number = lastNum + 1;
     }
 
-    // Random 3 digit (000–999)
-    const rand = Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0");
-
-    // Format: DTB000001123
-    return `${prefix}${String(number).padStart(6, "0")}${rand}`;
+    // Format: DTB000001, DTB000002, dst
+    return `${prefix}${String(number).padStart(6, "0")}`;
 }
 
 const TransBeliController = {
