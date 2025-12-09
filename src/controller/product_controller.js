@@ -431,12 +431,16 @@ const ProductController = {
 
     getAllKategori: async (req, res) => {
         try {
-            const kategori = await Kategori.findAll();
+            const kategori = await Kategori.findAll({
+                where: { aktif: true }   // ✅ hanya kategori aktif
+            });
+
             res.json(kategori);
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
     },
+
 
     addKategori: async (req, res) => {
         try {
@@ -513,6 +517,33 @@ const ProductController = {
             console.error("❌ Gagal update kategori:", error);
             return res.status(500).json({
                 message: "Gagal memperbarui kategori",
+                error: error.message
+            });
+        }
+    },
+
+    deleteKategori: async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            // Cek apakah kategori ada
+            const kategori = await Kategori.findByPk(id);
+
+            if (!kategori) {
+                return res.status(404).json({ message: "Kategori tidak ditemukan" });
+            }
+
+            // Soft delete → ubah aktif = false
+            await kategori.update({ aktif: false });
+
+            return res.json({
+                message: "Kategori berhasil dinonaktifkan (soft delete)"
+            });
+
+        } catch (error) {
+            console.error("❌ Error deleteKategori:", error);
+            return res.status(500).json({
+                message: "Gagal menghapus kategori",
                 error: error.message
             });
         }

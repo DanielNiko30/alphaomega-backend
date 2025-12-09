@@ -13,7 +13,10 @@ async function generateSupplierId() {
 const SupplierController = {
     getAllSuppliers: async (req, res) => {
         try {
-            const suppliers = await Supplier.findAll();
+            const suppliers = await Supplier.findAll({
+                where: { aktif: true }   // ✅ hanya supplier aktif
+            });
+
             res.json(suppliers);
         } catch (error) {
             res.status(500).json({ message: error.message });
@@ -57,15 +60,21 @@ const SupplierController = {
     deleteSupplier: async (req, res) => {
         try {
             const { id } = req.params;
-            const supplier = await Supplier.findByPk(id);
-            if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
 
-            await supplier.destroy();
-            res.json({ message: 'Supplier deleted successfully' });
+            const supplier = await Supplier.findByPk(id);
+            if (!supplier) {
+                return res.status(404).json({ message: 'Supplier not found' });
+            }
+
+            // Soft delete → set aktif = false
+            await supplier.update({ aktif: false });
+
+            res.json({ message: 'Supplier deleted (soft delete) successfully' });
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
     },
+
 };
 
 module.exports = SupplierController;

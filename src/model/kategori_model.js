@@ -14,6 +14,11 @@ const Kategori = db.define(
             type: DataTypes.STRING(255),
             allowNull: false,
         },
+        aktif: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+        },
+
     },
     {
         tableName: "kategori",

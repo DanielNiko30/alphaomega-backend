@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get("/kategori", ProductController.getAllKategori);
 router.put("/kategori/:id", ProductController.updateKategori);
+router.delete("/kategori/:id", ProductController.deleteKategori);
 
 router.get("/stok", ProductController.getAllStok);
 router.get("/stok/:id", ProductController.getStokById);

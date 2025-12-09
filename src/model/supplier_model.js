@@ -21,8 +21,14 @@ const Supplier = db.define(
         keterangan: {
             type: DataTypes.TEXT,
             allowNull: true, // bisa null
-        }
+        },
+        aktif: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+        },
+
     },
+
     {
         tableName: 'supplier',
         timestamps: false,
