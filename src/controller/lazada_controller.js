@@ -223,15 +223,15 @@ const getProducts = async (req, res) => {
 
         return res.json({
             success: true,
-            url,                  
-            params,               
+            url,
+            params,
             lazada_response: response.data
         });
     } catch (err) {
         console.error("❌ Lazada Get Products Error:", err.response?.data || err.message);
         return res.status(500).json({
             error: err.response?.data || err.message,
-            url: err.config?.url || null,  
+            url: err.config?.url || null,
             params: err.config?.params || null
         });
     }
@@ -540,7 +540,7 @@ const createProductLazada = async (req, res) => {
 
         // === Data produk ===
         const productAttributes = {
-            name: product.nama_product,
+            name: `${product.nama_product} ${stokTerpilih.satuan}`,
             brand: attributes.brand || "No Brand",
             description: product.deskripsi_product || "Deskripsi belum tersedia",
             short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
@@ -732,7 +732,7 @@ const updateProductLazada = async (req, res) => {
 
         // === Ambil data produk dari DB + gabungkan dengan input body ===
         const productAttributes = {
-            name: product.nama_product,
+            name: `${product.nama_product} ${stokTerpilih.satuan}`,
             brand: attributes.brand || "No Brand",
             description: product.deskripsi_product || "Deskripsi belum tersedia",
             short_description: product.deskripsi_product?.slice(0, 100) || "Short description",
