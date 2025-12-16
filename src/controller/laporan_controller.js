@@ -427,7 +427,7 @@ const LaporanController = {
 
                 const satuanTerbesar = stokTerbesar.satuan;
 
-                // 🔹 transaksi SETELAH periode
+                // 🔹 PEMBELIAN SETELAH PERIODE (HANYA KE SATUAN TERBESAR)
                 const pembelianSetelah = await DTransBeli.sum("jumlah_barang", {
                     where: { id_produk: idProduct },
                     include: [{
@@ -441,7 +441,7 @@ const LaporanController = {
                 for (const s of product.stok) {
                     const satuan = s.satuan;
 
-                    // 🔹 penjualan SETELAH periode (per satuan)
+                    // 🔹 PENJUALAN SETELAH PERIODE (PER SATUAN)
                     const penjualanSetelah = await DTransJual.sum("jumlah_barang", {
                         where: { id_produk: idProduct, satuan },
                         include: [{
@@ -453,11 +453,11 @@ const LaporanController = {
                     }) || 0;
 
                     // =========================
-                    // 🔹 STOK AWAL (FIX)
+                    // 🔹 STOK AWAL (BENAR)
                     // =========================
                     const stokAwal =
                         satuan === satuanTerbesar
-                            ? Number(s.stok) + Number(penjualanSetelah) - Number(pembelianSetelah)
+                            ? Number(s.stok) - Number(pembelianSetelah) + Number(penjualanSetelah)
                             : Number(s.stok) + Number(penjualanSetelah);
 
                     // =========================
@@ -489,6 +489,9 @@ const LaporanController = {
                         }]
                     }) || 0;
 
+                    // =========================
+                    // 🔹 STOK AKHIR
+                    // =========================
                     const stokAkhir =
                         Number(stokAwal) + Number(totalMasuk) - Number(totalKeluar);
 
