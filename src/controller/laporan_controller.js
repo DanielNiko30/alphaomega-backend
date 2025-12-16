@@ -427,13 +427,13 @@ const LaporanController = {
 
                 const satuanTerbesar = stokTerbesar.satuan;
 
-                // 🔹 PEMBELIAN SETELAH PERIODE (HANYA KE SATUAN TERBESAR)
-                const pembelianSetelah = await DTransBeli.sum("jumlah_barang", {
+                // 🔹 PEMBELIAN DALAM PERIODE (HANYA SATUAN TERBESAR)
+                const pembelianPeriode = await DTransBeli.sum("jumlah_barang", {
                     where: { id_produk: idProduct },
                     include: [{
                         model: HTransBeli,
                         as: "HTransBeli",
-                        where: { tanggal: { [Op.gt]: end } },
+                        where: { tanggal: { [Op.between]: [start, end] } },
                         attributes: []
                     }]
                 }) || 0;
@@ -441,45 +441,8 @@ const LaporanController = {
                 for (const s of product.stok) {
                     const satuan = s.satuan;
 
-                    // 🔹 PENJUALAN SETELAH PERIODE (PER SATUAN)
-                    const penjualanSetelah = await DTransJual.sum("jumlah_barang", {
-                        where: { id_produk: idProduct, satuan },
-                        include: [{
-                            model: HTransJual,
-                            as: "HTransJual",
-                            where: { tanggal: { [Op.gt]: end } },
-                            attributes: []
-                        }]
-                    }) || 0;
-
-                    // =========================
-                    // 🔹 STOK AWAL (BENAR)
-                    // =========================
-                    const stokAwal =
-                        satuan === satuanTerbesar
-                            ? Number(s.stok) - Number(pembelianSetelah) + Number(penjualanSetelah)
-                            : Number(s.stok) + Number(penjualanSetelah);
-
-                    // =========================
-                    // 🔹 MASUK DALAM PERIODE
-                    // =========================
-                    let totalMasuk = 0;
-                    if (satuan === satuanTerbesar) {
-                        totalMasuk = await DTransBeli.sum("jumlah_barang", {
-                            where: { id_produk: idProduct },
-                            include: [{
-                                model: HTransBeli,
-                                as: "HTransBeli",
-                                where: { tanggal: { [Op.between]: [start, end] } },
-                                attributes: []
-                            }]
-                        }) || 0;
-                    }
-
-                    // =========================
-                    // 🔹 KELUAR DALAM PERIODE
-                    // =========================
-                    const totalKeluar = await DTransJual.sum("jumlah_barang", {
+                    // 🔹 PENJUALAN DALAM PERIODE (PER SATUAN)
+                    const penjualanPeriode = await DTransJual.sum("jumlah_barang", {
                         where: { id_produk: idProduct, satuan },
                         include: [{
                             model: HTransJual,
@@ -490,7 +453,28 @@ const LaporanController = {
                     }) || 0;
 
                     // =========================
-                    // 🔹 STOK AKHIR
+                    // 🔹 STOK AWAL (FINAL & BENAR)
+                    // =========================
+                    const stokAwal =
+                        satuan === satuanTerbesar
+                            ? Number(s.stok) - Number(pembelianPeriode) + Number(penjualanPeriode)
+                            : Number(s.stok) + Number(penjualanPeriode);
+
+                    // =========================
+                    // 🔹 MASUK DALAM PERIODE
+                    // =========================
+                    const totalMasuk =
+                        satuan === satuanTerbesar
+                            ? Number(pembelianPeriode)
+                            : 0;
+
+                    // =========================
+                    // 🔹 KELUAR DALAM PERIODE
+                    // =========================
+                    const totalKeluar = Number(penjualanPeriode);
+
+                    // =========================
+                    // 🔹 STOK AKHIR (BALANCE KE DB)
                     // =========================
                     const stokAkhir =
                         Number(stokAwal) + Number(totalMasuk) - Number(totalKeluar);
