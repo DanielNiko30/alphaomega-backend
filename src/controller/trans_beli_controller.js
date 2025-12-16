@@ -4,7 +4,6 @@ const { Product } = require("../model/product_model");
 const { Stok } = require("../model/stok_model");
 const axios = require("axios");
 
-// Fungsi untuk generate ID htrans_beli (HTR000001)
 async function generateHTransBeliId() {
     const prefix = "HTB";
 
@@ -22,7 +21,6 @@ async function generateHTransBeliId() {
     return `${prefix}${String(number).padStart(6, "0")}`;
 }
 
-// Fungsi untuk generate ID dtrans_beli (DTR000001)
 async function generateDTransBeliId() {
     const prefix = "DTB";
 

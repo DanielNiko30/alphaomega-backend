@@ -441,7 +441,6 @@ const ProductController = {
         }
     },
 
-
     addKategori: async (req, res) => {
         try {
             const { nama_kategori } = req.body;
