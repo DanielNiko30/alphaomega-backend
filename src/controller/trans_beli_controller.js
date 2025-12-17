@@ -2,6 +2,7 @@ const { HTransBeli } = require("../model/htrans_beli_model");
 const { DTransBeli } = require("../model/dtrans_beli_model");
 const { Product } = require("../model/product_model");
 const { Stok } = require("../model/stok_model");
+const { Supplier } = require("../model/supplier_model");
 const axios = require("axios");
 
 async function generateHTransBeliId() {
@@ -48,23 +49,23 @@ const TransBeliController = {
                     {
                         model: Supplier,
                         as: "supplier",
-                        attributes: ["nama_supplier"], // ⬅️ ambil nama saja
+                        attributes: ["nama_supplier"],
                     },
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
                     }
-                ]
+                ],
             });
 
-            // Optional: rapihin response (hapus id_supplier)
             const result = transactions.map(trx => ({
                 ...trx.toJSON(),
-                supplier: trx.supplier?.nama_supplier || "-",
+                nama_supplier: trx.supplier?.nama_supplier || "-",
             }));
 
             res.json(result);
         } catch (error) {
+            console.error("❌ getAllTransactions error:", error);
             res.status(500).json({ message: error.message });
         }
     },
