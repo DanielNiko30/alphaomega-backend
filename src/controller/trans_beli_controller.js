@@ -112,44 +112,36 @@ const TransBeliController = {
 
             // ============= PARSING =================
             if (!detail) {
-                return res.status(400).json({
-                    success: false,
-                    message: "detail wajib diisi"
-                });
+                return res.status(400).json({ success: false, message: "detail wajib diisi" });
             }
 
-            // Jika masih string → parse
             if (typeof detail === "string") {
                 try {
                     detail = JSON.parse(detail);
-                } catch (e) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Format detail tidak valid"
-                    });
+                } catch {
+                    return res.status(400).json({ success: false, message: "Format detail tidak valid" });
                 }
             }
 
-            // Jika object → extract values
             if (!Array.isArray(detail)) {
                 detail = Object.values(detail);
             }
 
-            if (!Array.isArray(detail) || detail.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "detail harus array berisi 1 item atau lebih"
-                });
+            if (detail.length === 0) {
+                return res.status(400).json({ success: false, message: "detail harus berisi minimal 1 item" });
             }
 
             // ============= VALIDATION =================
             for (const d of detail) {
-                if (!d.id_produk || !d.jumlah_barang || !d.harga_satuan || !d.subtotal || !d.satuan) {
+                if (!d.id_produk || d.jumlah_barang == null || d.harga_satuan == null || d.subtotal == null || !d.satuan) {
                     return res.status(400).json({
                         success: false,
                         message: `Data detail tidak lengkap: ${JSON.stringify(d)}`
                     });
                 }
+
+                // normalize satuan
+                d.satuan = d.satuan.trim();
             }
 
             // ============= INSERT HEADER =================
@@ -165,7 +157,7 @@ const TransBeliController = {
             }, { transaction: t });
 
             // ============= INSERT DETAIL =================
-            const stokIds = [];   // hanya simpan id_stok, bukan object mentah
+            const stokIds = [];
 
             for (const item of detail) {
                 const id_dtrans_beli = await generateDTransBeliId();
@@ -174,13 +166,13 @@ const TransBeliController = {
                     id_dtrans_beli,
                     id_htrans_beli,
                     id_produk: item.id_produk,
+                    satuan: item.satuan,
                     jumlah_barang: Number(item.jumlah_barang),
                     harga_satuan: Number(item.harga_satuan),
                     diskon_barang: Number(item.diskon_barang) || 0,
                     subtotal: Number(item.subtotal),
                 }, { transaction: t });
 
-                // ===== UPDATE CREATE STOCK =====
                 let stok = await Stok.findOne({
                     where: {
                         id_product_stok: item.id_produk,
@@ -200,7 +192,7 @@ const TransBeliController = {
                 } else {
                     const id_stok = await generateStokId();
 
-                    await Stok.create({
+                    const created = await Stok.create({
                         id_stok,
                         id_product_stok: item.id_produk,
                         satuan: item.satuan,
@@ -209,45 +201,38 @@ const TransBeliController = {
                         harga_beli: Number(item.harga_satuan),
                     }, { transaction: t });
 
-                    stokIds.push(id_stok);
+                    stokIds.push(created.id_stok);
                 }
             }
 
-            // Commit dulu baru sync marketplace
             await t.commit();
 
-            // ================== SYNC MARKETPLACE ===================
+            // ============= SYNC MARKETPLACE =================
             const marketplaceResult = { shopee: [], lazada: [] };
 
             for (const id_stok of stokIds) {
                 const fresh = await Stok.findByPk(id_stok);
                 if (!fresh) continue;
 
-                // Shopee
-                if (fresh.id_product_shopee) {
-                    try {
+                try {
+                    if (fresh.id_product_shopee) {
                         await axios.post("https://tokalphaomegaploso.my.id/api/shopee/update-stock", {
                             item_id: Number(fresh.id_product_shopee),
                             stock: Number(fresh.stok)
                         });
                         marketplaceResult.shopee.push({ produk: fresh.id_product_stok, status: "success" });
-                    } catch (e) {
-                        marketplaceResult.shopee.push({ produk: fresh.id_product_stok, status: "failed", error: e.message });
                     }
-                }
 
-                // Lazada
-                if (fresh.id_product_lazada && fresh.sku_lazada) {
-                    try {
+                    if (fresh.id_product_lazada && fresh.sku_lazada) {
                         await axios.post("https://tokalphaomegaploso.my.id/api/lazada/update-stock", {
                             item_id: String(fresh.id_product_lazada),
                             sku_id: String(fresh.sku_lazada),
                             quantity: Number(fresh.stok)
                         });
                         marketplaceResult.lazada.push({ produk: fresh.id_product_stok, status: "success" });
-                    } catch (e) {
-                        marketplaceResult.lazada.push({ produk: fresh.id_product_stok, status: "failed", error: e.message });
                     }
+                } catch (e) {
+                    marketplaceResult.shopee.push({ produk: fresh.id_product_stok, status: "failed", error: e.message });
                 }
             }
 
@@ -260,7 +245,7 @@ const TransBeliController = {
 
         } catch (err) {
             await t.rollback();
-            console.error("❌ ERROR createTransaction:", err.message);
+            console.error("❌ ERROR createTransaction:", err);
             return res.status(500).json({ success: false, message: err.message });
         }
     },

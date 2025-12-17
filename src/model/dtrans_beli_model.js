@@ -19,6 +19,10 @@ const DTransBeli = db.define(
       type: DataTypes.STRING(10),
       allowNull: false,
     },
+    satuan: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
     jumlah_barang: {
       type: DataTypes.INTEGER,
       allowNull: false,
