@@ -110,4 +110,4 @@ const authLazadaMiddleware = async (req, res, next) => {
     }
 };
 
-module.exports = { authMiddleware, authLazadaMiddleware };
+module.exports = authMiddleware, authLazadaMiddleware;
