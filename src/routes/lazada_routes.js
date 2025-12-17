@@ -46,7 +46,7 @@ router.get("/seller", getSeller);
 router.get("/warehouse", getWarehouseBySeller);
 router.post("/atur-pickup", aturPickup);
 router.post("/print-resi", printLazadaResi);
-router.post("/ready-to-ship", authLazadaMiddleware, readyToShipLazada);
+router.post("/ready-to-ship", readyToShipLazada);
 router.post('/update-stock', updatePriceQuantity);
 
 module.exports = router;
