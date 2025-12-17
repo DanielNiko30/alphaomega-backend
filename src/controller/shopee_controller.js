@@ -314,7 +314,7 @@ const createProductShopee = async (req, res) => {
         console.log("AUTO ATTRIBUTE:", autoAttributes);
 
         const body = {
-            original_price: Number(stokTerpilih.harga),
+            original_price: Math.round(Number(stokTerpilih.harga) * 1.125),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: `${product.nama_product} ${stokTerpilih.satuan}`,
             item_sku: item_sku || null,
@@ -617,7 +617,7 @@ const updateProductShopee = async (req, res) => {
 
         const body = {
             item_id: Number(stokTerpilih.id_product_shopee), // ID produk di Shopee
-            original_price: Number(stokTerpilih.harga),
+            original_price: Math.round(Number(stokTerpilih.harga) * 1.125),
             description: product.deskripsi_product || "Deskripsi tidak tersedia",
             item_name: `${product.nama_product} ${stokTerpilih.satuan}`,
             item_sku: item_sku || null,

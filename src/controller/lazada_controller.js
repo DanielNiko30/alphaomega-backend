@@ -550,7 +550,7 @@ const createProductLazada = async (req, res) => {
         const skuAttributes = {
             SellerSku: attributes.SellerSku || `SKU-${uniqueSuffix}`,
             quantity: String(stokTerpilih.stok),
-            price: String(stokTerpilih.harga || 1000),
+            price: String(Math.round(Number(stokTerpilih.harga) * 1.125)),
             package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
@@ -744,7 +744,7 @@ const updateProductLazada = async (req, res) => {
             SkuId: stokTerpilih.sku_lazada, // ← WAJIB dari DB
             SellerSku: attributes.SellerSku || stokTerpilih.id_stok.toString(),
             quantity: String(stokTerpilih.stok),
-            price: String(stokTerpilih.harga),
+            price: String(Math.round(Number(stokTerpilih.harga) * 1.125)),
             package_height: String(attributes.package_height || stokTerpilih.tinggi || 10),
             package_length: String(attributes.package_length || stokTerpilih.panjang || 10),
             package_width: String(attributes.package_width || stokTerpilih.lebar || 10),
