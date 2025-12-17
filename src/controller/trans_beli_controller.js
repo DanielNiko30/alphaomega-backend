@@ -43,8 +43,27 @@ const TransBeliController = {
     // Mendapatkan semua transaksi pembelian
     getAllTransactions: async (req, res) => {
         try {
-            const transactions = await HTransBeli.findAll({ include: "detail_transaksi" });
-            res.json(transactions);
+            const transactions = await HTransBeli.findAll({
+                include: [
+                    {
+                        model: Supplier,
+                        as: "supplier",
+                        attributes: ["nama_supplier"], // ⬅️ ambil nama saja
+                    },
+                    {
+                        model: DTransBeli,
+                        as: "detail_transaksi",
+                    }
+                ]
+            });
+
+            // Optional: rapihin response (hapus id_supplier)
+            const result = transactions.map(trx => ({
+                ...trx.toJSON(),
+                supplier: trx.supplier?.nama_supplier || "-",
+            }));
+
+            res.json(result);
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
