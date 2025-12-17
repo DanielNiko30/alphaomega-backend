@@ -1567,63 +1567,48 @@ const aturPickup = async (req, res) => {
 };
 
 const readyToShipLazada = async (req, res) => {
-    console.log("🚀 readyToShipLazada dipanggil"); // <--- cek ini muncul
-    console.log("📦 req.body:", req.body);
-    console.log("👤 req.user:", req.user);
     try {
         const orderId = req.body.order_id || req.query.order_id;
-        if (!orderId) return res.status(400).json({ success: false, message: "Parameter 'order_id' wajib diisi" });
-        console.log("🚀 readyToShipLazada dipanggil"); // <--- cek ini muncul
-        console.log("📦 req.body:", req.body);
-        console.log("👤 req.user:", req.user);
-        const currentUser = req.user;
-        if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
-            return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat menandai Ready To Ship' });
-        }
+        if (!orderId)
+            return res.status(400).json({ success: false, message: "Parameter 'order_id' wajib diisi" });
 
-        // Tentukan user transaksi
-        let idUserForTransaction = currentUser.id_user;
-        if (currentUser.role === 'admin') {
-            const pegawaiOnline = await User.findOne({ where: { role: 'pegawai online' } });
-            if (!pegawaiOnline) return res.status(500).json({ success: false, message: 'Pegawai online tidak ditemukan di DB' });
-            idUserForTransaction = pegawaiOnline.id_user;
-        }
+        // Ambil user (tapi role tidak lagi dibatasi)
+        const currentUser = req.user || { id_user: null }; // jika req.user tidak ada, tetap bisa
 
         // Ambil akun Lazada terbaru
         let lazadaAccount = await Lazada.findOne({ order: [['last_updated', 'DESC']] });
-        if (!lazadaAccount) return res.status(400).json({ success: false, message: "Akun Lazada tidak ditemukan di DB" });
+        if (!lazadaAccount)
+            return res.status(400).json({ success: false, message: "Akun Lazada tidak ditemukan di DB" });
 
         let access_token = lazadaAccount.access_token?.trim();
         const appKey = process.env.LAZADA_APP_KEY?.trim();
         const appSecret = process.env.LAZADA_APP_SECRET?.trim();
         const baseUrl = "https://api.lazada.co.id/rest";
 
-        // Jika token kosong atau expired, refresh token otomatis
+        // Refresh token jika kosong / expired
         if (!access_token || Date.now() > lazadaAccount.token_expired_at) {
             const refreshed = await refreshLazadaToken(lazadaAccount.refresh_token);
             if (!refreshed || !refreshed.access_token) {
                 return res.status(400).json({ success: false, message: "Gagal refresh token Lazada" });
             }
             access_token = refreshed.access_token;
-            // Update DB
             await lazadaAccount.update({
-                access_token: access_token,
-                token_expired_at: Date.now() + (refreshed.expires_in * 1000) // misal expires_in detik
+                access_token,
+                token_expired_at: Date.now() + (refreshed.expires_in * 1000)
             });
         }
 
         // Ambil detail order dari internal API
         const detailRes = await axios.get(`https://tokalphaomegaploso.my.id/api/lazada/order/detail?order_id=${orderId}`);
         const detailData = detailRes.data?.data;
+
         if (!detailData || !Array.isArray(detailData.items) || detailData.items.length === 0) {
             return res.status(400).json({ success: false, message: "Gagal ambil data order dari Lazada — items kosong" });
         }
 
         const packageId = detailData.items[0].package_id;
-        if (!packageId) return res.status(400).json({ success: false, message: "Tidak menemukan package_id di data order Lazada" });
-
-        // === Optional: Validasi stok & buat HTransJual / DTransJual jika perlu ===
-        // ... (bisa disesuaikan sesuai kode sebelumnya)
+        if (!packageId)
+            return res.status(400).json({ success: false, message: "Tidak menemukan package_id di data order Lazada" });
 
         // === Ready To Ship API Lazada ===
         const apiPath = "/order/package/rts";
@@ -1668,6 +1653,7 @@ const readyToShipLazada = async (req, res) => {
         });
     }
 };
+
 
 const printLazadaResi = async (req, res) => {
     try {
