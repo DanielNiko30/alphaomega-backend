@@ -400,6 +400,7 @@ const LaporanController = {
     getLaporanStok: async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
+
             if (!startDate || !endDate) {
                 return res.status(400).json({
                     success: false,
@@ -411,7 +412,7 @@ const LaporanController = {
             const end = moment(endDate).endOf("day").toDate();
 
             const products = await Product.findAll({
-                include: [{ model: Stok, as: "stok" }]
+                include: [{ model: Stok, as: "stok" }],
             });
 
             let laporan = [];
@@ -423,9 +424,9 @@ const LaporanController = {
                     const satuan = s.satuan;
                     const idProduct = product.id_product;
 
-                    // =========================
+                    // =====================================================
                     // 🔹 DETAIL MASUK (PEMBELIAN)
-                    // =========================
+                    // =====================================================
                     const pembelian = await DTransBeli.findAll({
                         where: {
                             id_produk: idProduct,
@@ -434,8 +435,10 @@ const LaporanController = {
                         include: [{
                             model: HTransBeli,
                             as: "HTransBeli",
-                            where: { tanggal: { [Op.between]: [start, end] } },
                             attributes: ["tanggal", "nomor_invoice"],
+                            where: {
+                                tanggal: { [Op.between]: [start, end] },
+                            },
                         }],
                         order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
                     });
@@ -444,16 +447,17 @@ const LaporanController = {
                     const detailMasuk = pembelian.map(d => {
                         const jumlah = Number(d.jumlah_barang) || 0;
                         totalMasuk += jumlah;
+
                         return {
-                            tanggal: d.HTransBeli.tanggal,
+                            tanggal: d.HTransBeli?.tanggal ?? null,
                             jumlah,
-                            invoice: d.HTransBeli.nomor_invoice || "-",
+                            invoice: d.HTransBeli?.nomor_invoice ?? "-",
                         };
                     });
 
-                    // =========================
+                    // =====================================================
                     // 🔹 DETAIL KELUAR (PENJUALAN)
-                    // =========================
+                    // =====================================================
                     const penjualan = await DTransJual.findAll({
                         where: {
                             id_produk: idProduct,
@@ -462,8 +466,10 @@ const LaporanController = {
                         include: [{
                             model: HTransJual,
                             as: "HTransJual",
-                            where: { tanggal: { [Op.between]: [start, end] } },
                             attributes: ["tanggal", "nomor_invoice"],
+                            where: {
+                                tanggal: { [Op.between]: [start, end] },
+                            },
                         }],
                         order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
                     });
@@ -472,22 +478,22 @@ const LaporanController = {
                     const detailKeluar = penjualan.map(d => {
                         const jumlah = Number(d.jumlah_barang) || 0;
                         totalKeluar += jumlah;
+
                         return {
-                            tanggal: d.HTransJual.tanggal,
+                            tanggal: d.HTransJual?.tanggal ?? null,
                             jumlah,
-                            invoice: d.HTransJual.nomor_invoice || "-",
+                            invoice: d.HTransJual?.nomor_invoice ?? "-",
                         };
                     });
 
-                    // =========================
-                    // 🔹 STOK AWAL
-                    // =========================
-                    const stokAwal =
-                        Number(s.stok) - totalMasuk + totalKeluar;
+                    // =====================================================
+                    // 🔹 STOK AWAL & AKHIR
+                    // =====================================================
+                    const stokAkhirDb = Number(s.stok) || 0;
 
-                    // =========================
-                    // 🔹 STOK AKHIR
-                    // =========================
+                    const stokAwal =
+                        stokAkhirDb - totalMasuk + totalKeluar;
+
                     const stokAkhir =
                         stokAwal + totalMasuk - totalKeluar;
 
