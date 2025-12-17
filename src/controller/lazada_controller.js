@@ -1587,9 +1587,12 @@ const readyToShipLazada = async (req, res) => {
             idUserForTransaction = pegawaiOnline.id_user;
         }
 
-        // Ambil access token Lazada
-        const lazadaAccount = await Lazada.findOne();
-        if (!lazadaAccount?.access_token) return res.status(400).json({ success: false, message: "Token Lazada tidak ditemukan di DB" });
+        // Ambil access token Lazada (update: pastikan record ada)
+        const lazadaAccount = await Lazada.findOne({ order: [['last_updated', 'DESC']] }); // ambil record terbaru
+        if (!lazadaAccount) return res.status(400).json({ success: false, message: "Akun Lazada tidak ditemukan di DB" });
+        if (!lazadaAccount.access_token || lazadaAccount.access_token.trim() === "") {
+            return res.status(400).json({ success: false, message: "Token Lazada kosong atau tidak valid" });
+        }
 
         const access_token = lazadaAccount.access_token.trim();
         const appKey = process.env.LAZADA_APP_KEY.trim();
