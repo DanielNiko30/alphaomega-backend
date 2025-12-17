@@ -24,7 +24,7 @@ const {
     updatePriceQuantity
 } = require('../controller/lazada_controller');
 
-const authMiddleware = require('../middleware/auth');
+const authLazadaMiddleware = require('../middleware/auth');
 
 router.get('/generate-login-url', generateLoginUrl);
 router.get('/callback', lazadaCallback);
@@ -46,7 +46,7 @@ router.get("/seller", getSeller);
 router.get("/warehouse", getWarehouseBySeller);
 router.post("/atur-pickup", aturPickup);
 router.post("/print-resi", printLazadaResi);
-router.post("/ready-to-ship", authMiddleware, readyToShipLazada);
+router.post("/ready-to-ship", authLazadaMiddleware, readyToShipLazada);
 router.post('/update-stock', updatePriceQuantity);
 
 module.exports = router;
