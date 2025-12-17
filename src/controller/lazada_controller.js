@@ -1570,7 +1570,9 @@ const readyToShipLazada = async (req, res) => {
     try {
         const orderId = req.body.order_id || req.query.order_id;
         if (!orderId) return res.status(400).json({ success: false, message: "Parameter 'order_id' wajib diisi" });
-
+        console.log("🚀 readyToShipLazada dipanggil"); // <--- cek ini muncul
+        console.log("📦 req.body:", req.body);
+        console.log("👤 req.user:", req.user);
         const currentUser = req.user;
         if (!currentUser || !['pegawai online', 'admin'].includes(currentUser.role)) {
             return res.status(403).json({ success: false, message: 'Hanya pegawai online atau admin yang dapat menandai Ready To Ship' });
