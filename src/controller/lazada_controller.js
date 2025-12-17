@@ -1653,8 +1653,8 @@ const readyToShipLazada = async (req, res) => {
 
         await HTransJual.create({
             id_htrans_jual,
-            id_user: idUserForTransaction,
-            id_user_penjual: idUserForTransaction,
+            id_user: "USR003",
+            id_user_penjual: "USR003",
             nama_pembeli: detailData.address_shipping?.first_name || "Pembeli Lazada",
             tanggal: new Date(),
             total_harga: Math.floor(totalHarga),
