@@ -419,73 +419,87 @@ const LaporanController = {
             for (const product of products) {
                 if (!product.stok || product.stok.length === 0) continue;
 
-                const idProduct = product.id_product;
-
-                // 🔹 satuan terbesar (harga tertinggi)
-                const stokTerbesar = getSatuanTerbesar(product.stok);
-                if (!stokTerbesar) continue;
-
-                const satuanTerbesar = stokTerbesar.satuan;
-
-                // 🔹 PEMBELIAN DALAM PERIODE (HANYA SATUAN TERBESAR)
-                const pembelianPeriode = await DTransBeli.sum("jumlah_barang", {
-                    where: { id_produk: idProduct },
-                    include: [{
-                        model: HTransBeli,
-                        as: "HTransBeli",
-                        where: { tanggal: { [Op.between]: [start, end] } },
-                        attributes: []
-                    }]
-                }) || 0;
-
                 for (const s of product.stok) {
                     const satuan = s.satuan;
+                    const idProduct = product.id_product;
 
-                    // 🔹 PENJUALAN DALAM PERIODE (PER SATUAN)
-                    const penjualanPeriode = await DTransJual.sum("jumlah_barang", {
-                        where: { id_produk: idProduct, satuan },
+                    // =========================
+                    // 🔹 DETAIL MASUK (PEMBELIAN)
+                    // =========================
+                    const pembelian = await DTransBeli.findAll({
+                        where: {
+                            id_produk: idProduct,
+                            satuan: satuan,
+                        },
+                        include: [{
+                            model: HTransBeli,
+                            as: "HTransBeli",
+                            where: { tanggal: { [Op.between]: [start, end] } },
+                            attributes: ["tanggal", "nomor_invoice"],
+                        }],
+                        order: [[{ model: HTransBeli, as: "HTransBeli" }, "tanggal", "ASC"]],
+                    });
+
+                    let totalMasuk = 0;
+                    const detailMasuk = pembelian.map(d => {
+                        const jumlah = Number(d.jumlah_barang) || 0;
+                        totalMasuk += jumlah;
+                        return {
+                            tanggal: d.HTransBeli.tanggal,
+                            jumlah,
+                            invoice: d.HTransBeli.nomor_invoice || "-",
+                        };
+                    });
+
+                    // =========================
+                    // 🔹 DETAIL KELUAR (PENJUALAN)
+                    // =========================
+                    const penjualan = await DTransJual.findAll({
+                        where: {
+                            id_produk: idProduct,
+                            satuan: satuan,
+                        },
                         include: [{
                             model: HTransJual,
                             as: "HTransJual",
                             where: { tanggal: { [Op.between]: [start, end] } },
-                            attributes: []
-                        }]
-                    }) || 0;
+                            attributes: ["tanggal", "nomor_invoice"],
+                        }],
+                        order: [[{ model: HTransJual, as: "HTransJual" }, "tanggal", "ASC"]],
+                    });
+
+                    let totalKeluar = 0;
+                    const detailKeluar = penjualan.map(d => {
+                        const jumlah = Number(d.jumlah_barang) || 0;
+                        totalKeluar += jumlah;
+                        return {
+                            tanggal: d.HTransJual.tanggal,
+                            jumlah,
+                            invoice: d.HTransJual.nomor_invoice || "-",
+                        };
+                    });
 
                     // =========================
-                    // 🔹 STOK AWAL (FINAL & BENAR)
+                    // 🔹 STOK AWAL
                     // =========================
                     const stokAwal =
-                        satuan === satuanTerbesar
-                            ? Number(s.stok) - Number(pembelianPeriode) + Number(penjualanPeriode)
-                            : Number(s.stok) + Number(penjualanPeriode);
+                        Number(s.stok) - totalMasuk + totalKeluar;
 
                     // =========================
-                    // 🔹 MASUK DALAM PERIODE
-                    // =========================
-                    const totalMasuk =
-                        satuan === satuanTerbesar
-                            ? Number(pembelianPeriode)
-                            : 0;
-
-                    // =========================
-                    // 🔹 KELUAR DALAM PERIODE
-                    // =========================
-                    const totalKeluar = Number(penjualanPeriode);
-
-                    // =========================
-                    // 🔹 STOK AKHIR (BALANCE KE DB)
+                    // 🔹 STOK AKHIR
                     // =========================
                     const stokAkhir =
-                        Number(stokAwal) + Number(totalMasuk) - Number(totalKeluar);
+                        stokAwal + totalMasuk - totalKeluar;
 
                     laporan.push({
                         nama_product: product.nama_product,
-                        satuan,
+                        satuan: satuan,
                         stok_awal: stokAwal,
                         total_masuk: totalMasuk,
+                        detail_masuk: detailMasuk,
                         total_keluar: totalKeluar,
-                        stok_akhir: stokAkhir
+                        detail_keluar: detailKeluar,
+                        stok_akhir: stokAkhir,
                     });
                 }
             }
@@ -493,7 +507,7 @@ const LaporanController = {
             return res.json({
                 success: true,
                 periode: `${startDate} s.d ${endDate}`,
-                data: laporan
+                data: laporan,
             });
 
         } catch (err) {
@@ -501,7 +515,7 @@ const LaporanController = {
             return res.status(500).json({
                 success: false,
                 message: "Gagal memuat laporan stok",
-                error: err.message
+                error: err.message,
             });
         }
     },
