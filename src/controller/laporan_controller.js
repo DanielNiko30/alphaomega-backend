@@ -258,38 +258,58 @@ const LaporanController = {
             }
 
             const transaksi = await HTransBeli.findAll({
-                where: { tanggal: { [Op.between]: [startDate, endDate] } }, // pakai string
+                where: { tanggal: { [Op.between]: [startDate, endDate] } },
                 include: [
                     {
                         model: DTransBeli,
                         as: "detail_transaksi",
                         include: [
-                            { model: Product, as: "produk", include: [{ model: Stok, as: "stok" }] }
+                            {
+                                model: Product,
+                                as: "produk",
+                                include: [{ model: Stok, as: "stok" }]
+                            }
                         ],
                     },
-                    { model: Supplier, as: "supplier", attributes: ["nama_supplier"] },
+                    {
+                        model: Supplier,
+                        as: "supplier",
+                        attributes: ["nama_supplier"]
+                    },
                 ],
                 order: [["tanggal", "ASC"]],
             });
 
-            let laporan = [];
+            let mapSupplier = {};
             let grandTotal = 0;
 
             transaksi.forEach(trx => {
+                const namaSupplier = trx.supplier?.nama_supplier || "Tidak Diketahui";
+
+                if (!mapSupplier[namaSupplier]) {
+                    mapSupplier[namaSupplier] = {
+                        pemasok: namaSupplier,
+                        detail: [],
+                        total_pembelian_supplier: 0,
+                    };
+                }
+
                 trx.detail_transaksi.forEach(d => {
                     const produk = d.produk;
-                    const stok = produk?.stok?.find(s => s.satuan === d.satuan) || produk?.stok?.[0];
+                    const stok =
+                        produk?.stok?.find(s => s.satuan === d.satuan) ||
+                        produk?.stok?.[0];
 
                     const hargaBeli = d.harga_satuan || stok?.harga_beli || 0;
                     const jumlah = d.jumlah_barang;
                     const subtotal = hargaBeli * jumlah;
 
+                    mapSupplier[namaSupplier].total_pembelian_supplier += subtotal;
                     grandTotal += subtotal;
 
-                    laporan.push({
+                    mapSupplier[namaSupplier].detail.push({
                         waktu: trx.tanggal,
                         barang: produk?.nama_product || "Tidak Diketahui",
-                        pemasok: trx.supplier?.nama_supplier || "-",
                         jumlah,
                         satuan: stok?.satuan || d.satuan,
                         harga_beli: hargaBeli,
@@ -303,7 +323,7 @@ const LaporanController = {
             return res.json({
                 success: true,
                 periode: `${startDate} s.d ${endDate}`,
-                data: laporan,
+                data: Object.values(mapSupplier),
                 grand_total: { pembelian: grandTotal },
             });
 
